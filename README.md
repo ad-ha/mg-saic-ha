@@ -103,9 +103,6 @@ This integration was made possible thanks to the [saic-ismart-client-ng](https:/
 
 This project is licensed under the MIT License. See the LICENSE file for details.
 
-## Acknowledgments
-
-Special thanks to the Home Assistant community for their support and contributions.
 
 
 ## Disclaimer
