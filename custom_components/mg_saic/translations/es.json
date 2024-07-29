@@ -1,0 +1,42 @@
+{
+    "config": {
+      "step": {
+        "user": {
+          "title": "Seleccionar Tipo de Inicio de Sesión",
+          "data": {
+            "login_type": "Tipo de Inicio de Sesión"
+          },
+          "description": "Elija si desea iniciar sesión con una dirección de correo electrónico o un número de teléfono."
+        },
+        "login_data": {
+          "title": "Ingresar Detalles de Inicio de Sesión",
+          "data": {
+            "country_code": "Código de País",
+            "username": "Correo Electrónico o Número de Teléfono",
+            "password": "Contraseña",
+            "region": "Región"
+          },
+          "description": "Ingrese sus detalles de inicio de sesión. Si inicia sesión con un número de teléfono, seleccione el código de país.",
+          "email": {
+            "description": "Ingrese su correo electrónico y contraseña junto con la región."
+          },
+          "phone": {
+            "description": "Ingrese su número de teléfono, código de país, contraseña y región."
+          }
+        },
+        "select_vehicle": {
+          "title": "Seleccionar Vehículo",
+          "data": {
+            "vin": "VIN del Vehículo"
+          },
+          "description": "Seleccione el VIN del vehículo que desea agregar."
+        }
+      },
+      "error": {
+        "auth": "Autenticación fallida, por favor verifique sus credenciales."
+      },
+      "abort": {
+        "single_instance_allowed": "Solo se permite una única instancia."
+      }
+    }
+  }

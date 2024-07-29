@@ -1,0 +1,12 @@
+start_engine:
+  description: "Start the vehicle engine"
+  fields:
+    vin:
+      description: "Vehicle Identification Number"
+      example: "1HGCM82633A123456"
+stop_engine:
+  description: "Stop the vehicle engine"
+  fields:
+    vin:
+      description: "Vehicle Identification Number"
+      example: "1HGCM82633A123456"
