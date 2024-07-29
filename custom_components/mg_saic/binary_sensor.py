@@ -216,6 +216,7 @@ class SAICMGBinarySensor(BinarySensorEntity):
             hasattr(status, "basicVehicleStatus")
             and status.basicVehicleStatus.fuelRange == 0
             and status.basicVehicleStatus.fuelRangeElec == 0
+            and status.basicVehicleStatus.mileage == 0
         ):
             return True
         return False
