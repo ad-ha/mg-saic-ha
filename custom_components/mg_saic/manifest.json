@@ -12,6 +12,5 @@
         "requests",
         "pycryptodome",
         "saic-ismart-client-ng==0.2.2"
-    ],
-    "translations": ["translations"]
+    ]
 }
