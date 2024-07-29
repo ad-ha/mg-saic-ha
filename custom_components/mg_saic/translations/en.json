@@ -35,18 +35,22 @@
   },
   "services": {
     "start_engine": {
+      "name": "Start Engine",
       "description": "Start the vehicle engine",
       "fields": {
         "vin": {
+          "name": "Vehicle Identification Number",
           "description": "Vehicle Identification Number",
           "example": "1HGCM82633A123456"
         }
       }
     },
     "stop_engine": {
+      "name": "Stop Engine",
       "description": "Stop the vehicle engine",
       "fields": {
         "vin": {
+          "name": "Vehicle Identification Number",
           "description": "Vehicle Identification Number",
           "example": "1HGCM82633A123456"
         }
