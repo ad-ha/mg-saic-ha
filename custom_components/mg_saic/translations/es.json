@@ -35,18 +35,22 @@
   },
   "services": {
     "start_engine": {
+      "name": "Encender el Motor",
       "description": "Encender el motor del vehículo",
       "fields": {
         "vin": {
+          "name": "Número de Identificación del Vehículo",
           "description": "Número de Identificación del Vehículo",
           "example": "1HGCM82633A123456"
         }
       }
     },
     "stop_engine": {
+      "name": "Apagar el Motor",
       "description": "Apagar el motor del vehículo",
       "fields": {
         "vin": {
+          "name": "Número de Identificación del Vehículo",
           "description": "Número de Identificación del Vehículo",
           "example": "1HGCM82633A123456"
         }
