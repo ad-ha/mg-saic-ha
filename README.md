@@ -22,10 +22,10 @@
   ![image](https://github.com/user-attachments/assets/c89651bc-76c2-4c62-b7e2-f9dd11592f84)
 
 4. On the "Repository" field put the URL https://github.com/ad-ha/mg-saic-ha. On the "Category" select "Integration" and click "ADD"
-![image](https://github.com/user-attachments/assets/7b6ed323-58f3-489f-9d32-c0d41fd5afeb)
+  ![image](https://github.com/user-attachments/assets/7b6ed323-58f3-489f-9d32-c0d41fd5afeb)
 
-5. Search for "MG SAIC" and download the repository.
-6. Restart Home Assistant.
+6. Search for "MG SAIC" and download the repository.
+7. Restart Home Assistant.
 
 ### Manual Installation
 
