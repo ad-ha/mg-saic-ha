@@ -17,9 +17,15 @@
 ### HACS (Home Assistant Community Store)
 
 1. Ensure that HACS is installed.
-2. Go to HACS -> Integrations -> + Explore & Download Repositories
-3. Search for "MG SAIC" and download the repository.
-4. Restart Home Assistant.
+2. Go to HACS
+3. On the top right menu select "Custom repositories"
+  ![image](https://github.com/user-attachments/assets/c89651bc-76c2-4c62-b7e2-f9dd11592f84)
+
+4. On the "Repository" field put the URL https://github.com/ad-ha/mg-saic-ha. On the "Category" select "Integration" and click "ADD"
+![image](https://github.com/user-attachments/assets/7b6ed323-58f3-489f-9d32-c0d41fd5afeb)
+
+5. Search for "MG SAIC" and download the repository.
+6. Restart Home Assistant.
 
 ### Manual Installation
 
