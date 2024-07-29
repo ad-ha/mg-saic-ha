@@ -1,42 +1,56 @@
 {
-    "config": {
-      "step": {
-        "user": {
-          "title": "Select Login Type",
-          "data": {
-            "login_type": "Login Type"
-          },
-          "description": "Choose whether to log in with an email address or phone number."
+  "config": {
+    "step": {
+      "user": {
+        "title": "Select Login Type",
+        "data": {
+          "login_type": "Login Type"
         },
-        "login_data": {
-          "title": "Enter Login Details",
-          "data": {
-            "country_code": "Country Code",
-            "username": "Email or Phone Number",
-            "password": "Password",
-            "region": "Region"
-          },
-          "description": "Enter your login details. If logging in with a phone number, select the country code.",
-          "email": {
-            "description": "Enter your email and password along with the region."
-          },
-          "phone": {
-            "description": "Enter your phone number, country code, password, and region."
-          }
+        "description": "Choose whether to log in with an email address or phone number."
+      },
+      "login_data": {
+        "title": "Enter Login Details",
+        "data": {
+          "country_code": "Country Code",
+          "username": "Email or Phone Number",
+          "password": "Password",
+          "region": "Region"
         },
-        "select_vehicle": {
-          "title": "Select Vehicle",
-          "data": {
-            "vin": "Vehicle VIN"
-          },
-          "description": "Select the VIN of the vehicle you want to add."
+        "description": "Enter your login details. If logging in with a phone number, select the country code."
+      },
+      "select_vehicle": {
+        "title": "Select Vehicle",
+        "data": {
+          "vin": "Vehicle VIN"
+        },
+        "description": "Select the VIN of the vehicle you want to add."
+      }
+    },
+    "error": {
+      "auth": "Authentication failed, please check your credentials."
+    },
+    "abort": {
+      "single_instance_allowed": "Only a single instance is allowed."
+    }
+  },
+  "services": {
+    "start_engine": {
+      "description": "Start the vehicle engine",
+      "fields": {
+        "vin": {
+          "description": "Vehicle Identification Number",
+          "example": "1HGCM82633A123456"
         }
-      },
-      "error": {
-        "auth": "Authentication failed, please check your credentials."
-      },
-      "abort": {
-        "single_instance_allowed": "Only a single instance is allowed."
+      }
+    },
+    "stop_engine": {
+      "description": "Stop the vehicle engine",
+      "fields": {
+        "vin": {
+          "description": "Vehicle Identification Number",
+          "example": "1HGCM82633A123456"
+        }
       }
     }
   }
+}
