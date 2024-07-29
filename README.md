@@ -2,8 +2,8 @@
 ![GitHub Release (latest SemVer including pre-releases)](https://img.shields.io/github/v/release/ad-ha/mg-saic-ha?include_prereleases)
 ![GitHub Downloads (all assets, latest release)](https://img.shields.io/github/downloads/ad-ha/mg-saic-ha/latest/total)
 
-[![HACS Action](https://github.com/ad-ha/mg-saic-ha/actions/workflows/hacs.yml/badge.svg)](https://github.com/ad-ha/mg-saic-ha/actions/workflows/hacs.yml)
-[![Validate with hassfest](https://github.com/ad-ha/mg-saic-ha/actions/workflows/hassfest.yml/badge.svg)](https://github.com/ad-ha/mg-saic-ha/actions/workflows/hassfest.yml)
+[![HACS Action](https://github.com/ad-ha/mg-saic-ha/actions/workflows/validate.yaml/badge.svg)](https://github.com/ad-ha/mg-saic-ha/actions/workflows/validate.yaml)
+[![Hassfest](https://github.com/ad-ha/mg-saic-ha/actions/workflows/hassfest.yaml/badge.svg)](https://github.com/ad-ha/mg-saic-ha/actions/workflows/hassfest.yaml)
 
 
 # MG/SAIC CUSTOM INTEGRATION
