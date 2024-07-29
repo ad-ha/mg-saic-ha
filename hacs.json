@@ -1,0 +1,6 @@
+{
+  "name": "MG SAIC",
+  "homeassistant": "2024.06",
+  "hacs": "1.33.0",
+  "render_readme": true,
+}
