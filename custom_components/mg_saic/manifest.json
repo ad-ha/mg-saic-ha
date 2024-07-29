@@ -7,10 +7,10 @@
     "documentation": "https://github.com/ad-ha/mg-saic-ha",
     "iot_class": "cloud_polling",
     "issue_tracker": "https://github.com/ad-ha/mg-saic-ha/issues",
-    "version": "0.0.1",
     "requirements": [
         "requests",
         "pycryptodome",
         "saic-ismart-client-ng==0.2.2"
-    ]
+    ],
+    "version": "0.0.1"
 }
