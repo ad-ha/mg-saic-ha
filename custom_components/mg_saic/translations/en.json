@@ -39,6 +39,26 @@
           "description": "The vehicle identification number of the car to stop charging."
         }
       }
+    },
+    "start_engine": {
+      "name": "Start Engine",
+      "description": "Start the vehicle's engine.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "The vehicle identification number of the car to start the engine."
+        }
+      }
+    },
+    "stop_engine": {
+      "name": "Stop Engine",
+      "description": "Stop the vehicle's engine.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "The vehicle identification number of the car to stop the engine."
+        }
+      }
     }
   }
 }
