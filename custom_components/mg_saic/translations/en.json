@@ -1,58 +1,42 @@
 {
+  "title": "MG SAIC Integration",
   "config": {
     "step": {
       "user": {
-        "title": "Select Login Type",
+        "title": "MG SAIC Configuration",
+        "description": "Please enter your MG SAIC credentials and select a vehicle.",
         "data": {
-          "login_type": "Login Type"
-        },
-        "description": "Choose whether to log in with an email address or phone number."
-      },
-      "login_data": {
-        "title": "Enter Login Details",
-        "data": {
-          "country_code": "Country Code",
-          "username": "Email or Phone Number",
+          "username": "Username",
           "password": "Password",
-          "region": "Region"
-        },
-        "description": "Enter your login details. If logging in with a phone number, select the country code."
-      },
-      "select_vehicle": {
-        "title": "Select Vehicle",
-        "data": {
-          "vin": "Vehicle VIN"
-        },
-        "description": "Select the VIN of the vehicle you want to add."
-      }
-    },
-    "error": {
-      "auth": "Authentication failed, please check your credentials."
-    },
-    "abort": {
-      "single_instance_allowed": "Only a single instance is allowed."
-    }
-  },
-  "services": {
-    "start_engine": {
-      "name": "Start Engine",
-      "description": "Start the vehicle engine",
-      "fields": {
-        "vin": {
-          "name": "Vehicle Identification Number",
-          "description": "Vehicle Identification Number",
-          "example": "1HGCM82633A123456"
+          "region": "Region",
+          "vin": "Vehicle Identification Number (VIN)",
+          "login_type": "Login Type",
+          "country_code": "Country Code"
         }
       }
     },
-    "stop_engine": {
-      "name": "Stop Engine",
-      "description": "Stop the vehicle engine",
+    "error": {
+      "auth": "Failed to authenticate, please check your credentials."
+    }
+  },
+  "services": {
+    "start_charging": {
+      "name": "Start Charging",
+      "description": "Start the vehicle charging process.",
       "fields": {
         "vin": {
-          "name": "Vehicle Identification Number",
-          "description": "Vehicle Identification Number",
-          "example": "1HGCM82633A123456"
+          "name": "VIN",
+          "description": "The vehicle identification number of the car to start charging."
+        }
+      }
+    },
+    "stop_charging": {
+      "name": "Stop Charging",
+      "description": "Stop the vehicle charging process.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "The vehicle identification number of the car to stop charging."
         }
       }
     }

@@ -1,58 +1,42 @@
 {
+  "title": "Integración MG SAIC",
   "config": {
     "step": {
       "user": {
-        "title": "Seleccionar Tipo de Inicio de Sesión",
+        "title": "Configuración de MG SAIC",
+        "description": "Por favor ingrese sus credenciales de MG SAIC y seleccione un vehículo.",
         "data": {
-          "login_type": "Tipo de Inicio de Sesión"
-        },
-        "description": "Elija si desea iniciar sesión con una dirección de correo electrónico o un número de teléfono."
-      },
-      "login_data": {
-        "title": "Ingresar Detalles de Inicio de Sesión",
-        "data": {
-          "country_code": "Código de País",
-          "username": "Correo Electrónico o Número de Teléfono",
+          "username": "Nombre de usuario",
           "password": "Contraseña",
-          "region": "Región"
-        },
-        "description": "Ingrese sus detalles de inicio de sesión. Si inicia sesión con un número de teléfono, seleccione el código de país."
-      },
-      "select_vehicle": {
-        "title": "Seleccionar Vehículo",
-        "data": {
-          "vin": "VIN del Vehículo"
-        },
-        "description": "Seleccione el VIN del vehículo que desea agregar."
-      }
-    },
-    "error": {
-      "auth": "Autenticación fallida, por favor verifique sus credenciales."
-    },
-    "abort": {
-      "single_instance_allowed": "Solo se permite una única instancia."
-    }
-  },
-  "services": {
-    "start_engine": {
-      "name": "Encender el Motor",
-      "description": "Encender el motor del vehículo",
-      "fields": {
-        "vin": {
-          "name": "Número de Identificación del Vehículo",
-          "description": "Número de Identificación del Vehículo",
-          "example": "1HGCM82633A123456"
+          "region": "Región",
+          "vin": "Número de identificación del vehículo (VIN)",
+          "login_type": "Tipo de inicio de sesión",
+          "country_code": "Código de país"
         }
       }
     },
-    "stop_engine": {
-      "name": "Apagar el Motor",
-      "description": "Apagar el motor del vehículo",
+    "error": {
+      "auth": "Error de autenticación, por favor verifique sus credenciales."
+    }
+  },
+  "services": {
+    "start_charging": {
+      "name": "Iniciar Carga",
+      "description": "Iniciar el proceso de carga del vehículo.",
       "fields": {
         "vin": {
-          "name": "Número de Identificación del Vehículo",
-          "description": "Número de Identificación del Vehículo",
-          "example": "1HGCM82633A123456"
+          "name": "VIN",
+          "description": "El número de identificación del vehículo del coche para iniciar la carga."
+        }
+      }
+    },
+    "stop_charging": {
+      "name": "Detener Carga",
+      "description": "Detener el proceso de carga del vehículo.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "El número de identificación del vehículo del coche para detener la carga."
         }
       }
     }
