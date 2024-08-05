@@ -1,162 +1,250 @@
-from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
+# sensor.py
+
+from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.const import (
     PERCENTAGE,
     UnitOfLength,
     UnitOfElectricPotential,
+    UnitOfPower,
+    UnitOfTemperature,
     UnitOfPressure,
 )
-from homeassistant.util.unit_system import UnitOfTemperature
-from .const import DOMAIN, LOGGER, UPDATE_INTERVAL
+from .const import DOMAIN, LOGGER
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
     """Set up the MG SAIC sensors."""
-    client = hass.data[DOMAIN].get(entry.entry_id)
-    if client is None:
-        LOGGER.error("Client not initialized")
-        return
+    client = hass.data[DOMAIN][entry.entry_id]
 
     try:
+        vehicle_info = await client.get_vehicle_info()
         vehicle_status = await client.get_vehicle_status()
+
+        if vehicle_info is None or vehicle_status is None:
+            LOGGER.error("Failed to retrieve vehicle info or status.")
+            return
+
+        LOGGER.debug("Vehicle Info: %s", vehicle_info)
         LOGGER.debug("Vehicle Status: %s", vehicle_status)
+
+        # Set brand and model from the vehicle info
+        client.brand = vehicle_info[0].brandName
+        client.model = vehicle_info[0].modelName
+
+        sensors = [
+            SAICMGVehicleSensor(
+                client,
+                entry,
+                "Battery Voltage",
+                "batteryVoltage",
+                "basicVehicleStatus",
+                UnitOfElectricPotential.VOLT,
+                SensorDeviceClass.VOLTAGE,
+                "mdi:car-battery",
+                vehicle_status,
+                0.1,
+            ),
+            SAICMGVehicleSensor(
+                client,
+                entry,
+                "Fuel Level",
+                "fuelLevelPrc",
+                "basicVehicleStatus",
+                PERCENTAGE,
+                SensorDeviceClass.BATTERY,
+                "mdi:gas-station",
+                vehicle_status,
+            ),
+            SAICMGVehicleSensor(
+                client,
+                entry,
+                "Fuel Range",
+                "fuelRange",
+                "basicVehicleStatus",
+                UnitOfLength.KILOMETERS,
+                SensorDeviceClass.DISTANCE,
+                "mdi:car-electric",
+                vehicle_status,
+                0.1,
+            ),
+            SAICMGVehicleSensor(
+                client,
+                entry,
+                "Electric Range",
+                "fuelRangeElec",
+                "basicVehicleStatus",
+                UnitOfLength.KILOMETERS,
+                SensorDeviceClass.DISTANCE,
+                "mdi:car-electric",
+                vehicle_status,
+                0.1,
+            ),
+            SAICMGVehicleSensor(
+                client,
+                entry,
+                "Mileage",
+                "mileage",
+                "basicVehicleStatus",
+                UnitOfLength.KILOMETERS,
+                SensorDeviceClass.DISTANCE,
+                "mdi:counter",
+                vehicle_status,
+                0.1,
+            ),
+            SAICMGVehicleSensor(
+                client,
+                entry,
+                "EV Percentage",
+                "extendedData1",
+                "basicVehicleStatus",
+                PERCENTAGE,
+                SensorDeviceClass.BATTERY,
+                "mdi:battery",
+                vehicle_status,
+            ),
+            SAICMGVehicleSensor(
+                client,
+                entry,
+                "HVAC Status",
+                "remoteClimateStatus",
+                "basicVehicleStatus",
+                None,
+                None,
+                "mdi:air-conditioner",
+                vehicle_status,
+            ),
+            SAICMGVehicleSensor(
+                client,
+                entry,
+                "Interior Temperature",
+                "interiorTemperature",
+                "basicVehicleStatus",
+                UnitOfTemperature.CELSIUS,
+                SensorDeviceClass.TEMPERATURE,
+                "mdi:thermometer",
+                vehicle_status,
+            ),
+            SAICMGVehicleSensor(
+                client,
+                entry,
+                "Tyre Pressure Front Left",
+                "frontLeftTyrePressure",
+                "basicVehicleStatus",
+                UnitOfPressure.BAR,
+                SensorDeviceClass.PRESSURE,
+                "mdi:car-tire-alert",
+                vehicle_status,
+                0.04,
+            ),
+            SAICMGVehicleSensor(
+                client,
+                entry,
+                "Tyre Pressure Front Right",
+                "frontRightTyrePressure",
+                "basicVehicleStatus",
+                UnitOfPressure.BAR,
+                SensorDeviceClass.PRESSURE,
+                "mdi:car-tire-alert",
+                vehicle_status,
+                0.04,
+            ),
+            SAICMGVehicleSensor(
+                client,
+                entry,
+                "Tyre Pressure Rear Left",
+                "rearLeftTyrePressure",
+                "basicVehicleStatus",
+                UnitOfPressure.BAR,
+                SensorDeviceClass.PRESSURE,
+                "mdi:car-tire-alert",
+                vehicle_status,
+                0.04,
+            ),
+            SAICMGVehicleSensor(
+                client,
+                entry,
+                "Tyre Pressure Rear Right",
+                "rearRightTyrePressure",
+                "basicVehicleStatus",
+                UnitOfPressure.BAR,
+                SensorDeviceClass.PRESSURE,
+                "mdi:car-tire-alert",
+                vehicle_status,
+                0.04,
+            ),
+            # New Sensors for vehicle details
+            SAICMGVehicleDetailSensor(
+                client,
+                entry,
+                "Brand",
+                "brandName",
+                vehicle_info,
+            ),
+            SAICMGVehicleDetailSensor(
+                client,
+                entry,
+                "Model",
+                "modelName",
+                vehicle_info,
+            ),
+            SAICMGVehicleDetailSensor(
+                client,
+                entry,
+                "Model Year",
+                "modelYear",
+                vehicle_info,
+            ),
+        ]
+
+        async_add_entities(sensors, update_before_add=True)
+
     except Exception as e:
         LOGGER.error("Error connecting to MG SAIC API: %s", e)
-        return
 
-    sensors = [
-        SAICMGVehicleSensor(
-            client,
-            entry,
-            "Battery Voltage",
-            "batteryVoltage",
-            "basicVehicleStatus",
-            UnitOfElectricPotential.VOLT,
-            SensorDeviceClass.VOLTAGE,
-            "mdi:car-battery",
-            0.1,
-        ),
-        SAICMGVehicleSensor(
-            client,
-            entry,
-            "Fuel Level",
-            "fuelLevelPrc",
-            "basicVehicleStatus",
-            PERCENTAGE,
-            SensorDeviceClass.BATTERY,
-            "mdi:gas-station",
-        ),
-        SAICMGVehicleSensor(
-            client,
-            entry,
-            "Fuel Range",
-            "fuelRange",
-            "basicVehicleStatus",
-            UnitOfLength.KILOMETERS,
-            SensorDeviceClass.DISTANCE,
-            "mdi:car-electric",
-            0.1,
-        ),
-        SAICMGVehicleSensor(
-            client,
-            entry,
-            "Electric Range",
-            "fuelRangeElec",
-            "basicVehicleStatus",
-            UnitOfLength.KILOMETERS,
-            SensorDeviceClass.DISTANCE,
-            "mdi:car-electric",
-            0.1,
-        ),
-        SAICMGVehicleSensor(
-            client,
-            entry,
-            "Mileage",
-            "mileage",
-            "basicVehicleStatus",
-            UnitOfLength.KILOMETERS,
-            SensorDeviceClass.DISTANCE,
-            "mdi:counter",
-            0.1,
-        ),
-        SAICMGVehicleSensor(
-            client,
-            entry,
-            "EV Percentage",
-            "extendedData1",
-            "basicVehicleStatus",
-            PERCENTAGE,
-            SensorDeviceClass.BATTERY,
-            "mdi:battery",
-        ),
-        SAICMGVehicleSensor(
-            client,
-            entry,
-            "HVAC Status",
-            "remoteClimateStatus",
-            "basicVehicleStatus",
-            None,
-            None,
-            "mdi:air-conditioner",
-        ),
-        SAICMGVehicleSensor(
-            client,
-            entry,
-            "Interior Temperature",
-            "interiorTemperature",
-            "basicVehicleStatus",
-            UnitOfTemperature.CELSIUS,
-            SensorDeviceClass.TEMPERATURE,
-            "mdi:thermometer",
-        ),
-        SAICMGVehicleSensor(
-            client,
-            entry,
-            "Front Left Tyre Pressure",
-            "frontLeftTyrePressure",
-            "basicVehicleStatus",
-            UnitOfPressure.BAR,
-            SensorDeviceClass.PRESSURE,
-            "mdi:car-tire-alert",
-            0.04,
-        ),
-        SAICMGVehicleSensor(
-            client,
-            entry,
-            "Front Right Tyre Pressure",
-            "frontRightTyrePressure",
-            "basicVehicleStatus",
-            UnitOfPressure.BAR,
-            SensorDeviceClass.PRESSURE,
-            "mdi:car-tire-alert",
-            0.04,
-        ),
-        SAICMGVehicleSensor(
-            client,
-            entry,
-            "Rear Left Tyre Pressure",
-            "rearLeftTyrePressure",
-            "basicVehicleStatus",
-            UnitOfPressure.BAR,
-            SensorDeviceClass.PRESSURE,
-            "mdi:car-tire-alert",
-            0.04,
-        ),
-        SAICMGVehicleSensor(
-            client,
-            entry,
-            "Rear Right Tyre Pressure",
-            "rearRightTyrePressure",
-            "basicVehicleStatus",
-            UnitOfPressure.BAR,
-            SensorDeviceClass.PRESSURE,
-            "mdi:car-tire-alert",
-            0.04,
-        ),
-    ]
-    async_add_entities(sensors, update_before_add=True)
+    # Separate block for charging sensors
+    try:
+        charging_info = await client.get_charging_info()
+        if charging_info is None:
+            LOGGER.warning("Charging information is not available at setup.")
+        else:
+            charging_sensors = [
+                SAICMGChargingSensor(
+                    client,
+                    entry,
+                    "Charging Status",
+                    "chargingStatus",
+                    charging_info,
+                    None,
+                    "mdi:battery-charging",
+                ),
+                SAICMGChargingSensor(
+                    client,
+                    entry,
+                    "Charging State",
+                    "chargingState",
+                    charging_info,
+                    None,
+                    "mdi:car-electric",
+                ),
+                SAICMGChargingSensor(
+                    client,
+                    entry,
+                    "Charging Power",
+                    "chargingPower",
+                    charging_info,
+                    UnitOfPower.WATT,
+                    "mdi:flash",
+                ),
+            ]
+            async_add_entities(charging_sensors, update_before_add=True)
+    except Exception as e:
+        LOGGER.error("Error retrieving charging information: %s", e)
 
 
 class SAICMGVehicleSensor(SensorEntity):
+    """Sensor for general vehicle data."""
+
     def __init__(
         self,
         client,
@@ -167,6 +255,7 @@ class SAICMGVehicleSensor(SensorEntity):
         unit,
         device_class,
         icon,
+        status_data,
         factor=1,
     ):
         self.client = client
@@ -179,6 +268,7 @@ class SAICMGVehicleSensor(SensorEntity):
         self._icon = icon
         self._factor = factor
         self._unique_id = f"{entry.entry_id}_{client.vin}_{field}"
+        self._status_data = status_data
 
     @property
     def unique_id(self):
@@ -187,7 +277,7 @@ class SAICMGVehicleSensor(SensorEntity):
     @property
     def name(self):
         """Return the name of the sensor."""
-        return f"MG SAIC {self._name}"
+        return f"{self.client.brand} {self.client.model} {self._name}"
 
     @property
     def state(self):
@@ -213,22 +303,16 @@ class SAICMGVehicleSensor(SensorEntity):
     def device_info(self):
         return {
             "identifiers": {(DOMAIN, self.client.vin)},
-            "name": f"MG SAIC {self.client.vin}",
-            "manufacturer": "MG SAIC",
+            "name": f"{self.client.brand} {self.client.model}",
+            "manufacturer": f"{self.client.brand}",
+            "model": f"{self.client.model}",
+            "serial_number": f"{self.client.vin}",
         }
 
     async def async_update(self):
         """Fetch new state data for the sensor."""
         try:
-            status = await self.client.get_vehicle_status()
-
-            # Check for generic response and discard it if necessary
-            if self._is_generic_response(status):
-                LOGGER.debug("Discarding generic response for %s", self._name)
-                return
-
-            status_data = getattr(status, self._status_type, None)
-            LOGGER.debug("Status data for %s: %s", self._name, status_data)
+            status_data = getattr(self._status_data, self._status_type, None)
             if status_data:
                 raw_value = getattr(status_data, self._field, None)
                 if raw_value is not None:
@@ -239,21 +323,116 @@ class SAICMGVehicleSensor(SensorEntity):
         except Exception as e:
             LOGGER.error("Error connecting to MG SAIC API: %s", e)
 
-    def _is_generic_response(self, status):
-        """Check if the response is generic."""
-        if (
-            hasattr(status, "basicVehicleStatus")
-            and status.basicVehicleStatus.fuelRange == 0
-            and status.basicVehicleStatus.fuelRangeElec == 0
-            and status.basicVehicleStatus.mileage == 0
-        ):
-            return True
-        return False
 
-    async def async_added_to_hass(self):
-        """When entity is added to hass."""
-        self.async_on_remove(
-            self.hass.helpers.event.async_track_time_interval(
-                self.async_update, UPDATE_INTERVAL
-            )
-        )
+class SAICMGVehicleDetailSensor(SensorEntity):
+    """Sensor for vehicle details."""
+
+    def __init__(self, client, entry, name, field, vehicle_info):
+        self.client = client
+        self._name = name
+        self._field = field
+        self._state = None
+        self._unique_id = f"{entry.entry_id}_{client.vin}_{field}"
+        self._vehicle_info = vehicle_info
+
+    @property
+    def unique_id(self):
+        return self._unique_id
+
+    @property
+    def name(self):
+        """Return the name of the sensor."""
+        return f"{self.client.brand} {self.client.model} {self._name}"
+
+    @property
+    def state(self):
+        """Return the state of the sensor."""
+        return self._state
+
+    @property
+    def device_info(self):
+        return {
+            "identifiers": {(DOMAIN, self.client.vin)},
+            "name": f"{self.client.brand} {self.client.model}",
+            "manufacturer": f"{self.client.brand}",
+            "model": f"{self.client.model}",
+            "serial_number": f"{self.client.vin}",
+        }
+
+    async def async_update(self):
+        """Fetch new state data for the sensor."""
+        try:
+            if self._vehicle_info:
+                raw_value = getattr(self._vehicle_info[0], self._field, None)
+                if raw_value is not None:
+                    self._state = raw_value
+                else:
+                    LOGGER.error("No data for %s", self._name)
+            self.async_write_ha_state()
+        except Exception as e:
+            LOGGER.error("Error connecting to MG SAIC API: %s", e)
+
+
+class SAICMGChargingSensor(SensorEntity):
+    """Sensor for charging-related data."""
+
+    def __init__(self, client, entry, name, field, charging_data, unit, icon):
+        self.client = client
+        self._name = name
+        self._field = field
+        self._state = None
+        self._unit = unit
+        self._icon = icon
+        self._unique_id = f"{entry.entry_id}_{client.vin}_{field}"
+        self._charging_data = charging_data
+
+    @property
+    def unique_id(self):
+        return self._unique_id
+
+    @property
+    def name(self):
+        """Return the name of the sensor."""
+        return f"{self.client.brand} {self.client.model} {self._name}"
+
+    @property
+    def state(self):
+        """Return the state of the sensor."""
+        return self._state
+
+    @property
+    def unit_of_measurement(self):
+        """Return the unit of measurement."""
+        return self._unit
+
+    @property
+    def icon(self):
+        """Return the icon of the sensor."""
+        return self._icon
+
+    @property
+    def device_info(self):
+        return {
+            "identifiers": {(DOMAIN, self.client.vin)},
+            "name": f"{self.client.brand} {self.client.model}",
+            "manufacturer": f"{self.client.brand}",
+            "model": f"{self.client.model}",
+            "serial_number": f"{self.client.vin}",
+        }
+
+    async def async_update(self):
+        """Fetch new state data for the sensor."""
+        try:
+            # Fetch fresh charging data each update
+            charging_data = await self.client.get_charging_info()
+            LOGGER.debug("Charging data for %s: %s", self._name, charging_data)
+
+            if charging_data:
+                raw_value = getattr(charging_data, self._field, None)
+                if raw_value is not None:
+                    self._state = raw_value
+            else:
+                LOGGER.error("No charging data for %s", self._name)
+            self.async_write_ha_state()
+        except Exception as e:
+            LOGGER.error("Error updating charging sensor: %s", e)
