@@ -53,6 +53,9 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 
 ### Sensors
 
+- Brand
+- Model
+- Model Year
 - Mileage
 - Fuel Level
 - Fuel Range
@@ -86,6 +89,23 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 
 #### OTHERS ####
 - **Lock Status**
+
+
+## Version History
+```
+0.0.2
+- Revised mechanics for connection with API
+- Added new sensors (Brand, Model and MY)
+- Rename sensors based on Brand and Model
+- Rename sensors to have them grouped by type (windows, doors, tyres...)
+- Revise config_flow (_login with phone still not working and unavailable_)
+- Initial trialing for charging details 
+```
+
+```
+0.0.1
+- Initial release
+```
 
 
 ## TO-DO
