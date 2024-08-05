@@ -1,3 +1,5 @@
+# __init__.py
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -13,13 +15,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
     username = entry.data["username"]
     password = entry.data["password"]
-    country_code = entry.data.get("country_code")
-    region = entry.data["region"]
     vin = entry.data["vin"]
 
-    client = SAICMGAPIClient(username, password, country_code, region)
+    client = SAICMGAPIClient(username, password, vin)
     await client.login()
-    client.vin = vin
     hass.data[DOMAIN][entry.entry_id] = client
 
     coordinator = SAICMGDataUpdateCoordinator(hass, client)

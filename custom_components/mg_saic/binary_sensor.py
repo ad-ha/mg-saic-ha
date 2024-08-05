@@ -1,3 +1,5 @@
+# binary_sensor.py
+
 from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
     BinarySensorDeviceClass,
@@ -14,8 +16,16 @@ async def async_setup_entry(hass, entry, async_add_entities):
         return
 
     try:
+        vehicle_info = await client.get_vehicle_info()
         vehicle_status = await client.get_vehicle_status()
+
+        LOGGER.debug("Vehicle Info: %s", vehicle_info)
         LOGGER.debug("Vehicle Status: %s", vehicle_status)
+
+        # Set brand and model from the vehicle info
+        client.brand = vehicle_info[0].brandName
+        client.model = vehicle_info[0].modelName
+
     except Exception as e:
         LOGGER.error("Error connecting to MG SAIC API: %s", e)
         return
@@ -24,7 +34,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         SAICMGBinarySensor(
             client,
             entry,
-            "Driver Door",
+            "Door Driver",
             "driverDoor",
             "basicVehicleStatus",
             BinarySensorDeviceClass.DOOR,
@@ -33,7 +43,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         SAICMGBinarySensor(
             client,
             entry,
-            "Driver Window",
+            "Window Driver",
             "driverWindow",
             "basicVehicleStatus",
             BinarySensorDeviceClass.WINDOW,
@@ -42,7 +52,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         SAICMGBinarySensor(
             client,
             entry,
-            "Passenger Door",
+            "Door Passenger",
             "passengerDoor",
             "basicVehicleStatus",
             BinarySensorDeviceClass.DOOR,
@@ -51,7 +61,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         SAICMGBinarySensor(
             client,
             entry,
-            "Passenger Window",
+            "Window Passenger",
             "passengerWindow",
             "basicVehicleStatus",
             BinarySensorDeviceClass.WINDOW,
@@ -60,7 +70,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         SAICMGBinarySensor(
             client,
             entry,
-            "Rear Left Door",
+            "Door Rear Left",
             "rearLeftDoor",
             "basicVehicleStatus",
             BinarySensorDeviceClass.DOOR,
@@ -69,7 +79,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         SAICMGBinarySensor(
             client,
             entry,
-            "Rear Left Window",
+            "Window Rear Left",
             "rearLeftWindow",
             "basicVehicleStatus",
             BinarySensorDeviceClass.WINDOW,
@@ -78,7 +88,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         SAICMGBinarySensor(
             client,
             entry,
-            "Rear Right Door",
+            "Door Rear Right",
             "rearRightDoor",
             "basicVehicleStatus",
             BinarySensorDeviceClass.DOOR,
@@ -87,7 +97,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         SAICMGBinarySensor(
             client,
             entry,
-            "Rear Right Window",
+            "Window Rear Right",
             "rearRightWindow",
             "basicVehicleStatus",
             BinarySensorDeviceClass.WINDOW,
@@ -151,7 +161,7 @@ class SAICMGBinarySensor(BinarySensorEntity):
     @property
     def name(self):
         """Return the name of the sensor."""
-        return f"MG SAIC {self._name}"
+        return f"{self.client.brand} {self.client.model} {self._name}"
 
     @property
     def is_on(self):
@@ -175,8 +185,10 @@ class SAICMGBinarySensor(BinarySensorEntity):
     def device_info(self):
         return {
             "identifiers": {(DOMAIN, self.client.vin)},
-            "name": f"MG SAIC {self.client.vin}",
-            "manufacturer": "MG SAIC",
+            "name": f"{self.client.brand} {self.client.model}",
+            "manufacturer": f"{self.client.brand}",
+            "model": f"{self.client.model}",
+            "serial_number": f"{self.client.vin}",
         }
 
     @property
@@ -195,7 +207,6 @@ class SAICMGBinarySensor(BinarySensorEntity):
                 return
 
             status_data = getattr(status, self._status_type, None)
-            LOGGER.debug("Status data for %s: %s", self._name, status_data)
             if status_data:
                 raw_value = getattr(status_data, self._field, None)
                 if raw_value is not None:

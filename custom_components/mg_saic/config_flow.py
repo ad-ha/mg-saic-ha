@@ -1,8 +1,9 @@
+# config_flow.py
+
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from .const import DOMAIN, LOGGER, COUNTRY_CODES, BASE_URLS, AUTH_ENDPOINT
+from .const import DOMAIN, LOGGER, COUNTRY_CODES
 from saic_ismart_client_ng import SaicApi
 from saic_ismart_client_ng.model import SaicApiConfiguration
 
@@ -51,12 +52,14 @@ class SAICMGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self.username = user_input["username"]
             self.password = user_input["password"]
             self.region = user_input["region"]
+            username_is_email = self.login_type == "email"
+
             if self.login_type == "phone":
                 self.country_code = user_input["country_code"]
+                self.username = f"{self.country_code}{self.username}"
 
-            # Try to login and fetch vehicle data
             try:
-                await self.fetch_vehicle_data()
+                await self.fetch_vehicle_data(username_is_email)
                 return await self.async_step_select_vehicle()
             except Exception as e:
                 errors["base"] = "auth"
@@ -71,11 +74,13 @@ class SAICMGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
             )
         else:
+            country_options = {
+                f"{code['code']} - {code['country']}": code["code"]
+                for code in COUNTRY_CODES
+            }
             data_schema = vol.Schema(
                 {
-                    vol.Required("country_code"): vol.In(
-                        [code["code"] for code in COUNTRY_CODES]
-                    ),
+                    vol.Required("country_code"): vol.In(country_options),
                     vol.Required("username"): str,
                     vol.Required("password"): str,
                     vol.Required("region"): vol.In(["EU", "China", "Asia"]),
@@ -111,11 +116,17 @@ class SAICMGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="select_vehicle", data_schema=data_schema, errors=errors
         )
 
-    async def fetch_vehicle_data(self):
+    async def fetch_vehicle_data(self, username_is_email):
         """Authenticate and fetch vehicle data."""
-        config = SaicApiConfiguration(username=self.username, password=self.password)
+        config = SaicApiConfiguration(
+            username=self.username,
+            password=self.password,
+            region=self.region,
+            phone_country_code=self.country_code,
+            username_is_email=username_is_email,
+        )
         saic_api = SaicApi(config)
 
         await saic_api.login()
-        vehicle_list_rest = await saic_api.vehicle_list()
-        self.vehicles = [car.vin for car in vehicle_list_rest.vinList]
+        vehicle_list_resp = await saic_api.vehicle_list()
+        self.vehicles = [car.vin for car in vehicle_list_resp.vinList]
