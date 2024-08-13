@@ -10,7 +10,7 @@
     "requirements": [
         "requests",
         "pycryptodome",
-        "saic-ismart-client-ng==0.2.2"
+        "saic-ismart-client-ng==0.2.3"
     ],
-    "version": "0.0.2"
+    "version": "0.1.0"
 }
