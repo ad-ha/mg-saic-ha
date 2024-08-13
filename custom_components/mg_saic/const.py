@@ -4,13 +4,11 @@ from datetime import timedelta
 LOGGER = logging.getLogger(__package__)
 
 DOMAIN = "mg_saic"
-TENANT_ID = "459771"
-AUTH_ENDPOINT = "/api.app/v1/auth/login"
-VEHICLES_ENDPOINT = "/api.app/v1/vehicles"
-VEHICLE_STATUS_ENDPOINT = "/api.app/v1/vehicles/{vin}/status"
-COMMAND_ENDPOINT = "/api.app/v1/vehicles/{vin}/commands"
-START_ENGINE_COMMAND = "start_engine"
-STOP_ENGINE_COMMAND = "stop_engine"
+RETRY_LIMIT = 3
+
+# Conversion factors
+PRESSURE_TO_BAR = 0.04
+DATA_DECIMAL_CORRECTION = 0.1
 
 BASE_URLS = {
     "EU": "https://gateway-mg-eu.soimt.com",
@@ -28,13 +26,20 @@ COUNTRY_CODES = [
     {"code": "+33", "country": "France"},
     {"code": "+34", "country": "Spain"},
     {"code": "+39", "country": "Italy"},
-    {"code": "+43", "country": "Austria"},
+    {"code": "+41", "country": "Switzerland"},
+    {"code": "+44", "country": "United Kingdom"},
     {"code": "+45", "country": "Denmark"},
     {"code": "+46", "country": "Sweden"},
     {"code": "+47", "country": "Norway"},
     {"code": "+48", "country": "Poland"},
     {"code": "+49", "country": "Germany"},
+    {"code": "+52", "country": "Mexico"},
+    {"code": "+53", "country": "Cuba"},
+    {"code": "+54", "country": "Argentina"},
     {"code": "+55", "country": "Brazil"},
+    {"code": "+56", "country": "Chile"},
+    {"code": "+57", "country": "Colombia"},
+    {"code": "+58", "country": "Venezuela"},
     {"code": "+60", "country": "Malaysia"},
     {"code": "+61", "country": "Australia"},
     {"code": "+62", "country": "Indonesia"},
@@ -52,5 +57,8 @@ COUNTRY_CODES = [
     {"code": "+971", "country": "United Arab Emirates"},
 ]
 
-
 UPDATE_INTERVAL = timedelta(minutes=120)
+UPDATE_INTERVAL_CHARGING = timedelta(minutes=5)
+
+# Platforms
+PLATFORMS = ["sensor", "binary_sensor", "device_tracker"]

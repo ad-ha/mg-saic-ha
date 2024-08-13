@@ -1,28 +1,81 @@
-# services.yaml
-
-start_engine:
-  description: "Start the vehicle engine"
+start_ac:
+  description: "Start the vehicle's AC system"
   fields:
     vin:
       description: "Vehicle Identification Number"
       example: "1HGCM82633A123456"
 
-stop_engine:
-  description: "Stop the vehicle engine"
+stop_ac:
+  description: "Stop the vehicle's AC system"
   fields:
     vin:
       description: "Vehicle Identification Number"
       example: "1HGCM82633A123456"
 
 start_charging:
-  description: "Start vehicle charging"
+  description: "Start the vehicle charging process"
   fields:
     vin:
       description: "Vehicle Identification Number"
       example: "1HGCM82633A123456"
 
 stop_charging:
-  description: "Stop vehicle charging"
+  description: "Stop the vehicle charging process"
+  fields:
+    vin:
+      description: "Vehicle Identification Number"
+      example: "1HGCM82633A123456"
+
+lock_vehicle:
+  description: "Lock the vehicle"
+  fields:
+    vin:
+      description: "Vehicle Identification Number"
+      example: "1HGCM82633A123456"
+
+unlock_vehicle:
+  description: "Unlock the vehicle"
+  fields:
+    vin:
+      description: "Vehicle Identification Number"
+      example: "1HGCM82633A123456"
+
+open_tailgate:
+  description: "Open the vehicle's tailgate"
+  fields:
+    vin:
+      description: "Vehicle Identification Number"
+      example: "1HGCM82633A123456"
+
+trigger_alarm:
+  description: "Trigger the vehicle's alarm"
+  fields:
+    vin:
+      description: "Vehicle Identification Number"
+      example: "1HGCM82633A123456"
+
+control_rear_window_heat:
+  description: "Control the rear window heat"
+  fields:
+    vin:
+      description: "Vehicle Identification Number"
+      example: "1HGCM82633A123456"
+    action:
+      description: "Turn on (true) or off (false)"
+      example: true
+
+control_heated_seats:
+  description: "Control the heated seats"
+  fields:
+    vin:
+      description: "Vehicle Identification Number"
+      example: "1HGCM82633A123456"
+    action:
+      description: "Turn on (true) or off (false)"
+      example: true
+
+start_front_defrost:
+  description: "Start the front defrost system of the vehicle"
   fields:
     vin:
       description: "Vehicle Identification Number"

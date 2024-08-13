@@ -1,5 +1,3 @@
-# config_flow.py
-
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
@@ -51,12 +49,14 @@ class SAICMGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             self.username = user_input["username"]
             self.password = user_input["password"]
-            self.region = user_input["region"]
             username_is_email = self.login_type == "email"
 
-            if self.login_type == "phone":
-                self.country_code = user_input["country_code"]
-                self.username = f"{self.country_code}{self.username}"
+            if username_is_email:
+                self.region = user_input["region"]
+            else:  # phone login, require region
+                self.region = user_input["region"]
+                self.country_code = user_input["country_code"].replace("+", "")
+                self.username = self.username.replace(" ", "").replace("+", "")
 
             try:
                 await self.fetch_vehicle_data(username_is_email)
@@ -73,11 +73,8 @@ class SAICMGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Required("region"): vol.In(["EU", "China", "Asia"]),
                 }
             )
-        else:
-            country_options = {
-                f"{code['code']} - {code['country']}": code["code"]
-                for code in COUNTRY_CODES
-            }
+        else:  # phone login
+            country_options = {code["code"]: code["code"] for code in COUNTRY_CODES}
             data_schema = vol.Schema(
                 {
                     vol.Required("country_code"): vol.In(country_options),
@@ -118,15 +115,33 @@ class SAICMGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def fetch_vehicle_data(self, username_is_email):
         """Authenticate and fetch vehicle data."""
+
         config = SaicApiConfiguration(
             username=self.username,
             password=self.password,
             region=self.region,
-            phone_country_code=self.country_code,
+            phone_country_code=self.country_code if not username_is_email else None,
             username_is_email=username_is_email,
         )
+
+        LOGGER.debug(
+            "Logging in with username: %s, country_code: %s, is_email: %s, region: %s",
+            self.username,
+            self.country_code,
+            username_is_email,
+            self.region,
+        )
+
         saic_api = SaicApi(config)
 
-        await saic_api.login()
-        vehicle_list_resp = await saic_api.vehicle_list()
-        self.vehicles = [car.vin for car in vehicle_list_resp.vinList]
+        try:
+            await saic_api.login()
+            vehicle_list_resp = await saic_api.vehicle_list()
+            LOGGER.debug("Vehicle list response: %s", vehicle_list_resp)
+            if vehicle_list_resp is None:
+                raise Exception("Vehicle list API returned None")
+            self.vehicles = [car.vin for car in vehicle_list_resp.vinList]
+            LOGGER.info("Fetched vehicle data successfully.")
+        except Exception as e:
+            LOGGER.error("Error fetching vehicle data: %s", e)
+            raise

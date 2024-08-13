@@ -20,6 +20,26 @@
     }
   },
   "services": {
+    "start_ac": {
+      "name": "Encender AC",
+      "description": "Encender el sistema AC del vehículo.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "El número de identificación del vehículo del coche para encender el AC."
+        }
+      }
+    },
+    "stop_ac": {
+      "name": "Apagar AC",
+      "description": "Apagar el sistema AC del vehículo.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "El número de identificación del vehículo del coche para apagar el AC."
+        }
+      }
+    },
     "start_charging": {
       "name": "Iniciar Carga",
       "description": "Iniciar el proceso de carga del vehículo.",
@@ -40,23 +60,81 @@
         }
       }
     },
-    "start_engine": {
-      "name": "Encender Motor",
-      "description": "Encender el motor del vehículo.",
+    "lock_vehicle": {
+      "name": "Bloquear Vehículo",
+      "description": "Bloquear el vehículo.",
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "El número de identificación del vehículo del coche para encender el motor."
+          "description": "El número de identificación del vehículo del coche para bloquear."
         }
       }
     },
-    "stop_engine": {
-      "name": "Apagar Motor",
-      "description": "Apagar el motor del vehículo.",
+    "unlock_vehicle": {
+      "name": "Desbloquear Vehículo",
+      "description": "Desbloquear el vehículo.",
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "El número de identificación del vehículo del coche para apagar el motor."
+          "description": "El número de identificación del vehículo del coche para desbloquear."
+        }
+      }
+    },
+    "open_tailgate": {
+      "name": "Abrir Portón Trasero",
+      "description": "Abrir el portón trasero del vehículo.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "El número de identificación del vehículo del coche para abrir el portón trasero."
+        }
+      }
+    },
+    "trigger_alarm": {
+      "name": "Activar Alarma",
+      "description": "Activar la alarma del vehículo.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "El número de identificación del vehículo del coche para activar la alarma."
+        }
+      }
+    },
+    "control_rear_window_heat": {
+      "name": "Controlar Calefacción de la Ventana Trasera",
+      "description": "Controlar la calefacción de la ventana trasera del vehículo.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "El número de identificación del vehículo del coche para controlar la calefacción de la ventana trasera."
+        },
+        "action": {
+          "name": "Acción",
+          "description": "Encender (true) o apagar (false)."
+        }
+      }
+    },
+    "control_heated_seats": {
+      "name": "Controlar Asientos Calefaccionados",
+      "description": "Controlar los asientos calefaccionados del vehículo.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "El número de identificación del vehículo del coche para controlar los asientos calefaccionados."
+        },
+        "action": {
+          "name": "Acción",
+          "description": "Encender (true) o apagar (false)."
+        }
+      }
+    },
+    "start_front_defrost": {
+      "name": "Encender Desempañador Delantero",
+      "description": "Encender el sistema de desempañador delantero del vehículo.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "El número de identificación del vehículo del coche para encender el desempañador delantero."
         }
       }
     }
