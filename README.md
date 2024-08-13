@@ -44,7 +44,7 @@
 4. Select your type of account (email or phone), enter the details and select your region (EU, Asia, China)
 5. Once connected to the API, a list of available VINs associated with your account will be shown. Select the vehicle that you want to integrate and finish the process.
 
-You may add additional vehciles by following the same steps as above.
+You may add additional vehicles by following the same steps as above.
 
 
 ## SENSORS AVAILABLE
@@ -53,6 +53,7 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 
 ### Sensors
 
+#### GENERAL SENSORS
 - Brand
 - Model
 - Model Year
@@ -61,13 +62,30 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - Fuel Range
 - EV SOC
 - Electric Range
-- HVAC Status
 - Battery Voltage
+- HVAC Status
 - Interior Temperature
+- Exterior Temperature
+
+#### TYRE PRESSURE SENSORS
 - Front Left Tyre Pressure
 - Front Right Tyre Pressure
 - Rear Left Tyre Pressure
 - Rear Right Tyre Pressure
+
+### CHARGING DATA SENSORs
+- Charging Status
+- Charging Voltage
+- Charging Current
+- Charging Power
+- Estimated Range After Charging
+- Charging Current Limit
+- Charging Target SOC
+- Charging Duration
+- Remaining Charging Time
+- Added Electric Range
+- Power Usage Since Last Charge
+- Mileage Since Last Charge
 
 
 ### Binary Sensors
@@ -88,10 +106,24 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - Sun Roof Status
 
 #### OTHERS ####
-- **Lock Status**
+- Lock Status
+- Charging Gun Status
 
 
 ## Version History
+```
+0.1.0
+- Refactor code to work with data coordinator
+- Revised mechanics for connection with API and data retrieval
+- Added new sensors for charging data
+- Renamed and revised sensor data and info
+- Revise config_flow to allow login with phone and email
+- Initial implementation of services (some services still not available, but are implemented as a proof of concept). _Feedback on this will be helpful_
+- Change update i9nterval to 5 minutes once charging is detected
+- Refactor API responses and values as needed. Charging sensors only display data if Charging is Active, otherwise 0 will be displayed
+- Fuel Level, Fuel Range, EV State of Charge and Electric Range are vehicle dependent. Add logic to determine the vehicle type and show sensors accordingly.
+```
+
 ```
 0.0.2
 - Revised mechanics for connection with API
@@ -110,8 +142,8 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 
 ## TO-DO
 
-- Implement initial services for Locks action, HVAC control and anciliary services.
-- Implement charging detection and corresponding sensors.
+- ~~Implement initial services for Locks action, AC control and ancillary services.~~
+- ~~Implement charging detection and corresponding sensors.~~
 - Check API details for energy usage and stats, adding additional sensors.
 - Check implementation against other EV/PHEV models.
 - Add possibility to display metric or imperial data, including tyres' pressure.
