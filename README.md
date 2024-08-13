@@ -115,6 +115,7 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 0.1.0
 - Refactor code to work with data coordinator
 - Revised mechanics for connection with API and data retrieval
+- Update saic-python-client-ng requirements to version 0.2.3
 - Added new sensors for charging data
 - Renamed and revised sensor data and info
 - Revise config_flow to allow login with phone and email
