@@ -6,6 +6,8 @@
 [![Hassfest](https://github.com/ad-ha/mg-saic-ha/actions/workflows/hassfest.yaml/badge.svg)](https://github.com/ad-ha/mg-saic-ha/actions/workflows/hassfest.yaml)
 
 
+![image](https://brands.home-assistant.io/brands/_/mg_saic/logo.png)
+
 # MG/SAIC CUSTOM INTEGRATION
 
 **Important Notes:** 
@@ -73,7 +75,7 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - Rear Left Tyre Pressure
 - Rear Right Tyre Pressure
 
-### CHARGING DATA SENSORs
+#### CHARGING DATA SENSORS
 - Charging Status
 - Charging Voltage
 - Charging Current
@@ -120,7 +122,7 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - Renamed and revised sensor data and info
 - Revise config_flow to allow login with phone and email
 - Initial implementation of services (some services still not available, but are implemented as a proof of concept). _Feedback on this will be helpful_
-- Change update i9nterval to 5 minutes once charging is detected
+- Change update interval to 5 minutes once charging is detected
 - Refactor API responses and values as needed. Charging sensors only display data if Charging is Active, otherwise 0 will be displayed
 - Fuel Level, Fuel Range, EV State of Charge and Electric Range are vehicle dependent. Add logic to determine the vehicle type and show sensors accordingly.
 ```
