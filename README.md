@@ -114,6 +114,19 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 
 ## Version History
 ```
+0.1.2
+- Refactor code to work with data coordinator
+- Revised mechanics for connection with API and data retrieval
+- Update saic-python-client-ng requirements to version 0.2.3
+- Added new sensors for charging data
+- Renamed and revised sensor data and info
+- Revise config_flow to allow login with phone and email
+- Initial implementation of services (some services still not available, but are implemented as a proof of concept). _Feedback on this will be helpful_
+- Change update interval to 5 minutes once charging is detected
+- Refactor API responses and values as needed. Charging sensors only display data if Charging is Active, otherwise 0 will be displayed
+- Fuel Level, Fuel Range, EV State of Charge and Electric Range are vehicle dependent. Add logic to determine the vehicle type and show sensors accordingly.
+```
+```
 0.1.0
 - Refactor code to work with data coordinator
 - Revised mechanics for connection with API and data retrieval
