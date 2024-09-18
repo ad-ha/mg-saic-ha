@@ -128,7 +128,7 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 
 ## Version History
 ```
-0.1.2
+0.2.0
 - Revised mechanics for connection with API and data retrieval
 - Services testing and adjusting to API requirements
 - Renamed and revised sensor data and info
