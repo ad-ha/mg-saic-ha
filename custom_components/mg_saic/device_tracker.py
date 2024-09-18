@@ -1,7 +1,9 @@
 from homeassistant.components.device_tracker.config_entry import TrackerEntity
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.util import dt as dt_util
 from .const import DOMAIN, LOGGER, UPDATE_INTERVAL
+from datetime import timedelta
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -21,6 +23,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 
 class SAICMGDeviceTracker(TrackerEntity, RestoreEntity):
+    """Representation of a MG SAIC device tracker."""
+
     def __init__(self, coordinator, entry, field, name):
         self.coordinator = coordinator
         self._field = field
@@ -61,9 +65,9 @@ class SAICMGDeviceTracker(TrackerEntity, RestoreEntity):
         return {
             "identifiers": {(DOMAIN, vin_info.vin)},
             "name": f"{vin_info.brandName} {vin_info.modelName}",
-            "manufacturer": f"{vin_info.brandName}",
-            "model": f"{vin_info.modelName}",
-            "serial_number": f"{vin_info.vin}",
+            "manufacturer": vin_info.brandName,
+            "model": vin_info.modelName,
+            "serial_number": vin_info.vin,
         }
 
     @property
@@ -79,12 +83,18 @@ class SAICMGDeviceTracker(TrackerEntity, RestoreEntity):
         try:
             status = self.coordinator.data["status"]
             gps_position = getattr(status, self._field, None)
-            if gps_position and gps_position.wayPoint:
-                self._latitude = float(gps_position.wayPoint.position.latitude) / 1e6
-                self._longitude = float(gps_position.wayPoint.position.longitude) / 1e6
+            if (
+                gps_position
+                and gps_position.wayPoint
+                and gps_position.wayPoint.position
+            ):
+                self._latitude = gps_position.wayPoint.position.latitude / 1e6
+                self._longitude = gps_position.wayPoint.position.longitude / 1e6
                 LOGGER.debug(
                     "Updated GPS location to %f, %f", self._latitude, self._longitude
                 )
+            else:
+                LOGGER.warning("No GPS position data available.")
             self.async_write_ha_state()
         except Exception as e:
             LOGGER.error("Error updating GPS location: %s", e)
