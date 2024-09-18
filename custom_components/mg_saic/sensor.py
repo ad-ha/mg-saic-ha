@@ -1,12 +1,5 @@
-from homeassistant.components.sensor import SensorEntity
-from homeassistant.const import (
-    PERCENTAGE,
-    UnitOfLength,
-    UnitOfTemperature,
-    UnitOfPressure,
-    UnitOfElectricPotential,
-    UnitOfTime,
-)
+from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
+from homeassistant.const import PERCENTAGE
 from homeassistant.helpers.restore_state import RestoreEntity
 from .const import DOMAIN, LOGGER, PRESSURE_TO_BAR, DATA_DECIMAL_CORRECTION
 
@@ -20,9 +13,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
             LOGGER.error("Failed to retrieve vehicle info or status.")
             return
 
-        vehicle_info = coordinator.data["info"]
+        vin_info = coordinator.data["info"][0]
         vehicle_status = coordinator.data["status"]
-
         vehicle_type = coordinator.vehicle_type
 
         sensors = [
@@ -32,7 +24,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "Battery Voltage",
                 "batteryVoltage",
                 "basicVehicleStatus",
-                UnitOfElectricPotential.VOLT,
+                SensorDeviceClass.VOLTAGE,
+                "V",
                 "mdi:car-battery",
                 "measurement",
                 DATA_DECIMAL_CORRECTION,
@@ -43,7 +36,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "Interior Temperature",
                 "interiorTemperature",
                 "basicVehicleStatus",
-                UnitOfTemperature.CELSIUS,
+                SensorDeviceClass.TEMPERATURE,
+                "°C",
                 "mdi:thermometer",
                 "measurement",
                 1.0,
@@ -54,7 +48,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "Exterior Temperature",
                 "exteriorTemperature",
                 "basicVehicleStatus",
-                UnitOfTemperature.CELSIUS,
+                SensorDeviceClass.TEMPERATURE,
+                "°C",
                 "mdi:thermometer",
                 "measurement",
                 1.0,
@@ -65,7 +60,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "Tyre Pressure Front Left",
                 "frontLeftTyrePressure",
                 "basicVehicleStatus",
-                UnitOfPressure.BAR,
+                SensorDeviceClass.PRESSURE,
+                "bar",
                 "mdi:car-tire-alert",
                 "measurement",
                 PRESSURE_TO_BAR,
@@ -76,7 +72,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "Tyre Pressure Front Right",
                 "frontRightTyrePressure",
                 "basicVehicleStatus",
-                UnitOfPressure.BAR,
+                SensorDeviceClass.PRESSURE,
+                "bar",
                 "mdi:car-tire-alert",
                 "measurement",
                 PRESSURE_TO_BAR,
@@ -87,7 +84,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "Tyre Pressure Rear Left",
                 "rearLeftTyrePressure",
                 "basicVehicleStatus",
-                UnitOfPressure.BAR,
+                SensorDeviceClass.PRESSURE,
+                "bar",
                 "mdi:car-tire-alert",
                 "measurement",
                 PRESSURE_TO_BAR,
@@ -98,7 +96,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "Tyre Pressure Rear Right",
                 "rearRightTyrePressure",
                 "basicVehicleStatus",
-                UnitOfPressure.BAR,
+                SensorDeviceClass.PRESSURE,
+                "bar",
                 "mdi:car-tire-alert",
                 "measurement",
                 PRESSURE_TO_BAR,
@@ -109,7 +108,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "Mileage",
                 "mileage",
                 "basicVehicleStatus",
-                UnitOfLength.KILOMETERS,
+                SensorDeviceClass.DISTANCE,
+                "km",
                 "mdi:counter",
                 "total_increasing",
                 DATA_DECIMAL_CORRECTION,
@@ -142,7 +142,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
                     "Fuel Range",
                     "fuelRange",
                     "basicVehicleStatus",
-                    UnitOfLength.KILOMETERS,
+                    SensorDeviceClass.DISTANCE,
+                    "km",
                     "mdi:gas-station",
                     "measurement",
                     DATA_DECIMAL_CORRECTION,
@@ -156,7 +157,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
                     "Fuel Level",
                     "fuelLevelPrc",
                     "basicVehicleStatus",
-                    PERCENTAGE,
+                    SensorDeviceClass.BATTERY,
+                    "%",
                     "mdi:gas-station",
                     "measurement",
                     1.0,
@@ -171,7 +173,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
                     "Electric Range",
                     "fuelRangeElec",
                     "basicVehicleStatus",
-                    UnitOfLength.KILOMETERS,
+                    SensorDeviceClass.DISTANCE,
+                    "km",
                     "mdi:car-electric",
                     "measurement",
                     DATA_DECIMAL_CORRECTION,
@@ -185,160 +188,144 @@ async def async_setup_entry(hass, entry, async_add_entities):
                     "State of Charge",
                     "extendedData1",
                     "basicVehicleStatus",
-                    PERCENTAGE,
+                    SensorDeviceClass.BATTERY,
+                    "%",
                     "mdi:battery",
                     "measurement",
-                    1.0,  # Add factor for State of Charge
+                    1.0,
                 ),
             )
 
         # Add all non-charging sensors first
         async_add_entities(sensors, update_before_add=True)
 
-        # Now add the charging-related sensors separately, wrapped in a try-except block
-        try:
-            if coordinator.data and "charging" in coordinator.data:
-                charging_sensors = [
-                    SAICMGChargingSensor(
-                        coordinator,
-                        entry,
-                        "Charging Voltage",
-                        "bmsPackVol",
-                        UnitOfElectricPotential.VOLT,
-                        "mdi:flash",
-                        "measurement",
-                        0.001,  # Correct factor to display in Volts
-                        "chrgMgmtData",
-                    ),
-                    SAICMGChargingSensor(
-                        coordinator,
-                        entry,
-                        "Charging Current",
-                        "bmsPackCrnt",
-                        "A",
-                        "mdi:current-ac",
-                        "measurement",
-                        0.001,  # Correct factor to display in Amperes
-                        "chrgMgmtData",
-                    ),
-                    SAICMGChargingSensor(
-                        coordinator,
-                        entry,
-                        "Charging Power",
-                        "lastChargeEndingPower",
-                        "kW",
-                        "mdi:flash",
-                        "measurement",
-                        0.1,  # Factor to convert to kW
-                        "rvsChargeStatus",
-                    ),
-                    SAICMGChargingSensor(
-                        coordinator,
-                        entry,
-                        "Estimated Range After Charging",
-                        "bmsEstdElecRng",
-                        UnitOfLength.KILOMETERS,
-                        "mdi:map-marker-distance",
-                        "measurement",
-                        1.0,
-                        "chrgMgmtData",
-                    ),
-                    SAICMGChargingSensor(
-                        coordinator,
-                        entry,
-                        "Charging Current Limit",
-                        "bmsChrgOtptCrntReq",
-                        "A",
-                        "mdi:current-ac",
-                        "measurement",
-                        0.001,
-                        "chrgMgmtData",
-                    ),
-                    SAICMGChargingSensor(
-                        coordinator,
-                        entry,
-                        "Charging Target SOC",
-                        "bmsOnBdChrgTrgtSOCDspCmd",
-                        PERCENTAGE,
-                        "mdi:battery-charging-100",
-                        "measurement",
-                        1.0,
-                        "chrgMgmtData",
-                    ),
-                    SAICMGChargingSensor(
-                        coordinator,
-                        entry,
-                        "Charging Duration",
-                        "chargingDuration",
-                        UnitOfTime.SECONDS,
-                        "mdi:timer-outline",
-                        "measurement",
-                        1.0,
-                        "rvsChargeStatus",
-                    ),
-                    SAICMGChargingSensor(
-                        coordinator,
-                        entry,
-                        "Remaining Charging Time",
-                        "chrgngRmnngTime",
-                        UnitOfTime.MINUTES,
-                        "mdi:timer-sand",
-                        "measurement",
-                        1.0,
-                        "chrgMgmtData",
-                    ),
-                    SAICMGChargingSensor(
-                        coordinator,
-                        entry,
-                        "Added Electric Range",
-                        "chrgngAddedElecRng",
-                        UnitOfLength.KILOMETERS,
-                        "mdi:map-marker-distance",
-                        "measurement",
-                        DATA_DECIMAL_CORRECTION,
-                        "chrgMgmtData",
-                    ),
-                    SAICMGChargingSensor(
-                        coordinator,
-                        entry,
-                        "Power Usage Since Last Charge",
-                        "powerUsageSinceLastCharge",
-                        "kWh",
-                        "mdi:flash",
-                        "measurement",
-                        1.0,
-                        "rvsChargeStatus",
-                    ),
-                    SAICMGChargingSensor(
-                        coordinator,
-                        entry,
-                        "Mileage Since Last Charge",
-                        "mileageSinceLastCharge",
-                        UnitOfLength.KILOMETERS,
-                        "mdi:map-marker-distance",
-                        "measurement",
-                        DATA_DECIMAL_CORRECTION,
-                        "rvsChargeStatus",
-                    ),
-                    SAICMGChargingSensor(
-                        coordinator,
-                        entry,
-                        "Charging Status",
-                        "bmsChrgSts",
-                        None,
-                        "mdi:battery-charging",
-                        "measurement",
-                        1.0,
-                        "chrgMgmtData",
-                    ),
-                ]
+        # Now add the charging-related sensors, if charging data is available
+        if "charging" in coordinator.data and coordinator.data["charging"]:
+            charging_sensors = [
+                SAICMGChargingSensor(
+                    coordinator,
+                    entry,
+                    "Charging Voltage",
+                    "bmsPackVol",
+                    SensorDeviceClass.VOLTAGE,
+                    "V",
+                    "mdi:flash",
+                    "measurement",
+                    0.001,  # Convert from mV to V
+                    "chrgMgmtData",
+                ),
+                SAICMGChargingSensor(
+                    coordinator,
+                    entry,
+                    "Charging Current",
+                    "bmsPackCrnt",
+                    SensorDeviceClass.CURRENT,
+                    "A",
+                    "mdi:current-ac",
+                    "measurement",
+                    0.001,  # Convert from mA to A
+                    "chrgMgmtData",
+                ),
+                SAICMGChargingSensor(
+                    coordinator,
+                    entry,
+                    "Target SOC",
+                    "bmsOnBdChrgTrgtSOCDspCmd",
+                    SensorDeviceClass.BATTERY,
+                    "%",
+                    "mdi:battery-charging-100",
+                    "measurement",
+                    1.0,
+                    "chrgMgmtData",
+                ),
+                SAICMGChargingSensor(
+                    coordinator,
+                    entry,
+                    "Estimated Range After Charging",
+                    "bmsEstdElecRng",
+                    SensorDeviceClass.DISTANCE,
+                    "km",
+                    "mdi:map-marker-distance",
+                    "measurement",
+                    1.0,
+                    "chrgMgmtData",
+                ),
+                SAICMGChargingSensor(
+                    coordinator,
+                    entry,
+                    "Charging Duration",
+                    "chargingDuration",
+                    SensorDeviceClass.DURATION,
+                    "min",
+                    "mdi:timer-outline",
+                    "measurement",
+                    1.0,
+                    "rvsChargeStatus",
+                ),
+                SAICMGChargingSensor(
+                    coordinator,
+                    entry,
+                    "Remaining Charging Time",
+                    "chrgngRmnngTime",
+                    SensorDeviceClass.DURATION,
+                    "min",
+                    "mdi:timer-sand",
+                    "measurement",
+                    1.0,
+                    "chrgMgmtData",
+                ),
+                SAICMGChargingSensor(
+                    coordinator,
+                    entry,
+                    "Added Electric Range",
+                    "chrgngAddedElecRng",
+                    SensorDeviceClass.DISTANCE,
+                    "km",
+                    "mdi:map-marker-distance",
+                    "measurement",
+                    DATA_DECIMAL_CORRECTION,
+                    "chrgMgmtData",
+                ),
+                SAICMGChargingSensor(
+                    coordinator,
+                    entry,
+                    "Power Usage Since Last Charge",
+                    "powerUsageSinceLastCharge",
+                    SensorDeviceClass.ENERGY,
+                    "kWh",
+                    "mdi:flash",
+                    "measurement",
+                    1.0,
+                    "rvsChargeStatus",
+                ),
+                SAICMGChargingSensor(
+                    coordinator,
+                    entry,
+                    "Mileage Since Last Charge",
+                    "mileageSinceLastCharge",
+                    SensorDeviceClass.DISTANCE,
+                    "km",
+                    "mdi:map-marker-distance",
+                    "measurement",
+                    DATA_DECIMAL_CORRECTION,
+                    "rvsChargeStatus",
+                ),
+                SAICMGChargingSensor(
+                    coordinator,
+                    entry,
+                    "Charging Status",
+                    "bmsChrgSts",
+                    None,
+                    None,
+                    "mdi:battery-charging",
+                    None,
+                    1.0,
+                    "chrgMgmtData",
+                ),
+            ]
 
-                # Add charging sensors if they are available
-                async_add_entities(charging_sensors, update_before_add=True)
-            else:
-                LOGGER.error("Failed to retrieve charging info.")
-        except Exception as e:
-            LOGGER.error("Error setting up MG SAIC charging sensors: %s", e)
+            # Add charging sensors if they are available
+            async_add_entities(charging_sensors, update_before_add=True)
 
     except Exception as e:
         LOGGER.error("Error setting up MG SAIC sensors: %s", e)
@@ -354,6 +341,7 @@ class SAICMGVehicleSensor(SensorEntity, RestoreEntity):
         name,
         field,
         status_type,
+        device_class,
         unit,
         icon,
         state_class,
@@ -364,12 +352,17 @@ class SAICMGVehicleSensor(SensorEntity, RestoreEntity):
         self._name = name
         self._field = field
         self._status_type = status_type
+        self._device_class = device_class
         self._unit = unit
         self._state_class = state_class
         self._icon = icon
         self._state = None
         self._factor = factor
-        vin_info = coordinator.data["info"][0]
+        self._attr_state_class = state_class
+        self._attr_native_unit_of_measurement = unit
+        self._attr_icon = icon
+        self._attr_device_class = device_class
+        vin_info = self.coordinator.data["info"][0]
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}"
 
     @property
@@ -383,19 +376,9 @@ class SAICMGVehicleSensor(SensorEntity, RestoreEntity):
         return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
 
     @property
-    def state(self):
+    def native_value(self):
         """Return the state of the sensor."""
         return self._state
-
-    @property
-    def unit_of_measurement(self):
-        """Return the unit of measurement."""
-        return self._unit
-
-    @property
-    def icon(self):
-        """Return the icon to use in the frontend, if any."""
-        return self._icon
 
     @property
     def device_info(self):
@@ -403,9 +386,9 @@ class SAICMGVehicleSensor(SensorEntity, RestoreEntity):
         return {
             "identifiers": {(DOMAIN, vin_info.vin)},
             "name": f"{vin_info.brandName} {vin_info.modelName}",
-            "manufacturer": f"{vin_info.brandName}",
-            "model": f"{vin_info.modelName}",
-            "serial_number": f"{vin_info.vin}",
+            "manufacturer": vin_info.brandName,
+            "model": vin_info.modelName,
+            "serial_number": vin_info.vin,
         }
 
     async def async_update(self):
@@ -418,6 +401,12 @@ class SAICMGVehicleSensor(SensorEntity, RestoreEntity):
                 raw_value = getattr(status_data, self._field, None)
                 if raw_value is not None:
                     self._state = raw_value * self._factor
+                else:
+                    LOGGER.warning(
+                        "Field %s not found in status data for sensor %s",
+                        self._field,
+                        self._name,
+                    )
             else:
                 LOGGER.error("No status data for %s", self._name)
             self.async_write_ha_state()
@@ -434,7 +423,7 @@ class SAICMGVehicleDetailSensor(SensorEntity, RestoreEntity):
         self._name = name
         self._field = field
         self._state = None
-        vin_info = coordinator.data["info"][0]
+        vin_info = self.coordinator.data["info"][0]
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}"
 
     @property
@@ -448,7 +437,7 @@ class SAICMGVehicleDetailSensor(SensorEntity, RestoreEntity):
         return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
 
     @property
-    def state(self):
+    def native_value(self):
         """Return the state of the sensor."""
         return self._state
 
@@ -458,16 +447,16 @@ class SAICMGVehicleDetailSensor(SensorEntity, RestoreEntity):
         return {
             "identifiers": {(DOMAIN, vin_info.vin)},
             "name": f"{vin_info.brandName} {vin_info.modelName}",
-            "manufacturer": f"{vin_info.brandName}",
-            "model": f"{vin_info.modelName}",
-            "serial_number": f"{vin_info.vin}",
+            "manufacturer": vin_info.brandName,
+            "model": vin_info.modelName,
+            "serial_number": vin_info.vin,
         }
 
     async def async_update(self):
         """Fetch new state data for the sensor."""
         try:
-            vehicle_info = self.coordinator.data["info"]
-            self._state = getattr(vehicle_info[0], self._field, None)
+            vin_info = self.coordinator.data["info"][0]
+            self._state = getattr(vin_info, self._field, None)
             self.async_write_ha_state()
         except Exception as e:
             LOGGER.error("Error updating vehicle detail sensor %s: %s", self._name, e)
@@ -482,6 +471,7 @@ class SAICMGChargingSensor(SensorEntity, RestoreEntity):
         entry,
         name,
         field,
+        device_class,
         unit,
         icon,
         state_class,
@@ -492,12 +482,17 @@ class SAICMGChargingSensor(SensorEntity, RestoreEntity):
         self.coordinator = coordinator
         self._name = name
         self._field = field
+        self._device_class = device_class
         self._unit = unit
         self._state_class = state_class
         self._icon = icon
         self._state = None
         self._factor = factor
         self._data_source = data_source
+        self._attr_state_class = state_class
+        self._attr_native_unit_of_measurement = unit
+        self._attr_icon = icon
+        self._attr_device_class = device_class
         vin_info = self.coordinator.data["info"][0]
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}_charge"
 
@@ -512,19 +507,9 @@ class SAICMGChargingSensor(SensorEntity, RestoreEntity):
         return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
 
     @property
-    def state(self):
+    def native_value(self):
         """Return the state of the sensor."""
         return self._state
-
-    @property
-    def unit_of_measurement(self):
-        """Return the unit of measurement."""
-        return self._unit
-
-    @property
-    def icon(self):
-        """Return the icon to use in the frontend, if any."""
-        return self._icon
 
     @property
     def device_info(self):
@@ -532,9 +517,9 @@ class SAICMGChargingSensor(SensorEntity, RestoreEntity):
         return {
             "identifiers": {(DOMAIN, vin_info.vin)},
             "name": f"{vin_info.brandName} {vin_info.modelName}",
-            "manufacturer": f"{vin_info.brandName}",
-            "model": f"{vin_info.modelName}",
-            "serial_number": f"{vin_info.vin}",
+            "manufacturer": vin_info.brandName,
+            "model": vin_info.modelName,
+            "serial_number": vin_info.vin,
         }
 
     async def async_update(self):
@@ -559,8 +544,11 @@ class SAICMGChargingSensor(SensorEntity, RestoreEntity):
                     "chrgngRmnngTime",
                     "chrgngAddedElecRng",
                 ]:
-                    if charging_status in [0, 5]:
-                        self._state = 0
+                    if charging_status in [
+                        0,
+                        5,
+                    ]:  # 0 = Not Charging, 5 = Charging Finished
+                        self._state = 0  # Display 0 for these sensors when not charging
                     else:
                         raw_value = getattr(charging_data, self._field, None)
                         self._state = (
@@ -581,7 +569,7 @@ class SAICMGChargingSensor(SensorEntity, RestoreEntity):
                     }.get(raw_value, None)
 
                 elif self._field == "bmsChrgSts":
-                    # Map bmsChrgSts values to charging statuses
+                    # Map bmsChrgSts values to charging statuses (these are strings)
                     raw_value = getattr(charging_data, self._field, None)
                     self._state = {
                         0: "Not Charging",
@@ -590,6 +578,7 @@ class SAICMGChargingSensor(SensorEntity, RestoreEntity):
                     }.get(raw_value, f"Unknown ({raw_value})")
 
                 else:
+                    # Handle other numeric fields
                     raw_value = getattr(charging_data, self._field, None)
                     self._state = (
                         raw_value * self._factor if raw_value is not None else None
@@ -602,7 +591,9 @@ class SAICMGChargingSensor(SensorEntity, RestoreEntity):
             else:
                 LOGGER.error("No charging data available for %s", self._name)
                 self._state = None
+
             self.async_write_ha_state()
+
         except Exception as e:
             LOGGER.error("Error updating charging sensor %s: %s", self._name, e)
 

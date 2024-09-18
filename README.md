@@ -21,9 +21,11 @@
 1. Ensure that HACS is installed.
 2. Go to HACS
 3. On the top right menu select "Custom repositories"
+
   ![image](https://github.com/user-attachments/assets/c89651bc-76c2-4c62-b7e2-f9dd11592f84)
 
 4. On the "Repository" field put the URL https://github.com/ad-ha/mg-saic-ha. On the "Category" select "Integration" and click "ADD"
+
   ![image](https://github.com/user-attachments/assets/7b6ed323-58f3-489f-9d32-c0d41fd5afeb)
 
 6. Search for "MG SAIC" and download the repository.
@@ -53,9 +55,9 @@ You may add additional vehicles by following the same steps as above.
 
 The MG/SAIC Custom Integration provides the following sensors and binary sensors:
 
-### Sensors
+### SENSORS
 
-#### GENERAL SENSORS
+#### General
 - Brand
 - Model
 - Model Year
@@ -69,19 +71,18 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - Interior Temperature
 - Exterior Temperature
 
-#### TYRE PRESSURE SENSORS
+#### Tyre Pressure
 - Front Left Tyre Pressure
 - Front Right Tyre Pressure
 - Rear Left Tyre Pressure
 - Rear Right Tyre Pressure
 
-#### CHARGING DATA SENSORS
+#### Charging Data
 - Charging Status
 - Charging Voltage
 - Charging Current
 - Charging Power
 - Estimated Range After Charging
-- Charging Current Limit
 - Charging Target SOC
 - Charging Duration
 - Remaining Charging Time
@@ -90,9 +91,9 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - Mileage Since Last Charge
 
 
-### Binary Sensors
+### BINARY SENSORS
 
-#### DOORS ####
+#### Doors
 - Driver Door
 - Passenger Door
 - Rear Left Door
@@ -100,19 +101,44 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - Bonnet Status
 - Boot Status
 
-#### WINDOWS ####
+#### Windows
 - Driver Window
 - Passenger Window
 - Rear Left Window
 - Rear Right Window
 - Sun Roof Status
 
-#### OTHERS ####
+#### Others
 - Lock Status
 - Charging Gun Status
 
+### Services
+- Lock Vehicle
+- Unlock Vehicle
+- Start AC
+- Stop AC
+- Open Tailgate
+- Tigger Find My Car Alarm
+- Start Charging (sometimes this service fails)
+- Stop Charging
+- Defrost Rear Window
+- Defrost Windshield
+- Control Heated Seats
+
 
 ## Version History
+```
+0.1.2
+- Revised mechanics for connection with API and data retrieval
+- Services testing and adjusting to API requirements
+- Renamed and revised sensor data and info
+- Revise units for sensors and adapting all sensors to SensorDeviceClass from Home Assistant
+- Revise Unique ID generation for all sensors
+- Revise Login method to avoid blocking calls during startup
+- Improve detection and discard of "Generic Responses" during API setup and updates
+- Improve vehicle type detection on integration setup.
+```
+ 
 ```
 0.1.0
 - Refactor code to work with data coordinator

@@ -34,6 +34,13 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                 vehicle_status = await self.client.get_vehicle_status()
                 charging_info = await self.client.get_charging_info()
 
+                if vehicle_info is None:
+                    LOGGER.error("Vehicle info returned None")
+                if vehicle_status is None:
+                    LOGGER.error("Vehicle status returned None")
+                if charging_info is None:
+                    LOGGER.error("Charging info returned None")
+
                 # Check for generic response and retry
                 if self._is_generic_response(vehicle_status):
                     LOGGER.debug("Discarding generic response, retrying...")
@@ -49,14 +56,6 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                 LOGGER.debug("Vehicle Status: %s", vehicle_status)
                 LOGGER.debug("Vehicle Charging Data: %s", charging_info)
 
-                # Adjust update interval based on charging status
-                if charging_info and charging_info.chrgMgmtData.bmsChrgSts == 1:
-                    # Vehicle is charging, reduce the update interval
-                    self.update_interval = UPDATE_INTERVAL_CHARGING
-                else:
-                    # Vehicle is not charging, use the standard update interval
-                    self.update_interval = UPDATE_INTERVAL
-
                 return {
                     "info": vehicle_info,
                     "status": vehicle_status,
@@ -65,24 +64,24 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
 
             raise UpdateFailed("Generic response received after retries")
 
-        except ConfigEntryAuthFailed as auth_err:
-            raise ConfigEntryAuthFailed(
-                f"Authentication failed: {auth_err}"
-            ) from auth_err
         except Exception as e:
             LOGGER.error("Error fetching data: %s", e)
             raise UpdateFailed(f"Error fetching data: {e}")
 
     def _is_generic_response(self, status):
         """Check if the response is generic."""
-        if (
-            hasattr(status, "basicVehicleStatus")
-            and status.basicVehicleStatus.fuelRange == 0
-            and status.basicVehicleStatus.fuelRangeElec == 0
-            and status.basicVehicleStatus.mileage == 0
-        ):
-            return True
-        return False
+        try:
+            if (
+                hasattr(status, "basicVehicleStatus")
+                and status.basicVehicleStatus.fuelRange == 0
+                and status.basicVehicleStatus.fuelRangeElec == 0
+                and status.basicVehicleStatus.mileage == 0
+            ):
+                return True
+            return False
+        except Exception as e:
+            LOGGER.error("Error checking for generic response: %s", e)
+            return False
 
     def _determine_vehicle_type(self, vehicle_info):
         """Determine the type of vehicle based on its information."""
@@ -90,19 +89,29 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         is_combustion = False
         is_hybrid = False
 
-        for config in vehicle_info[0].vehicleModelConfiguration:
-            if config.itemCode == "EV" and config.itemValue == "1":
-                is_electric = True
+        vin_info = vehicle_info[0]  # Get the first VIN info
+
+        for config in vin_info.vehicleModelConfiguration:
+            if config.itemCode == "EV":
+                if config.itemValue == "1":
+                    is_electric = True
+                elif config.itemValue == "0":
+                    is_combustion = True
             if config.itemCode == "BType":
                 if config.itemValue == "1":
                     is_electric = True
                 elif config.itemValue == "0":
+                    is_combustion = True
+            if config.itemCode == "ENERGY":
+                if config.itemValue == "1":
                     is_hybrid = True
-            if config.itemCode == "ENERGY" and config.itemValue == "1":
-                is_hybrid = True
 
-        if "electric" in vehicle_info[0].modelName.lower():
+        # Update: Check the modelName explicitly for "electric" to prioritize BEV detection
+        if "electric" in vin_info.modelName.lower():
             is_electric = True
+            is_combustion = False  # Prioritize BEV over combustion
+
+        # Determine the final vehicle type
         if is_electric and not is_combustion:
             return "BEV"
         if is_electric and is_combustion and is_hybrid:
