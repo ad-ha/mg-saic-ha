@@ -112,7 +112,7 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - Lock Status
 - Charging Gun Status
 
-### Services
+### SERVICES
 - Lock Vehicle
 - Unlock Vehicle
 - Start AC
@@ -174,7 +174,7 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - ~~Implement initial services for Locks action, AC control and ancillary services.~~
 - ~~Implement charging detection and corresponding sensors.~~
 - Check API details for energy usage and stats, adding additional sensors.
-- Check implementation against other EV/PHEV models.
+- ~~Check implementation against other EV/PHEV models.~~
 - Add possibility to display metric or imperial data, including tyres' pressure.
 
 
