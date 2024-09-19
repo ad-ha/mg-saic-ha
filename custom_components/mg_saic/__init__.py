@@ -29,7 +29,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         await client.login()
         hass.data[DOMAIN][entry.entry_id] = client
 
-        coordinator = SAICMGDataUpdateCoordinator(hass, client)
+        coordinator = SAICMGDataUpdateCoordinator(hass, client, entry)
         await coordinator.async_setup()
 
         hass.data[DOMAIN][f"{entry.entry_id}_coordinator"] = coordinator
