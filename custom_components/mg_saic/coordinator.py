@@ -1,3 +1,4 @@
+# coordinator.py
 from datetime import timedelta
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.exceptions import ConfigEntryAuthFailed
@@ -8,11 +9,26 @@ from .const import LOGGER, RETRY_LIMIT, UPDATE_INTERVAL, UPDATE_INTERVAL_CHARGIN
 class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
     """Class to manage fetching data from the MG SAIC API."""
 
-    def __init__(self, hass, client: SAICMGAPIClient):
+    def __init__(self, hass, client: SAICMGAPIClient, config_entry):
         """Initialize."""
         self.client = client
+        self.config_entry = config_entry
+
+        # Initialize update intervals from config_entry options, falling back to defaults if not set
+        self.update_interval = timedelta(
+            seconds=config_entry.options.get(
+                "scan_interval", UPDATE_INTERVAL.total_seconds()
+            )
+        )
+        self.update_interval_charging = timedelta(
+            seconds=config_entry.options.get(
+                "charging_scan_interval", UPDATE_INTERVAL_CHARGING.total_seconds()
+            )
+        )
+
         self.vehicle_type = None
-        self.update_interval = UPDATE_INTERVAL
+
+        # Pass the update interval to the parent class
         super().__init__(
             hass,
             LOGGER,
@@ -56,6 +72,18 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                 LOGGER.debug("Vehicle Status: %s", vehicle_status)
                 LOGGER.debug("Vehicle Charging Data: %s", charging_info)
 
+                # Adjust update interval based on charging status
+                if charging_info and charging_info.chrgMgmtData.bmsChrgSts == 1:
+                    # Vehicle is charging, reduce the update interval
+                    self.update_interval = self.update_interval_charging
+                else:
+                    # Vehicle is not charging, use the standard update interval
+                    self.update_interval = timedelta(
+                        seconds=self.config_entry.options.get(
+                            "scan_interval", UPDATE_INTERVAL.total_seconds()
+                        )
+                    )
+
                 return {
                     "info": vehicle_info,
                     "status": vehicle_status,
@@ -85,11 +113,10 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
 
     def _determine_vehicle_type(self, vehicle_info):
         """Determine the type of vehicle based on its information."""
+        vin_info = vehicle_info[0]  # Get the first VIN info
         is_electric = False
         is_combustion = False
         is_hybrid = False
-
-        vin_info = vehicle_info[0]  # Get the first VIN info
 
         for config in vin_info.vehicleModelConfiguration:
             if config.itemCode == "EV":
@@ -106,8 +133,16 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                 if config.itemValue == "1":
                     is_hybrid = True
 
-        # Update: Check the modelName explicitly for "electric" to prioritize BEV detection
-        if "electric" in vin_info.modelName.lower():
+        # Additional checks for "electric" or "EV" in the modelName
+        if (
+            "electric" in vin_info.modelName.lower()
+            or "ev" in vin_info.modelName.lower()
+        ):
+            is_electric = True
+            is_combustion = False  # Prioritize BEV over combustion
+
+        # Check the 'series' field for BEV indicators like 'EV'
+        if "electric" in vin_info.series.lower() or "ev" in vin_info.series.lower():
             is_electric = True
             is_combustion = False  # Prioritize BEV over combustion
 
@@ -116,9 +151,9 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             return "BEV"
         if is_electric and is_combustion and is_hybrid:
             return "PHEV"
-        if not is_electric and is_combustion:
-            return "ICE"
         if is_hybrid and not is_electric:
             return "HEV"
+        if not is_electric and is_combustion:
+            return "ICE"
 
         return "ICE"  # Default to ICE if unsure

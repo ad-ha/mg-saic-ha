@@ -294,7 +294,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                     SensorDeviceClass.ENERGY,
                     "kWh",
                     "mdi:flash",
-                    "measurement",
+                    "total_increasing",
                     1.0,
                     "rvsChargeStatus",
                 ),

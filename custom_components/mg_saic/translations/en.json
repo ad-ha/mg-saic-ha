@@ -138,5 +138,15 @@
         }
       }
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "scan_interval": "Update Interval (in seconds)",
+          "charging_scan_interval": "Charging Update Interval (in seconds)"
+        }
+      }
+    }
   }
 }

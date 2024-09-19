@@ -2,7 +2,13 @@ import logging
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
-from .const import DOMAIN, LOGGER, COUNTRY_CODES
+from .const import (
+    DOMAIN,
+    LOGGER,
+    COUNTRY_CODES,
+    UPDATE_INTERVAL,
+    UPDATE_INTERVAL_CHARGING,
+)
 from saic_ismart_client_ng import SaicApi
 from saic_ismart_client_ng.model import SaicApiConfiguration
 
@@ -31,6 +37,7 @@ class SAICMGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self.region = None
         self.vin = None
         self.vehicles = []
+        self.vehicle_type = None  # Store vehicle type (BEV, PHEV, HEV, ICE)
 
     async def async_step_user(self, user_input=None):
         errors = {}
@@ -95,6 +102,7 @@ class SAICMGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
         if user_input is not None:
             self.vin = user_input["vin"]
+            self.vehicle_type = user_input["vehicle_type"]  # Store vehicle type
             return self.async_create_entry(
                 title=f"MG SAIC - {self.vin}",
                 data={
@@ -104,12 +112,15 @@ class SAICMGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     "region": self.region,
                     "vin": self.vin,
                     "login_type": self.login_type,
+                    "vehicle_type": self.vehicle_type,  # Include vehicle type in the entry
                 },
             )
 
+        # Add vehicle_type selection with fallback for user confirmation
         data_schema = vol.Schema(
             {
                 vol.Required("vin"): vol.In(self.vehicles),
+                vol.Required("vehicle_type"): vol.In(["BEV", "PHEV", "HEV", "ICE"]),
             }
         )
 
@@ -171,18 +182,27 @@ class SAICMGOptionsFlowHandler(config_entries.OptionsFlow):
         """Initialize options flow."""
         self.config_entry = config_entry
 
-    async def async_step_init(self, user_input=None):
+    async def async_step_init(self, data=None):
         """Manage the options."""
-        if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+        if data is not None:
+            return self.async_create_entry(title="", data=data)
 
-        options_schema = vol.Schema(
+        data = vol.Schema(
             {
                 vol.Optional(
                     "scan_interval",
-                    default=self.config_entry.options.get("scan_interval", 300),
+                    default=self.config_entry.options.get(
+                        "scan_interval", int(UPDATE_INTERVAL.total_seconds())
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=60)),
+                vol.Optional(
+                    "charging_scan_interval",
+                    default=self.config_entry.options.get(
+                        "charging_scan_interval",
+                        int(UPDATE_INTERVAL_CHARGING.total_seconds()),
+                    ),
                 ): vol.All(vol.Coerce(int), vol.Range(min=60)),
             }
         )
 
-        return self.async_show_form(step_id="init", data_schema=options_schema)
+        return self.async_show_form(step_id="init", data_schema=data)
