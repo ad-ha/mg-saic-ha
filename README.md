@@ -128,6 +128,14 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 
 ## Version History
 ```
+0.2.1
+- Revised vehicle type identification mechanics and conditions - closes SOC not showing in HA #6
+- Added new step to config_flow to allow users to select the correct vehicle type if the integration fails to do so based on API data - closes SOC not showing in HA #6
+- Added configuration options to the integration to manually change the update intervals.
+- Revised translations
+```
+
+```
 0.2.0
 - Revised mechanics for connection with API and data retrieval
 - Services testing and adjusting to API requirements
