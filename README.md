@@ -113,11 +113,12 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - Lock Status
 - Charging Gun Status
 
-### SERVICES
+### ACTIONS
 - Lock Vehicle
 - Unlock Vehicle
 - Start AC
 - Stop AC
+- Set Target SOC
 - Open Tailgate
 - Tigger Find My Car Alarm
 - Start Charging (sometimes this service fails)
@@ -126,8 +127,19 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - Defrost Windshield
 - Control Heated Seats
 
+**Note: Actions (Services) can be accessed and activated from the Actions menu under Developer Tools.**
+![image](https://github.com/user-attachments/assets/14be0d41-ae65-4738-8bc0-5b0f743c290f)
+
 
 ## Version History
+```
+- Refactor usage of DataCoordinator to address issues with Update Intervals. Hopefully closes #10 
+- Refactor code to address issues with `No entity id specified`
+- Refactor State of Charge sensor to try to retrieve data from ChargingData if StatusData is not available. Hope it closes #8 
+- Add new **Set Target SOC** service.
+- Revise Debug logs generation to avoid duplicated entries
+```
+ 
 ```
 0.2.1
 - Revised vehicle type identification mechanics and conditions - closes SOC not showing in HA #6
@@ -176,16 +188,6 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 0.0.1
 - Initial release
 ```
-
-
-## TO-DO
-
-- ~~Implement initial services for Locks action, AC control and ancillary services.~~
-- ~~Implement charging detection and corresponding sensors.~~
-- Check API details for energy usage and stats, adding additional sensors.
-- ~~Check implementation against other EV/PHEV models.~~
-- Add possibility to display metric or imperial data, including tyres' pressure.
-
 
 ## Contributing
 
