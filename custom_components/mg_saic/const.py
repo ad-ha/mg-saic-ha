@@ -4,7 +4,6 @@ from datetime import timedelta
 LOGGER = logging.getLogger(__package__)
 
 DOMAIN = "mg_saic"
-RETRY_LIMIT = 3
 
 # Conversion factors
 PRESSURE_TO_BAR = 0.04
@@ -57,8 +56,10 @@ COUNTRY_CODES = [
     {"code": "+971", "country": "United Arab Emirates"},
 ]
 
+# Update Settings
 UPDATE_INTERVAL = timedelta(minutes=120)
 UPDATE_INTERVAL_CHARGING = timedelta(minutes=5)
+RETRY_LIMIT = 3
 
 # Platforms
 PLATFORMS = ["sensor", "binary_sensor", "device_tracker"]

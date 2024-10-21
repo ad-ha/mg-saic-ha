@@ -2,7 +2,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
     BinarySensorDeviceClass,
 )
-from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN, LOGGER
 
 
@@ -85,7 +85,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
             SAICMGBinarySensor(
                 coordinator,
                 entry,
-                "Sun Roof Status",
+                "Sunroof Status",
                 "sunroofStatus",
                 BinarySensorDeviceClass.WINDOW,
                 "mdi:car-door",
@@ -124,7 +124,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
             ),
         ]
 
-        # Now add the charging-related binary sensors
+        # Add charging-related binary sensors
         if "charging" in coordinator.data and coordinator.data["charging"]:
             charging_binary_sensors = [
                 SAICMGChargingBinarySensor(
@@ -146,17 +146,16 @@ async def async_setup_entry(hass, entry, async_add_entities):
         LOGGER.error("Error setting up MG SAIC binary sensors: %s", e)
 
 
-class SAICMGBinarySensor(BinarySensorEntity, RestoreEntity):
+class SAICMGBinarySensor(CoordinatorEntity, BinarySensorEntity):
     """Representation of a MG SAIC binary sensor."""
 
     def __init__(self, coordinator, entry, name, field, device_class, icon):
         """Initialize the binary sensor."""
-        self.coordinator = coordinator
+        super().__init__(coordinator)
         self._name = name
         self._field = field
         self._device_class = device_class
         self._icon = icon
-        self._state = None
         vin_info = self.coordinator.data["info"][0]
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}_binary_sensor"
 
@@ -167,14 +166,21 @@ class SAICMGBinarySensor(BinarySensorEntity, RestoreEntity):
 
     @property
     def name(self):
-        """Return the name of the binary sensor."""
         vin_info = self.coordinator.data["info"][0]
         return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
 
     @property
     def is_on(self):
-        """Return true if the binary sensor is on."""
-        return self._state
+        data = self.coordinator.data.get("status")
+        if data:
+            status_data = getattr(data, "basicVehicleStatus", None)
+            if status_data:
+                value = getattr(status_data, self._field, None)
+                if value is not None:
+                    if self._field == "lockStatus":
+                        return value == 0
+                    return bool(value)
+        return None
 
     @property
     def device_class(self):
@@ -188,7 +194,6 @@ class SAICMGBinarySensor(BinarySensorEntity, RestoreEntity):
 
     @property
     def device_info(self):
-        """Return device information about this binary sensor."""
         vin_info = self.coordinator.data["info"][0]
         return {
             "identifiers": {(DOMAIN, vin_info.vin)},
@@ -197,32 +202,6 @@ class SAICMGBinarySensor(BinarySensorEntity, RestoreEntity):
             "model": vin_info.modelName,
             "serial_number": vin_info.vin,
         }
-
-    async def async_update(self):
-        """Fetch new state data for the binary sensor."""
-        try:
-            status_data = getattr(
-                self.coordinator.data["status"], "basicVehicleStatus", None
-            )
-            if status_data:
-                value = getattr(status_data, self._field, None)
-                if value is not None:
-                    if self._field == "lockStatus":
-                        # 1 means locked, 0 means unlocked
-                        self._state = value == 0
-                    else:
-                        self._state = bool(value)
-                else:
-                    LOGGER.warning(
-                        "Field %s not found in status data for sensor %s",
-                        self._field,
-                        self._name,
-                    )
-            else:
-                LOGGER.error("No status data for %s", self._name)
-            self.async_write_ha_state()
-        except Exception as e:
-            LOGGER.error("Error updating binary sensor %s: %s", self._name, e)
 
 
 class SAICMGChargingBinarySensor(SAICMGBinarySensor):
@@ -241,30 +220,14 @@ class SAICMGChargingBinarySensor(SAICMGBinarySensor):
         """Initialize the charging binary sensor."""
         super().__init__(coordinator, entry, name, field, device_class, icon)
         self._data_source = data_source
-        self._unique_id = f"{self._unique_id}_charging"
 
-    async def async_update(self):
-        """Fetch new state data for the charging binary sensor."""
-        try:
-            charging_data = getattr(
-                self.coordinator.data["charging"], self._data_source, None
-            )
-            if charging_data:
-                value = getattr(charging_data, self._field, None)
-                if value is not None:
-                    if self._field == "chargingGunState":
-                        # Assuming 0 means disconnected, 1 means connected
-                        self._state = value == 1
-                    else:
-                        self._state = bool(value)
-                else:
-                    LOGGER.warning(
-                        "Field %s not found in charging data for sensor %s",
-                        self._field,
-                        self._name,
-                    )
-            else:
-                LOGGER.error("No charging data for %s", self._name)
-            self.async_write_ha_state()
-        except Exception as e:
-            LOGGER.error("Error updating charging binary sensor %s: %s", self._name, e)
+    @property
+    def is_on(self):
+        charging_data = getattr(
+            self.coordinator.data.get("charging"), self._data_source, None
+        )
+        if charging_data:
+            value = getattr(charging_data, self._field, None)
+            if value is not None:
+                return bool(value)
+        return None
