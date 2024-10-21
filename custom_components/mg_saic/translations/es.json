@@ -26,7 +26,7 @@
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "El número de identificación del vehículo del coche para encender el AC."
+          "description": "El número de identificacióndel vehículo para encender el AC."
         }
       }
     },
@@ -36,7 +36,7 @@
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "El número de identificación del vehículo del coche para apagar el AC."
+          "description": "El número de identificacióndel vehículo para apagar el AC."
         }
       }
     },
@@ -46,7 +46,7 @@
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "El número de identificación del vehículo del coche para iniciar la carga."
+          "description": "El número de identificacióndel vehículo para iniciar la carga."
         }
       }
     },
@@ -56,7 +56,21 @@
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "El número de identificación del vehículo del coche para detener la carga."
+          "description": "El número de identificacióndel vehículo para detener la carga."
+        }
+      }
+    },
+    "set_target_soc": {
+      "name": "Definir limite de carga",
+      "description": "Define el limite de porcentaje de carga del vehículo.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "El número de identificacióndel vehículo para definir el limite de carga."
+        },
+        "target_soc": {
+          "name": "Limite de carga",
+          "description": "Porcentaje de limite de carga deseado (10-100)."
         }
       }
     },
@@ -66,7 +80,7 @@
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "El número de identificación del vehículo del coche para bloquear."
+          "description": "El número de identificacióndel vehículo para bloquear."
         }
       }
     },
@@ -76,7 +90,7 @@
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "El número de identificación del vehículo del coche para desbloquear."
+          "description": "El número de identificacióndel vehículo para desbloquear."
         }
       }
     },
@@ -86,7 +100,7 @@
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "El número de identificación del vehículo del coche para abrir el portón trasero."
+          "description": "El número de identificacióndel vehículo para abrir el portón trasero."
         }
       }
     },
@@ -96,7 +110,7 @@
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "El número de identificación del vehículo del coche para activar la alarma."
+          "description": "El número de identificacióndel vehículo para activar la alarma."
         }
       }
     },
@@ -106,7 +120,7 @@
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "El número de identificación del vehículo del coche para controlar la calefacción de la ventana trasera."
+          "description": "El número de identificacióndel vehículo para controlar la calefacción de la ventana trasera."
         },
         "action": {
           "name": "Acción",
@@ -120,7 +134,7 @@
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "El número de identificación del vehículo del coche para controlar los asientos calefaccionados."
+          "description": "El número de identificacióndel vehículo para controlar los asientos calefaccionados."
         },
         "action": {
           "name": "Acción",
@@ -134,7 +148,7 @@
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "El número de identificación del vehículo del coche para encender el desempañador delantero."
+          "description": "El número de identificacióndel vehículo para encender el desempañador delantero."
         }
       }
     }

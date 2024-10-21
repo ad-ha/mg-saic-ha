@@ -17,6 +17,7 @@ SERVICE_STOP_CHARGING = "stop_charging"
 SERVICE_CONTROL_REAR_WINDOW_HEAT = "control_rear_window_heat"
 SERVICE_CONTROL_HEATED_SEATS = "control_heated_seats"
 SERVICE_START_FRONT_DEFROST = "start_front_defrost"
+SERVICE_SET_TARGET_SOC = "set_target_soc"
 
 SERVICE_VIN_SCHEMA = vol.Schema({vol.Required("vin"): cv.string})
 
@@ -24,6 +25,13 @@ SERVICE_ACTION_SCHEMA = vol.Schema(
     {
         vol.Required("vin"): cv.string,
         vol.Required("action"): cv.boolean,
+    }
+)
+
+SERVICE_SET_TARGET_SOC_SCHEMA = vol.Schema(
+    {
+        vol.Required("vin"): cv.string,
+        vol.Required("target_soc"): vol.In([40, 50, 60, 70, 80, 90, 100]),
     }
 )
 
@@ -105,6 +113,15 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
         except Exception as e:
             LOGGER.error(f"Error stopping charging for VIN {vin}: {e}")
 
+    async def handle_set_target_soc(call: ServiceCall) -> None:
+        """Handle the set_target_soc service call."""
+        vin = call.data["vin"]
+        target_soc = call.data["target_soc"]
+        try:
+            await client.set_target_soc(vin, target_soc)
+        except Exception as e:
+            LOGGER.error("Error setting target SOC for VIN %s: %s", vin, e)
+
     async def handle_control_rear_window_heat(call: ServiceCall) -> None:
         """Handle the control_rear_window_heat service call."""
         vin = call.data["vin"]
@@ -161,6 +178,12 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
     )
     hass.services.async_register(
         DOMAIN,
+        SERVICE_SET_TARGET_SOC,
+        handle_set_target_soc,
+        schema=SERVICE_SET_TARGET_SOC_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
         SERVICE_CONTROL_REAR_WINDOW_HEAT,
         handle_control_rear_window_heat,
         schema=SERVICE_ACTION_SCHEMA,
@@ -191,6 +214,7 @@ async def async_unload_services(hass: HomeAssistant) -> None:
     hass.services.async_remove(DOMAIN, SERVICE_TRIGGER_ALARM)
     hass.services.async_remove(DOMAIN, SERVICE_START_CHARGING)
     hass.services.async_remove(DOMAIN, SERVICE_STOP_CHARGING)
+    hass.services.async_remove(DOMAIN, SERVICE_SET_TARGET_SOC)
     hass.services.async_remove(DOMAIN, SERVICE_CONTROL_REAR_WINDOW_HEAT)
     hass.services.async_remove(DOMAIN, SERVICE_CONTROL_HEATED_SEATS)
     hass.services.async_remove(DOMAIN, SERVICE_START_FRONT_DEFROST)

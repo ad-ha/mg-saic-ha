@@ -60,6 +60,20 @@
         }
       }
     },
+    "set_target_soc": {
+      "name": "Set Target SOC",
+      "description": "Set the target state of charge (SOC) for the vehicle.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "The vehicle identification number of the car."
+        },
+        "target_soc": {
+          "name": "Target SOC",
+          "description": "Desired target SOC percentage (10-100)."
+        }
+      }
+    },
     "lock_vehicle": {
       "name": "Lock Vehicle",
       "description": "Lock the vehicle.",
@@ -145,7 +159,9 @@
         "data": {
           "scan_interval": "Update Interval (in seconds)",
           "charging_scan_interval": "Charging Update Interval (in seconds)"
-        }
+        },
+        "description": "Define additional settings for MG/SAIC Integration",
+        "title": "MG/SAIC Options"
       }
     }
   }

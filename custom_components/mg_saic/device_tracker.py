@@ -1,9 +1,6 @@
 from homeassistant.components.device_tracker.config_entry import TrackerEntity
-from homeassistant.helpers.restore_state import RestoreEntity
-from homeassistant.helpers.event import async_track_time_interval
-from homeassistant.util import dt as dt_util
-from .const import DOMAIN, LOGGER, UPDATE_INTERVAL
-from datetime import timedelta
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from .const import DOMAIN, LOGGER
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -22,16 +19,14 @@ async def async_setup_entry(hass, entry, async_add_entities):
         LOGGER.error("Error setting up MG SAIC device tracker: %s", e)
 
 
-class SAICMGDeviceTracker(TrackerEntity, RestoreEntity):
+class SAICMGDeviceTracker(CoordinatorEntity, TrackerEntity):
     """Representation of a MG SAIC device tracker."""
 
     def __init__(self, coordinator, entry, field, name):
-        self.coordinator = coordinator
+        super().__init__(coordinator)
         self._field = field
         self._name = name
-        self._latitude = None
-        self._longitude = None
-        vin_info = coordinator.data["info"][0]
+        vin_info = self.coordinator.data["info"][0]
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}_gps"
 
     @property
@@ -40,19 +35,34 @@ class SAICMGDeviceTracker(TrackerEntity, RestoreEntity):
 
     @property
     def name(self):
-        """Return the name of the device tracker."""
         vin_info = self.coordinator.data["info"][0]
         return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
 
     @property
     def latitude(self):
-        """Return latitude value of the device."""
-        return self._latitude
+        status = self.coordinator.data.get("status")
+        if status:
+            gps_position = getattr(status, self._field, None)
+            if (
+                gps_position
+                and gps_position.wayPoint
+                and gps_position.wayPoint.position
+            ):
+                return gps_position.wayPoint.position.latitude / 1e6
+        return None
 
     @property
     def longitude(self):
-        """Return longitude value of the device."""
-        return self._longitude
+        status = self.coordinator.data.get("status")
+        if status:
+            gps_position = getattr(status, self._field, None)
+            if (
+                gps_position
+                and gps_position.wayPoint
+                and gps_position.wayPoint.position
+            ):
+                return gps_position.wayPoint.position.longitude / 1e6
+        return None
 
     @property
     def source_type(self):
@@ -69,48 +79,3 @@ class SAICMGDeviceTracker(TrackerEntity, RestoreEntity):
             "model": vin_info.modelName,
             "serial_number": vin_info.vin,
         }
-
-    @property
-    def extra_state_attributes(self):
-        """Return extra state attributes."""
-        return {
-            "latitude": f"{self._latitude:.6f}" if self._latitude else None,
-            "longitude": f"{self._longitude:.6f}" if self._longitude else None,
-        }
-
-    async def async_update(self):
-        """Fetch new state data for the tracker."""
-        try:
-            status = self.coordinator.data["status"]
-            gps_position = getattr(status, self._field, None)
-            if (
-                gps_position
-                and gps_position.wayPoint
-                and gps_position.wayPoint.position
-            ):
-                self._latitude = gps_position.wayPoint.position.latitude / 1e6
-                self._longitude = gps_position.wayPoint.position.longitude / 1e6
-                LOGGER.debug(
-                    "Updated GPS location to %f, %f", self._latitude, self._longitude
-                )
-            else:
-                LOGGER.warning("No GPS position data available.")
-            self.async_write_ha_state()
-        except Exception as e:
-            LOGGER.error("Error updating GPS location: %s", e)
-
-    async def async_added_to_hass(self):
-        """When entity is added to hass."""
-        await super().async_added_to_hass()
-        last_state = await self.async_get_last_state()
-        if last_state is not None:
-            self._latitude = float(
-                last_state.attributes.get("latitude", self._latitude)
-            )
-            self._longitude = float(
-                last_state.attributes.get("longitude", self._longitude)
-            )
-
-        self.async_on_remove(
-            async_track_time_interval(self.hass, self.async_update, UPDATE_INTERVAL)
-        )

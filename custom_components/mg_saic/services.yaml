@@ -26,6 +26,16 @@ stop_charging:
       description: "Vehicle Identification Number"
       example: "1HGCM82633A123456"
 
+set_target_soc:
+  description: "Set the target SOC (State of Charge) for the vehicle."
+  fields:
+    vin:
+      description: "Vehicle Identification Number"
+      example: "1HGCM82633A123456"
+    target_soc:
+      description: "Desired target SOC percentage (10-100)"
+      example: 80
+
 lock_vehicle:
   description: "Lock the vehicle"
   fields:

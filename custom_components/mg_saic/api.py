@@ -1,6 +1,7 @@
 import asyncio
 from saic_ismart_client_ng import SaicApi
 from saic_ismart_client_ng.model import SaicApiConfiguration
+from enum import Enum
 from .const import LOGGER
 
 
@@ -85,6 +86,35 @@ class SAICMGAPIClient:
         except Exception as e:
             LOGGER.error("Error retrieving charging information: %s", e)
             return None
+
+    async def set_target_soc(self, vin, target_soc_percentage):
+        """Set the target SOC of the vehicle."""
+        await self._ensure_initialized()
+        try:
+            # Map percentage to BatterySoc enum
+            percentage_to_enum = {
+                40: BatterySoc.SOC_40,
+                50: BatterySoc.SOC_50,
+                60: BatterySoc.SOC_60,
+                70: BatterySoc.SOC_70,
+                80: BatterySoc.SOC_80,
+                90: BatterySoc.SOC_90,
+                100: BatterySoc.SOC_100,
+            }
+            battery_soc = percentage_to_enum.get(target_soc_percentage)
+            if battery_soc is None:
+                raise ValueError(
+                    f"Invalid target SOC percentage: {target_soc_percentage}"
+                )
+
+            # Call the method with the enum value
+            await self.saic_api.set_target_battery_soc(vin, battery_soc)
+            LOGGER.info(
+                "Set target SOC to %d%% for VIN: %s", target_soc_percentage, vin
+            )
+        except Exception as e:
+            LOGGER.error("Error setting target SOC for VIN %s: %s", vin, e)
+            raise
 
     # Climate control actions
     async def start_ac(self, vin):
@@ -201,3 +231,13 @@ class SAICMGAPIClient:
             LOGGER.info("Closed MG SAIC API session.")
         except Exception as e:
             LOGGER.error("Error closing MG SAIC API session: %s", e)
+
+
+class BatterySoc(Enum):
+    SOC_40 = 1
+    SOC_50 = 2
+    SOC_60 = 3
+    SOC_70 = 4
+    SOC_80 = 5
+    SOC_90 = 6
+    SOC_100 = 7
