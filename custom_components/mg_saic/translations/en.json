@@ -40,6 +40,24 @@
         }
       }
     },
+    "start_ac_with_settings": {
+      "name": "Start AC with Settings",
+      "description": "Start the vehicle's AC system with specific temperature and fan speed.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "Vehicle Identification Number."
+        },
+        "temperature": {
+          "name": "Temperature",
+          "description": "Desired temperature in degrees Celsius."
+        },
+        "fan_speed": {
+          "name": "Fan Speed",
+          "description": "Fan speed level (e.g., 1-7)."
+        }
+      }
+    },
     "start_charging": {
       "name": "Start Charging",
       "description": "Start the vehicle charging process.",

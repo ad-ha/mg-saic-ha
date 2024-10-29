@@ -38,7 +38,6 @@ class SAICMGAPIClient:
             "Logging in with region-based endpoint for region: %s", self.region
         )
 
-        # Use asyncio.to_thread to avoid blocking the event loop with a blocking call
         self.saic_api = await asyncio.to_thread(SaicApi, config)
 
         try:
@@ -134,6 +133,49 @@ class SAICMGAPIClient:
             LOGGER.info("AC stopped successfully.")
         except Exception as e:
             LOGGER.error("Error stopping AC: %s", e)
+
+    async def start_climate(self, vin, temperature, fan_speed):
+        """Start the vehicle AC with temperature and fan speed settings."""
+        await self._ensure_initialized()
+        try:
+            # Map temperature in Celsius to temperature_idx expected by the API
+            temperature_idx = self._map_temperature_to_idx(temperature)
+            await self.saic_api.control_climate(
+                vin, fan_speed=fan_speed, ac_on=True, temperature_idx=temperature_idx
+            )
+            LOGGER.info(
+                "AC started with temperature %s°C and fan speed %s for VIN: %s",
+                temperature,
+                fan_speed,
+                vin,
+            )
+        except Exception as e:
+            LOGGER.error("Error starting AC with settings for VIN %s: %s", vin, e)
+            raise
+
+    def _map_temperature_to_idx(self, temperature):
+        """Map temperature in Celsius to temperature_idx expected by the API."""
+        temperature_to_idx = {
+            16: 0,
+            17: 1,
+            18: 2,
+            19: 3,
+            20: 4,
+            21: 5,
+            22: 6,
+            23: 7,
+            24: 8,
+            25: 9,
+            26: 10,
+            27: 11,
+            28: 12,
+            29: 13,
+            30: 14,
+        }
+        idx = temperature_to_idx.get(int(temperature))
+        if idx is None:
+            raise ValueError("Invalid temperature value. Must be between 16 and 30°C.")
+        return idx
 
     # Locks control actions
     async def lock_vehicle(self, vin):

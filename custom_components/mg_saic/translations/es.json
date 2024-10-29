@@ -40,6 +40,24 @@
         }
       }
     },
+    "start_ac_with_settings": {
+      "name": "Encender AC con Configuración",
+      "description": "Encender el sistema de AC del vehículo con temperatura y velocidad de ventilador específicas.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "Número de identificación del vehículo."
+        },
+        "temperature": {
+          "name": "Temperatura",
+          "description": "Temperatura deseada en grados Celsius."
+        },
+        "fan_speed": {
+          "name": "Velocidad del Ventilador",
+          "description": "Nivel de velocidad del ventilador (por ejemplo, 1-7)."
+        }
+      }
+    },
     "start_charging": {
       "name": "Iniciar Carga",
       "description": "Iniciar el proceso de carga del vehículo.",
