@@ -126,6 +126,28 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - Defrost Rear Window
 - Defrost Windshield
 - Control Heated Seats
+ 
+### SWITCHES
+- AC On/Off
+- Heated Seats
+- Charging Start/Stop
+
+### BUTTONS
+- Open Tailgate
+- Start Front Defrost
+- Start Rear Window Heat
+- Tigger Alarm
+
+### LOCK
+- Lock entity for lock/unlock doors
+
+### CLIMATE
+- AC Control Climate entity
+  * Temperature
+  * Fan Speed
+
+### SLIDERS
+- Target SOC
 
 **Note: Actions (Services) can be accessed and activated from the Actions menu under Developer Tools.**
 ![image](https://github.com/user-attachments/assets/14be0d41-ae65-4738-8bc0-5b0f743c290f)
@@ -133,6 +155,31 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 
 ## Version History
 ```
+0.4.1
+- Add new platforms to the integration
+- New Switch entities:
+  * AC On/Off
+  * Heated Seats
+  * Charging Start/Stop
+- New Button entities
+  * Open Tailgate
+  * Start Front Defrost
+  * Start Rear Window Heat
+  * Tigger Alarm
+- New Lock entity
+  * Lock entity for lock/unlock doors
+- New Climate entity
+  * AC Control Climate entity
+    - Temperature
+    - Fan Speed
+- New Slider entity
+  * Target SOC
+- Revise API methods to identify some vehicle info and show sensors/actions accordingly. 
+  (limited to some areas only, as API is not fully reliable on data provided)
+```
+
+```
+0.3.0
 - Refactor usage of DataCoordinator to address issues with Update Intervals. Hopefully closes #10 
 - Refactor code to address issues with `No entity id specified`
 - Refactor State of Charge sensor to try to retrieve data from ChargingData if StatusData is not available. Hope it closes #8 
