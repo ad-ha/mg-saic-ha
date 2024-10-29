@@ -12,6 +12,19 @@ stop_ac:
       description: "Vehicle Identification Number"
       example: "1HGCM82633A123456"
 
+start_ac_with_settings:
+  description: "Start the vehicle's AC system with temperature and fan settings."
+  fields:
+    vin:
+      description: "Vehicle Identification Number"
+      example: "1HGCM82633A123456"
+    temperature:
+      description: "Desired temperature in degrees Celsius"
+      example: 22.5
+    fan_speed:
+      description: "Fan speed level (e.g., 1-7)"
+      example: 3
+
 start_charging:
   description: "Start the vehicle charging process"
   fields:

@@ -2,6 +2,7 @@
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 import voluptuous as vol
+import asyncio
 
 from .api import SAICMGAPIClient
 from .const import DOMAIN, LOGGER
@@ -18,6 +19,7 @@ SERVICE_CONTROL_REAR_WINDOW_HEAT = "control_rear_window_heat"
 SERVICE_CONTROL_HEATED_SEATS = "control_heated_seats"
 SERVICE_START_FRONT_DEFROST = "start_front_defrost"
 SERVICE_SET_TARGET_SOC = "set_target_soc"
+SERVICE_START_AC_WITH_SETTINGS = "start_ac_with_settings"
 
 SERVICE_VIN_SCHEMA = vol.Schema({vol.Required("vin"): cv.string})
 
@@ -35,9 +37,31 @@ SERVICE_SET_TARGET_SOC_SCHEMA = vol.Schema(
     }
 )
 
+SERVICE_START_AC_WITH_SETTINGS_SCHEMA = vol.Schema(
+    {
+        vol.Required("vin"): cv.string,
+        vol.Required("temperature"): vol.Coerce(float),
+        vol.Required("fan_speed"): vol.Coerce(int),
+    }
+)
+
 
 async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> None:
     """Set up services for the MG SAIC integration."""
+
+    async def schedule_data_refresh(vin: str):
+        """Schedule a data refresh for the coordinator associated with the VIN."""
+        coordinators_by_vin = hass.data[DOMAIN].get("coordinators_by_vin", {})
+        coordinator = coordinators_by_vin.get(vin)
+        if coordinator:
+
+            async def delayed_refresh():
+                await asyncio.sleep(15)  # Wait for 15 seconds
+                await coordinator.async_request_refresh()
+
+            hass.async_create_task(delayed_refresh())
+        else:
+            LOGGER.warning("Coordinator not found for VIN %s", vin)
 
     async def handle_lock_vehicle(call: ServiceCall) -> None:
         """Handle the lock_vehicle service call."""
@@ -74,6 +98,23 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
             LOGGER.info("AC stopped successfully for VIN: %s", vin)
         except Exception as e:
             LOGGER.error("Error stopping AC for VIN %s: %s", vin, e)
+
+    async def handle_start_ac_with_settings(call: ServiceCall) -> None:
+        """Handle the start_ac_with_settings service call."""
+        vin = call.data["vin"]
+        temperature = call.data["temperature"]
+        fan_speed = call.data["fan_speed"]
+        try:
+            await client.start_climate(vin, temperature, fan_speed)
+            LOGGER.info(
+                "AC started with temperature %s°C and fan speed %s for VIN: %s",
+                temperature,
+                fan_speed,
+                vin,
+            )
+            await schedule_data_refresh(vin)
+        except Exception as e:
+            LOGGER.error("Error starting AC with settings for VIN %s: %s", vin, e)
 
     async def handle_open_tailgate(call: ServiceCall) -> None:
         """Handle the open_tailgate service call."""
@@ -165,6 +206,12 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
         DOMAIN, SERVICE_STOP_AC, handle_stop_ac, schema=SERVICE_VIN_SCHEMA
     )
     hass.services.async_register(
+        DOMAIN,
+        SERVICE_START_AC_WITH_SETTINGS,
+        handle_start_ac_with_settings,
+        schema=SERVICE_START_AC_WITH_SETTINGS_SCHEMA,
+    )
+    hass.services.async_register(
         DOMAIN, SERVICE_OPEN_TAILGATE, handle_open_tailgate, schema=SERVICE_VIN_SCHEMA
     )
     hass.services.async_register(
@@ -210,6 +257,7 @@ async def async_unload_services(hass: HomeAssistant) -> None:
     hass.services.async_remove(DOMAIN, SERVICE_UNLOCK_VEHICLE)
     hass.services.async_remove(DOMAIN, SERVICE_START_AC)
     hass.services.async_remove(DOMAIN, SERVICE_STOP_AC)
+    hass.services.async_remove(DOMAIN, SERVICE_START_AC_WITH_SETTINGS)
     hass.services.async_remove(DOMAIN, SERVICE_OPEN_TAILGATE)
     hass.services.async_remove(DOMAIN, SERVICE_TRIGGER_ALARM)
     hass.services.async_remove(DOMAIN, SERVICE_START_CHARGING)

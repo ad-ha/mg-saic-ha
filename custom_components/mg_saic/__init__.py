@@ -27,12 +27,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
     try:
         await client.login()
+
+        # Fetch vehicle info to get the VIN
+        vehicles = await client.get_vehicle_info()
+        if vehicles:
+            vin = vehicles[0].vin
+        else:
+            LOGGER.error("No vehicles found for this account.")
+            return False
+
         hass.data[DOMAIN][entry.entry_id] = client
 
         coordinator = SAICMGDataUpdateCoordinator(hass, client, entry)
         await coordinator.async_setup()
 
         hass.data[DOMAIN][f"{entry.entry_id}_coordinator"] = coordinator
+
+        # Store coordinator by VIN for data refresh after service calls
+        hass.data[DOMAIN].setdefault("coordinators_by_vin", {})
+        hass.data[DOMAIN]["coordinators_by_vin"][vin] = coordinator
 
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 

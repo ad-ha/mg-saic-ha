@@ -62,4 +62,13 @@ UPDATE_INTERVAL_CHARGING = timedelta(minutes=5)
 RETRY_LIMIT = 3
 
 # Platforms
-PLATFORMS = ["sensor", "binary_sensor", "device_tracker"]
+PLATFORMS = [
+    "sensor",
+    "binary_sensor",
+    "device_tracker",
+    "button",
+    "climate",
+    "number",
+    "switch",
+    "lock",
+]
