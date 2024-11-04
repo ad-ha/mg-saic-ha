@@ -326,6 +326,18 @@ async def async_setup_entry(hass, entry, async_add_entities):
                         1.0,
                         "chrgMgmtData",
                     ),
+                    SAICMGChargingSensor(
+                        coordinator,
+                        entry,
+                        "Battery Heating Status",
+                        "bmsPTCHeatResp",
+                        None,
+                        None,
+                        "mdi:fire",
+                        None,
+                        1.0,
+                        "chrgMgmtData",
+                    ),
                 ]
             )
 
@@ -617,6 +629,14 @@ class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
                         3: "Waiting to Charge",
                         4: "Charging Paused",
                         5: "Charging Finished",
+                    }.get(raw_value, f"Unknown ({raw_value})")
+
+                elif self._field == "bmsPTCHeatResp":
+                    # Map bmsPTCHeatResp values to status strings
+                    return {
+                        0: "Off",
+                        1: "On",
+                        2: "Error",
                     }.get(raw_value, f"Unknown ({raw_value})")
 
                 else:

@@ -36,6 +36,30 @@ async def async_setup_entry(hass, entry, async_add_entities):
     if coordinator.vehicle_type in ["BEV", "PHEV"]:
         switches.append(SAICMGChargingSwitch(coordinator, client, vin_info, vin))
 
+        # Check if battery heating is supported
+        charging_data = coordinator.data.get("charging")
+        if charging_data:
+            chrgMgmtData = getattr(charging_data, "chrgMgmtData", None)
+            if chrgMgmtData:
+                bmsPTCHeatResp = getattr(chrgMgmtData, "bmsPTCHeatResp", None)
+                if bmsPTCHeatResp is not None:
+                    # Battery Heating Switch
+                    switches.append(
+                        SAICMGBatteryHeatingSwitch(coordinator, client, vin_info, vin)
+                    )
+                else:
+                    LOGGER.debug(
+                        f"Vehicle {vin} does not support battery heating. Skipping Battery Heating Switch."
+                    )
+            else:
+                LOGGER.debug(
+                    f"Charging management data not available for VIN {vin}. Cannot determine battery heating support."
+                )
+        else:
+            LOGGER.debug(
+                f"Charging data not available for VIN {vin}. Cannot determine battery heating support."
+            )
+
     async_add_entities(switches)
 
 
@@ -188,3 +212,46 @@ class SAICMGChargingSwitch(SAICMGVehicleSwitch):
             await self.coordinator.async_request_refresh()
         except Exception as e:
             LOGGER.error("Error stopping charging for VIN %s: %s", self._vin, e)
+
+
+class SAICMGBatteryHeatingSwitch(SAICMGVehicleSwitch):
+    """Switch to control battery heating."""
+
+    def __init__(self, coordinator, client, vin_info, vin):
+        super().__init__(
+            coordinator,
+            client,
+            vin_info,
+            vin,
+            "Battery Heating",
+            "mdi:fire",
+        )
+
+    @property
+    def is_on(self):
+        """Return true if battery heating is active."""
+        charging_data = self.coordinator.data.get("charging")
+        if charging_data:
+            chrgMgmtData = getattr(charging_data, "chrgMgmtData", None)
+            if chrgMgmtData:
+                bmsPTCHeatResp = getattr(chrgMgmtData, "bmsPTCHeatResp", None)
+                return bmsPTCHeatResp == 1
+        return False
+
+    async def async_turn_on(self, **kwargs):
+        """Start battery heating."""
+        try:
+            await self._client.send_vehicle_charging_ptc_heat(self._vin, "start")
+            LOGGER.info("Battery heating started for VIN: %s", self._vin)
+            await self.coordinator.async_request_refresh()
+        except Exception as e:
+            LOGGER.error("Error starting battery heating for VIN %s: %s", self._vin, e)
+
+    async def async_turn_off(self, **kwargs):
+        """Stop battery heating."""
+        try:
+            await self._client.send_vehicle_charging_ptc_heat(self._vin, "stop")
+            LOGGER.info("Battery heating stopped for VIN: %s", self._vin)
+            await self.coordinator.async_request_refresh()
+        except Exception as e:
+            LOGGER.error("Error stopping battery heating for VIN %s: %s", self._vin, e)

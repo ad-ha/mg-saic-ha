@@ -78,6 +78,26 @@
         }
       }
     },
+    "start_battery_heating": {
+      "name": "Iniciar Condicionamiento Bateria",
+      "description": "Iniciar el proceso de condicionamiento de la batería del vehículo.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "El número de identificacióndel vehículo para iniciar el condicionamiento de la bateria."
+        }
+      }
+    },
+    "stop_battery_heating": {
+      "name": "Detener Condicionamiento Bateria",
+      "description": "Detener el proceso de condicionamiento de la batería del vehículo.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "El número de identificacióndel vehículo para detener el condicionamiento de la bateria."
+        }
+      }
+    },
     "set_target_soc": {
       "name": "Definir limite de carga",
       "description": "Define el limite de porcentaje de carga del vehículo.",

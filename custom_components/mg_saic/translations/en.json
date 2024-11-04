@@ -78,6 +78,26 @@
         }
       }
     },
+    "start_battery_heating": {
+      "name": "Start Battery Heating",
+      "description": "Start the vehicle battery heating process.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "The vehicle identification number of the car to start battery heating."
+        }
+      }
+    },
+    "stop_battery_heating": {
+      "name": "Stop Battery Heating",
+      "description": "Stop the vehicle battery heating process.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "The vehicle identification number of the car to stop battery heating."
+        }
+      }
+    },
     "set_target_soc": {
       "name": "Set Target SOC",
       "description": "Set the target state of charge (SOC) for the vehicle.",
