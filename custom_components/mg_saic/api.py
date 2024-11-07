@@ -239,6 +239,27 @@ class SAICMGAPIClient:
             LOGGER.error(f"Error sending charging {action} command for VIN {vin}: {e}")
             raise
 
+    async def send_vehicle_charging_ptc_heat(self, vin, action):
+        """Send a charging control command to the vehicle."""
+        await self._ensure_initialized()
+        try:
+            LOGGER.debug(f"Battery heating control - VIN: {vin}, action: {action}")
+
+            # Use the control_charging method from the saic-python-client-ng library
+            if action == "start":
+                await self.saic_api.control_battery_heating(vin=vin, enable=False)
+            else:
+                await self.saic_api.control_battery_heating(vin=vin, enable=True)
+
+            LOGGER.info(
+                f"Battery heating {action} command sent successfully for VIN: {vin}"
+            )
+        except Exception as e:
+            LOGGER.error(
+                f"Error sending battery heating {action} command for VIN {vin}: {e}"
+            )
+            raise
+
     async def control_rear_window_heat(self, vin, action):
         """Control the rear window heat."""
         await self._ensure_initialized()

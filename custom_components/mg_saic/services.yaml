@@ -39,6 +39,20 @@ stop_charging:
       description: "Vehicle Identification Number"
       example: "1HGCM82633A123456"
 
+start_battery_heating:
+  description: "Start the vehicle battery heating process"
+  fields:
+    vin:
+      description: "Vehicle Identification Number"
+      example: "1HGCM82633A123456"
+
+stop_battery_heating:
+  description: "Stop the vehicle battery heating process"
+  fields:
+    vin:
+      description: "Vehicle Identification Number"
+      example: "1HGCM82633A123456"
+
 set_target_soc:
   description: "Set the target SOC (State of Charge) for the vehicle."
   fields:

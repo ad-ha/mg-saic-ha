@@ -41,7 +41,10 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
         self._attr_unique_id = f"{vin}_climate"
         self._attr_temperature_unit = UnitOfTemperature.CELSIUS
         self._attr_supported_features = (
-            ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.FAN_MODE
+            ClimateEntityFeature.TARGET_TEMPERATURE
+            | ClimateEntityFeature.FAN_MODE
+            | ClimateEntityFeature.TURN_ON
+            | ClimateEntityFeature.TURN_OFF
         )
         self._attr_hvac_modes = [HVACMode.OFF, HVACMode.COOL]
         self._attr_fan_modes = [FAN_LOW, FAN_MEDIUM, FAN_HIGH]
@@ -97,8 +100,17 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
             self._attr_hvac_mode = HVACMode.COOL
         else:
             LOGGER.warning("Unsupported HVAC mode: %s", hvac_mode)
+            return
         # Schedule data refresh
         await self.coordinator.async_request_refresh()
+
+    async def async_turn_on(self):
+        """Turn the climate entity on."""
+        await self.async_set_hvac_mode(HVACMode.COOL)
+
+    async def async_turn_off(self):
+        """Turn the climate entity off."""
+        await self.async_set_hvac_mode(HVACMode.OFF)
 
     async def async_set_temperature(self, **kwargs):
         """Set new target temperature."""
