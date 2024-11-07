@@ -126,6 +126,7 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - Defrost Rear Window
 - Defrost Windshield
 - Control Heated Seats
+- Control Battery Heating
  
 ### SWITCHES
 - AC On/Off
@@ -164,7 +165,7 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - Refactor data calculations for Charging Current and Charging Voltage sensors
 - Add Charging Power (kW) sensor
 - Adjust climate entity issues. Actionable mode COOL/OFF only, correcting the raised error from HA.
-- New Switch entities:
+- New Actions and Switch entities:
   * Battery Heating
 - Revise translation files for Config Flow, since some labels were missing.
 - Adjust charging status messages from API.
