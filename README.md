@@ -169,6 +169,7 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
   * Battery Heating
 - Revise translation files for Config Flow, since some labels were missing.
 - Adjust charging status messages from API.
+- Bump saic-ismart-client-ng to 0.5.2
 ```
 
 ```
