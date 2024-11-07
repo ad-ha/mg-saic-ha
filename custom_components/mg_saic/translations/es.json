@@ -4,14 +4,29 @@
     "step": {
       "user": {
         "title": "Configuración de MG SAIC",
-        "description": "Por favor ingrese sus credenciales de MG SAIC y seleccione un vehículo.",
+        "description": "Selecciona el tipo de inicio de sesión",
+        "data": {
+          "login_type": "Tipo de inicio de sesión",
+          "email": "E-mail",
+          "phone": "Teléfono"
+        }
+      },
+      "login_data": {
+        "title": "Información de Inicio de Sesión",
+        "description": "Introduce credenciales de MG SAIC.",
         "data": {
           "username": "Nombre de usuario",
           "password": "Contraseña",
           "region": "Región",
-          "vin": "Número de identificación del vehículo (VIN)",
-          "login_type": "Tipo de inicio de sesión",
-          "country_code": "Código de país"
+          "country_code": "Código de País"
+        }
+      },
+      "select_vehicle": {
+        "title": "Seleccionar Vehículo",
+        "description": "Selecciona el vehículo a añadir y revise el tipo de vehículo.",
+        "data": {
+          "vin": "VIN del Vehículo",
+          "vehicle_type": "Tipo de Vehículo"
         }
       }
     },
@@ -26,7 +41,7 @@
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "El número de identificacióndel vehículo para encender el AC."
+          "description": "El número de identificación del vehículo para encender el AC."
         }
       }
     },
@@ -36,7 +51,7 @@
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "El número de identificacióndel vehículo para apagar el AC."
+          "description": "El número de identificación del vehículo para apagar el AC."
         }
       }
     },
@@ -64,7 +79,7 @@
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "El número de identificacióndel vehículo para iniciar la carga."
+          "description": "El número de identificación del vehículo para iniciar la carga."
         }
       }
     },
@@ -74,7 +89,27 @@
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "El número de identificacióndel vehículo para detener la carga."
+          "description": "El número de identificación del vehículo para detener la carga."
+        }
+      }
+    },
+    "start_battery_heating": {
+      "name": "Iniciar Condicionamiento Bateria",
+      "description": "Iniciar el proceso de condicionamiento de la batería del vehículo.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "El número de identificación del vehículo para iniciar el condicionamiento de la bateria."
+        }
+      }
+    },
+    "stop_battery_heating": {
+      "name": "Detener Condicionamiento Bateria",
+      "description": "Detener el proceso de condicionamiento de la batería del vehículo.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "El número de identificación del vehículo para detener el condicionamiento de la bateria."
         }
       }
     },
@@ -84,7 +119,7 @@
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "El número de identificacióndel vehículo para definir el limite de carga."
+          "description": "El número de identificación del vehículo para definir el limite de carga."
         },
         "target_soc": {
           "name": "Limite de carga",
@@ -98,7 +133,7 @@
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "El número de identificacióndel vehículo para bloquear."
+          "description": "El número de identificación del vehículo para bloquear."
         }
       }
     },
@@ -108,7 +143,7 @@
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "El número de identificacióndel vehículo para desbloquear."
+          "description": "El número de identificación del vehículo para desbloquear."
         }
       }
     },
@@ -118,7 +153,7 @@
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "El número de identificacióndel vehículo para abrir el portón trasero."
+          "description": "El número de identificación del vehículo para abrir el portón trasero."
         }
       }
     },
@@ -128,7 +163,7 @@
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "El número de identificacióndel vehículo para activar la alarma."
+          "description": "El número de identificación del vehículo para activar la alarma."
         }
       }
     },
@@ -138,7 +173,7 @@
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "El número de identificacióndel vehículo para controlar la calefacción de la ventana trasera."
+          "description": "El número de identificación del vehículo para controlar la calefacción de la ventana trasera."
         },
         "action": {
           "name": "Acción",
@@ -152,7 +187,7 @@
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "El número de identificacióndel vehículo para controlar los asientos calefaccionados."
+          "description": "El número de identificación del vehículo para controlar los asientos calefaccionados."
         },
         "action": {
           "name": "Acción",
@@ -166,7 +201,7 @@
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "El número de identificacióndel vehículo para encender el desempañador delantero."
+          "description": "El número de identificación del vehículo para encender el desempañador delantero."
         }
       }
     }

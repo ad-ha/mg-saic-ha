@@ -4,14 +4,29 @@
     "step": {
       "user": {
         "title": "MG SAIC Configuration",
-        "description": "Please enter your MG SAIC credentials and select a vehicle.",
+        "description": "Select the login type.",
+        "data": {
+          "login_type": "Login Type",
+          "email": "E-mail",
+          "phone": "Phone"
+        }
+      },
+      "login_data": {
+        "title": "Login Information",
+        "description": "Enter your MG SAIC credentials.",
         "data": {
           "username": "Username",
           "password": "Password",
           "region": "Region",
-          "vin": "Vehicle Identification Number (VIN)",
-          "login_type": "Login Type",
           "country_code": "Country Code"
+        }
+      },
+      "select_vehicle": {
+        "title": "Select Vehicle",
+        "description": "Select the vehicle to be added and revise the vehicle type.",
+        "data": {
+          "vin": "Vehicle Identification Number (VIN)",
+          "vehicle_type": "Vehicle Type"
         }
       }
     },
@@ -75,6 +90,26 @@
         "vin": {
           "name": "VIN",
           "description": "The vehicle identification number of the car to stop charging."
+        }
+      }
+    },
+    "start_battery_heating": {
+      "name": "Start Battery Heating",
+      "description": "Start the vehicle battery heating process.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "The vehicle identification number of the car to start battery heating."
+        }
+      }
+    },
+    "stop_battery_heating": {
+      "name": "Stop Battery Heating",
+      "description": "Stop the vehicle battery heating process.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "The vehicle identification number of the car to stop battery heating."
         }
       }
     },

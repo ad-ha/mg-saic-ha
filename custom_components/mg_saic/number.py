@@ -32,6 +32,7 @@ class SAICMGTargetSOCNumber(CoordinatorEntity, NumberEntity):
         self._client = client
         self._vin = vin
         self._vin_info = vin_info
+        self._last_valid_value = None
 
         self._attr_name = f"{vin_info.brandName} {vin_info.modelName} Target SOC"
         self._attr_unique_id = f"{vin}_target_soc"
@@ -70,27 +71,35 @@ class SAICMGTargetSOCNumber(CoordinatorEntity, NumberEntity):
                     6: 90,
                     7: 100,
                 }
-                return soc_mapping.get(soc_cmd)
-        return None
+                soc_value = soc_mapping.get(soc_cmd)
+                if soc_value is not None:
+                    self._last_valid_value = soc_value
+                    return soc_value
+        # Return the last valid value if current data is invalid
+        return self._last_valid_value
 
     @property
     def icon(self):
         """Return the icon based on the current SOC value."""
-        if self.native_value >= 100:
-            return "mdi:battery-charging-100"
-        elif self.native_value >= 90:
-            return "mdi:battery-charging-90"
-        elif self.native_value >= 80:
-            return "mdi:battery-charging-80"
-        elif self.native_value >= 70:
-            return "mdi:battery-charging-70"
-        elif self.native_value >= 60:
-            return "mdi:battery-charging-60"
-        elif self.native_value >= 50:
-            return "mdi:battery-charging-50"
-        elif self.native_value >= 40:
-            return "mdi:battery-charging-40"
+        if self.native_value is not None:
+            if self.native_value >= 100:
+                return "mdi:battery-charging-100"
+            elif self.native_value >= 90:
+                return "mdi:battery-charging-90"
+            elif self.native_value >= 80:
+                return "mdi:battery-charging-80"
+            elif self.native_value >= 70:
+                return "mdi:battery-charging-70"
+            elif self.native_value >= 60:
+                return "mdi:battery-charging-60"
+            elif self.native_value >= 50:
+                return "mdi:battery-charging-50"
+            elif self.native_value >= 40:
+                return "mdi:battery-charging-40"
+            else:
+                return "mdi:battery-charging-outline"
         else:
+            # Return a default icon when native_value is None
             return "mdi:battery-charging-outline"
 
     async def async_set_native_value(self, value: float) -> None:

@@ -15,6 +15,8 @@ SERVICE_OPEN_TAILGATE = "open_tailgate"
 SERVICE_TRIGGER_ALARM = "trigger_alarm"
 SERVICE_START_CHARGING = "start_charging"
 SERVICE_STOP_CHARGING = "stop_charging"
+SERVICE_START_BATTERY_HEATING = "start_battery_heating"
+SERVICE_STOP_BATTERY_HEATING = "stop_battery_heating"
 SERVICE_CONTROL_REAR_WINDOW_HEAT = "control_rear_window_heat"
 SERVICE_CONTROL_HEATED_SEATS = "control_heated_seats"
 SERVICE_START_FRONT_DEFROST = "start_front_defrost"
@@ -56,7 +58,7 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
         if coordinator:
 
             async def delayed_refresh():
-                await asyncio.sleep(15)  # Wait for 15 seconds
+                await asyncio.sleep(15)
                 await coordinator.async_request_refresh()
 
             hass.async_create_task(delayed_refresh())
@@ -154,6 +156,26 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
         except Exception as e:
             LOGGER.error(f"Error stopping charging for VIN {vin}: {e}")
 
+    async def handle_start_battery_heating(call: ServiceCall) -> None:
+        """Handle the start_battery_heating service call."""
+        vin = call.data["vin"]
+        try:
+            LOGGER.debug(f"Sending start battery heating command for VIN: {vin}")
+            await client.send_vehicle_charging_ptc_heat(vin, "start")
+            LOGGER.info(f"Battery heating started successfully for VIN: {vin}")
+        except Exception as e:
+            LOGGER.error(f"Error starting battery heating for VIN {vin}: {e}")
+
+    async def handle_stop_battery_heating(call: ServiceCall) -> None:
+        """Handle the stop_battery_heating service call."""
+        vin = call.data["vin"]
+        try:
+            LOGGER.debug(f"Sending stop battery heating command for VIN: {vin}")
+            await client.send_vehicle_charging_ptc_heat(vin, "stop")
+            LOGGER.info(f"Battery heating stopped successfully for VIN: {vin}")
+        except Exception as e:
+            LOGGER.error(f"Error stopping battery heating for VIN {vin}: {e}")
+
     async def handle_set_target_soc(call: ServiceCall) -> None:
         """Handle the set_target_soc service call."""
         vin = call.data["vin"]
@@ -225,6 +247,18 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
     )
     hass.services.async_register(
         DOMAIN,
+        SERVICE_START_BATTERY_HEATING,
+        handle_start_battery_heating,
+        schema=SERVICE_VIN_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_STOP_BATTERY_HEATING,
+        handle_stop_battery_heating,
+        schema=SERVICE_VIN_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
         SERVICE_SET_TARGET_SOC,
         handle_set_target_soc,
         schema=SERVICE_SET_TARGET_SOC_SCHEMA,
@@ -262,6 +296,8 @@ async def async_unload_services(hass: HomeAssistant) -> None:
     hass.services.async_remove(DOMAIN, SERVICE_TRIGGER_ALARM)
     hass.services.async_remove(DOMAIN, SERVICE_START_CHARGING)
     hass.services.async_remove(DOMAIN, SERVICE_STOP_CHARGING)
+    hass.services.async_remove(DOMAIN, SERVICE_START_BATTERY_HEATING)
+    hass.services.async_remove(DOMAIN, SERVICE_STOP_BATTERY_HEATING)
     hass.services.async_remove(DOMAIN, SERVICE_SET_TARGET_SOC)
     hass.services.async_remove(DOMAIN, SERVICE_CONTROL_REAR_WINDOW_HEAT)
     hass.services.async_remove(DOMAIN, SERVICE_CONTROL_HEATED_SEATS)

@@ -8,13 +8,20 @@ DOMAIN = "mg_saic"
 # Conversion factors
 PRESSURE_TO_BAR = 0.04
 DATA_DECIMAL_CORRECTION = 0.1
+DATA_DECIMAL_CORRECTION_SOC = 0.1
 
+# Conversion factors for charging data
+CHARGING_CURRENT_FACTOR = 0.001
+CHARGING_VOLTAGE_FACTOR = 0.145
+
+# API Base Urls
 BASE_URLS = {
     "EU": "https://gateway-mg-eu.soimt.com",
     "China": "https://gateway-mg-china.soimt.com",
     "Asia": "https://gateway-mg-asia.soimt.com",
 }
 
+# Phone Login Country Codes
 COUNTRY_CODES = [
     {"code": "+1", "country": "USA"},
     {"code": "+7", "country": "Russia"},
@@ -57,9 +64,19 @@ COUNTRY_CODES = [
 ]
 
 # Update Settings
-UPDATE_INTERVAL = timedelta(minutes=120)
-UPDATE_INTERVAL_CHARGING = timedelta(minutes=5)
-RETRY_LIMIT = 3
+DEFAULT_SCAN_INTERVAL = timedelta(minutes=120)
+DEFAULT_CHARGING_SCAN_INTERVAL = timedelta(minutes=10)
+
+UPDATE_INTERVAL = DEFAULT_SCAN_INTERVAL
+UPDATE_INTERVAL_CHARGING = DEFAULT_CHARGING_SCAN_INTERVAL
+
+# Retry configuration
+RETRY_LIMIT = 5
+MAX_RETRY_DELAY = 60
+RETRY_BACKOFF_FACTOR = 10
+
+# Charging status codes indicating that the vehicle is charging
+CHARGING_STATUS_CODES = {1, 3, 10, 12}
 
 # Platforms
 PLATFORMS = [
