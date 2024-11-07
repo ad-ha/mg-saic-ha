@@ -13,7 +13,7 @@
 
 **Important Notes:** 
 - **Using this integration causes the MG/SAIC mobile app to shut down, as per API requirements, since only one device can be connected at a time. Logging into the mobile app causes this integration to disconnect and fail to set up.**
-- This Integration has only been tested on a MG Marvel R model. Please provide feedback on sensors and information for other vehicles.
+- Please provide feedback on sensors and information for other vehicles.
 
 ## INSTALLATION
 
@@ -131,6 +131,7 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - AC On/Off
 - Heated Seats
 - Charging Start/Stop
+- Battery Heating
 
 ### BUTTONS
 - Open Tailgate
@@ -154,6 +155,21 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 
 
 ## Version History
+```
+0.4.2
+- Revise Vehicle Type mechanics. Avoid overriding user selection from configuration process
+- Revise SOC sensor data retrieval. Now main data will be obtained from Charging Data and fallback on Basis Status.
+- Revise sensors available for BEV, PHEV and HEV.
+- Refactor data updates on initial setup and update intervals
+- Refactor data calculations for Charging Current and Charging Voltage sensors
+- Add Charging Power (kW) sensor
+- Adjust climate entity issues. Actionable mode COOL/OFF only, correcting the raised error from HA.
+- New Switch entities:
+  * Battery Heating
+- Revise translation files for Config Flow, since some labels were missing.
+- Adjust charging status messages from API.
+```
+
 ```
 0.4.1
 - Add new platforms to the integration
