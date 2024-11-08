@@ -10,6 +10,8 @@ from .const import (
     MAX_RETRY_DELAY,
     RETRY_BACKOFF_FACTOR,
     CHARGING_STATUS_CODES,
+    GENERIC_RESPONSE_STATUS_THRESHOLD,
+    GENERIC_RESPONSE_SOC_THRESHOLD,
 )
 
 
@@ -60,6 +62,11 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                 if charging_info is None:
                     LOGGER.error("Charging info returned None")
                     raise UpdateFailed("Charging info is None")
+
+                if self._is_generic_charging_response(charging_info):
+                    LOGGER.warning("Charging info is generic, retrying...")
+                    raise GenericResponseException("Charging info is generic")
+
                 data["charging"] = charging_info
 
                 # Determine if the vehicle is charging
@@ -94,7 +101,7 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
 
                 if self._is_generic_response(vehicle_status):
                     LOGGER.warning("Vehicle status is generic, retrying...")
-                    raise GenericResponseException("Received generic vehicle status")
+                    raise GenericResponseException("Vehicle status is generic")
 
                 # Vehicle status is valid
                 data["status"] = vehicle_status
@@ -136,14 +143,14 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                 retries += 1
                 delay = min(retries * RETRY_BACKOFF_FACTOR, MAX_RETRY_DELAY)
                 LOGGER.warning(
-                    "Received generic response. Retrying (%d/%d) in %s seconds...",
+                    "Received generic response (%s). Retrying (%d/%d) in %s seconds...",
+                    e,
                     retries,
                     RETRY_LIMIT,
                     delay,
                 )
                 await asyncio.sleep(delay)
                 continue
-            # Retry fetching data
             except Exception as e:
                 LOGGER.error("Error fetching data: %s", e)
                 retries += 1
@@ -164,18 +171,41 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             )
 
     def _is_generic_response(self, status):
-        """Check if the response is generic."""
+        """Check if the vehicle status response is generic."""
         try:
             if (
                 hasattr(status, "basicVehicleStatus")
-                and status.basicVehicleStatus.fuelRange == 0
-                and status.basicVehicleStatus.fuelRangeElec == 0
-                and status.basicVehicleStatus.mileage == 0
+                and status.basicVehicleStatus.fuelRange
+                == GENERIC_RESPONSE_STATUS_THRESHOLD
+                and status.basicVehicleStatus.fuelRangeElec
+                == GENERIC_RESPONSE_STATUS_THRESHOLD
+                and status.basicVehicleStatus.mileage
+                == GENERIC_RESPONSE_STATUS_THRESHOLD
             ):
                 return True
             return False
         except Exception as e:
             LOGGER.error("Error checking for generic response: %s", e)
+            return False
+
+    def _is_generic_charging_response(self, charging_info):
+        """Check if the charging response is generic."""
+        try:
+            chrgMgmtData = getattr(charging_info, "chrgMgmtData", None)
+            if chrgMgmtData:
+                if (
+                    chrgMgmtData.bmsPackSOCDsp is not None
+                    and chrgMgmtData.bmsPackSOCDsp > GENERIC_RESPONSE_SOC_THRESHOLD
+                    or chrgMgmtData.bmsChrgOtptCrntReq is not None
+                    and chrgMgmtData.bmsChrgOtptCrntReq > GENERIC_RESPONSE_SOC_THRESHOLD
+                ):
+                    LOGGER.debug(
+                        "Generic charging response detected due to high values."
+                    )
+                    return True
+            return False
+        except Exception as e:
+            LOGGER.error("Error checking for generic charging response: %s", e)
             return False
 
     def _determine_vehicle_type(self, vehicle_info):
