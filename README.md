@@ -157,6 +157,11 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 
 ## Version History
 ```
+0.4.3
+- Revise Generic Response verification method to discard responses with SOC over 100%
+```
+
+```
 0.4.2
 - Revise Vehicle Type mechanics. Avoid overriding user selection from configuration process
 - Revise SOC sensor data retrieval. Now main data will be obtained from Charging Data and fallback on Basis Status.
