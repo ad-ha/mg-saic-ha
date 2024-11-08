@@ -157,7 +157,7 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 
 ## Version History
 ```
-0.4.3
+0.4.4
 - Revise Generic Response verification method to discard responses with SOC over 100%
 ```
 
