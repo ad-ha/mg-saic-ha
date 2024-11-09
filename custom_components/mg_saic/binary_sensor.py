@@ -125,7 +125,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         ]
 
         # Add charging-related binary sensors
-        if "charging" in coordinator.data and coordinator.data["charging"]:
+        if coordinator.vehicle_type in ["BEV", "PHEV"]:
             charging_binary_sensors = [
                 SAICMGChargingBinarySensor(
                     coordinator,
@@ -204,7 +204,7 @@ class SAICMGBinarySensor(CoordinatorEntity, BinarySensorEntity):
         }
 
 
-class SAICMGChargingBinarySensor(SAICMGBinarySensor):
+class SAICMGChargingBinarySensor(CoordinatorEntity, BinarySensorEntity):
     """Representation of a MG SAIC charging binary sensor."""
 
     def __init__(
@@ -215,19 +215,59 @@ class SAICMGChargingBinarySensor(SAICMGBinarySensor):
         field,
         device_class,
         icon,
-        data_source="chrgMgmtData",
+        data_source="rvsChargeStatus",
     ):
         """Initialize the charging binary sensor."""
-        super().__init__(coordinator, entry, name, field, device_class, icon)
+        super().__init__(coordinator)
+        self._name = name
+        self._field = field
+        self._device_class = device_class
+        self._icon = icon
         self._data_source = data_source
+        vin_info = self.coordinator.data["info"][0]
+        self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}_binary_sensor"
+
+    @property
+    def unique_id(self):
+        """Return the unique ID of the binary sensor."""
+        return self._unique_id
+
+    @property
+    def name(self):
+        """Return the name of the binary sensor."""
+        vin_info = self.coordinator.data["info"][0]
+        return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
 
     @property
     def is_on(self):
-        charging_data = getattr(
-            self.coordinator.data.get("charging"), self._data_source, None
-        )
+        """Return true if the charging gun is connected."""
+        charging_data = self.coordinator.data.get("charging")
         if charging_data:
-            value = getattr(charging_data, self._field, None)
-            if value is not None:
-                return bool(value)
+            data_source = getattr(charging_data, self._data_source, None)
+            if data_source:
+                value = getattr(data_source, self._field, None)
+                if value is not None:
+                    return bool(value)
         return None
+
+    @property
+    def device_class(self):
+        """Return the device class of this binary sensor."""
+        return self._device_class
+
+    @property
+    def icon(self):
+        """Return the icon to use in the frontend."""
+        return self._icon
+
+    @property
+    def device_info(self):
+        """Return device information about this sensor."""
+        vin_info = self.coordinator.data["info"][0]
+        return {
+            "identifiers": {(DOMAIN, vin_info.vin)},
+            "name": f"{vin_info.brandName} {vin_info.modelName}",
+            "manufacturer": vin_info.brandName,
+            "model": vin_info.modelName,
+            "serial_number": vin_info.vin,
+        }

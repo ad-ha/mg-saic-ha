@@ -1,8 +1,11 @@
+# coordinator.py
+
 from datetime import timedelta
 import asyncio
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from .api import SAICMGAPIClient
 from .const import (
+    DOMAIN,
     LOGGER,
     RETRY_LIMIT,
     UPDATE_INTERVAL,
@@ -48,7 +51,12 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
 
     async def async_setup(self):
         """Set up the coordinator."""
-        await self.async_config_entry_first_refresh()
+        try:
+            await self.async_config_entry_first_refresh()
+        except Exception as e:
+            LOGGER.error("First data update failed: %s", e)
+            # Proceed anyway, set data to empty dict
+            self.data = {}
         return True
 
     async def _async_update_data(self):
@@ -57,100 +65,89 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         data = {}
         while retries < RETRY_LIMIT:
             try:
-                # Fetch charging info to determine charging status
+                # Initialize variables to track data validity
+                valid_data_fetched = False
+
+                # Fetch charging info
                 charging_info = await self.client.get_charging_info()
-                if charging_info is None:
-                    LOGGER.error("Charging info returned None")
-                    raise UpdateFailed("Charging info is None")
+                if charging_info is None or self._is_generic_charging_response(
+                    charging_info
+                ):
+                    LOGGER.debug("Generic Vehicle Charging Data: %s", charging_info)
+                    LOGGER.warning("Charging info is invalid or generic.")
+                    charging_info = self.data.get("charging") if self.data else None
+                else:
+                    data["charging"] = charging_info
+                    valid_data_fetched = True
 
-                if self._is_generic_charging_response(charging_info):
-                    LOGGER.warning("Charging info is generic, retrying...")
-                    raise GenericResponseException("Charging info is generic")
+                # Determine charging status
+                if charging_info:
+                    bms_chrg_sts = getattr(
+                        getattr(charging_info, "chrgMgmtData", None), "bmsChrgSts", None
+                    )
+                    self.is_charging = bms_chrg_sts in CHARGING_STATUS_CODES
+                else:
+                    self.is_charging = False
 
-                data["charging"] = charging_info
+                # Fetch vehicle status
+                vehicle_status = await self.client.get_vehicle_status()
+                if vehicle_status is None or self._is_generic_response(vehicle_status):
+                    LOGGER.warning("Vehicle status is invalid or generic.")
+                    vehicle_status = self.data.get("status") if self.data else None
+                else:
+                    data["status"] = vehicle_status
+                    valid_data_fetched = True
 
-                # Determine if the vehicle is charging
-                bms_chrg_sts = getattr(
-                    getattr(charging_info, "chrgMgmtData", None), "bmsChrgSts", None
-                )
-                current_is_charging = bms_chrg_sts in CHARGING_STATUS_CODES
-
-                # Check for charging state change
-                charging_state_changed = current_is_charging != self.is_charging
-
-                # Update charging status
-                self.is_charging = current_is_charging
-
-                # Determine if it's the first run
-                is_first_run = self.data is None or not self.data
-
-                # Fetch Vehicle Info if needed
+                # Fetch vehicle info if needed
                 fetch_vehicle_info = (
-                    charging_state_changed
-                    or self.vehicle_type is None
-                    or is_first_run
+                    self.vehicle_type is None
+                    or self.data is None
                     or "info" not in self.data
                     or self.data["info"] is None
                 )
-
-                # Always fetch Vehicle Status
-                vehicle_status = await self.client.get_vehicle_status()
-                if vehicle_status is None:
-                    LOGGER.error("Vehicle status returned None")
-                    raise UpdateFailed("Vehicle status is None")
-
-                if self._is_generic_response(vehicle_status):
-                    LOGGER.warning("Vehicle status is generic, retrying...")
-                    raise GenericResponseException("Vehicle status is generic")
-
-                # Vehicle status is valid
-                data["status"] = vehicle_status
-
                 if fetch_vehicle_info:
-                    # Fetch vehicle info
                     vehicle_info = await self.client.get_vehicle_info()
                     if vehicle_info is None:
-                        LOGGER.error("Vehicle info returned None")
-                        raise UpdateFailed("Vehicle info is None")
+                        LOGGER.warning("Vehicle info returned None.")
+                        vehicle_info = self.data.get("info") if self.data else None
+                    else:
+                        data["info"] = vehicle_info
+                        valid_data_fetched = True
+                else:
+                    vehicle_info = self.data.get("info") if self.data else None
                     data["info"] = vehicle_info
 
-                else:
-                    data["info"] = self.data.get("info") if self.data else None
-
+                # Log data
                 LOGGER.debug("Vehicle Type: %s", self.vehicle_type)
                 LOGGER.debug("Vehicle Info: %s", data.get("info"))
                 LOGGER.debug("Vehicle Status: %s", data.get("status"))
-                LOGGER.debug("Vehicle Charging Data: %s", charging_info)
+                LOGGER.debug("Vehicle Charging Data: %s", data.get("charging"))
 
-                # Adjust update interval based on charging status
+                # Adjust update interval
                 new_interval = (
                     self.update_interval_charging
                     if self.is_charging
                     else self.update_interval
                 )
-
                 if self.update_interval != new_interval:
                     self.update_interval = new_interval
                     LOGGER.debug("Update interval set to %s", self.update_interval)
-                    # Reschedule the updates with the new interval
                     if self._unsub_refresh:
                         self._unsub_refresh()
                     self._schedule_refresh()
 
-                return data
+                # If we have any valid data, return it
+                if valid_data_fetched:
+                    return data
+                else:
+                    LOGGER.warning(
+                        "No valid data fetched, using previous data if available."
+                    )
+                    if self.data:
+                        return self.data
+                    else:
+                        return {}
 
-            except GenericResponseException as e:
-                retries += 1
-                delay = min(retries * RETRY_BACKOFF_FACTOR, MAX_RETRY_DELAY)
-                LOGGER.warning(
-                    "Received generic response (%s). Retrying (%d/%d) in %s seconds...",
-                    e,
-                    retries,
-                    RETRY_LIMIT,
-                    delay,
-                )
-                await asyncio.sleep(delay)
-                continue
             except Exception as e:
                 LOGGER.error("Error fetching data: %s", e)
                 retries += 1
@@ -158,17 +155,14 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                 LOGGER.info("Retrying in %s seconds...", delay)
                 await asyncio.sleep(delay)
 
-        # After retries exhausted, attempt to use previous data
-        LOGGER.error(
-            "Failed to fetch valid data after retries. Using previous data if available."
-        )
+        # After retries exhausted
+        LOGGER.error("Failed to fetch data after retries.")
         if self.data:
             LOGGER.info("Using previous data.")
             return self.data
         else:
-            raise UpdateFailed(
-                "Failed to fetch data after retries and no previous data available"
-            )
+            LOGGER.error("No previous data available. Returning empty data.")
+            return {}
 
     def _is_generic_response(self, status):
         """Check if the vehicle status response is generic."""
@@ -196,12 +190,8 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                 if (
                     chrgMgmtData.bmsPackSOCDsp is not None
                     and chrgMgmtData.bmsPackSOCDsp > GENERIC_RESPONSE_SOC_THRESHOLD
-                    or chrgMgmtData.bmsChrgOtptCrntReq is not None
-                    and chrgMgmtData.bmsChrgOtptCrntReq > GENERIC_RESPONSE_SOC_THRESHOLD
                 ):
-                    LOGGER.debug(
-                        "Generic charging response detected due to high values."
-                    )
+                    LOGGER.debug("Generic Chargind Data response.")
                     return True
             return False
         except Exception as e:
