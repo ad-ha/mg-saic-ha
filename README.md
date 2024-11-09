@@ -158,6 +158,7 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 ## Version History
 ```
 0.4.4
+- Refactor setup to avoid generic responses from blocking integration startup
 - Revise Generic Response verification method
 - Revise Charging Gun State sensor mechanics for BEV and PHEV only.
 - Additional Debug Logging for Generic Responses
