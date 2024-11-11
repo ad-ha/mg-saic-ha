@@ -204,6 +204,16 @@
           "description": "The vehicle identification number of the car to start front defrost."
         }
       }
+    },
+    "update_vehicle_data": {
+      "name": "Update Vehicle Data",
+      "description": "Manually trigger a data update from the vehicle.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "The vehicle identification number of the car to update data."
+        }
+      }
     }
   },
   "options": {

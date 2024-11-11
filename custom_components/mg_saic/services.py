@@ -1,4 +1,5 @@
 """Services for the MG SAIC integration."""
+
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 import voluptuous as vol
@@ -22,6 +23,7 @@ SERVICE_CONTROL_HEATED_SEATS = "control_heated_seats"
 SERVICE_START_FRONT_DEFROST = "start_front_defrost"
 SERVICE_SET_TARGET_SOC = "set_target_soc"
 SERVICE_START_AC_WITH_SETTINGS = "start_ac_with_settings"
+SERVICE_UPDATE_VEHICLE_DATA = "update_vehicle_data"
 
 SERVICE_VIN_SCHEMA = vol.Schema({vol.Required("vin"): cv.string})
 
@@ -214,6 +216,17 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
         except Exception as e:
             LOGGER.error("Error starting front defrost for VIN %s: %s", vin, e)
 
+    async def handle_update_vehicle_data(call: ServiceCall) -> None:
+        """Handle the update_vehicle_data service call."""
+        vin = call.data["vin"]
+        coordinators_by_vin = hass.data[DOMAIN].get("coordinators_by_vin", {})
+        coordinator = coordinators_by_vin.get(vin)
+        if coordinator:
+            await coordinator.async_request_refresh()
+            LOGGER.info("Data update triggered for VIN: %s", vin)
+        else:
+            LOGGER.warning("Coordinator not found for VIN %s", vin)
+
     # Register services
     hass.services.async_register(
         DOMAIN, SERVICE_LOCK_VEHICLE, handle_lock_vehicle, schema=SERVICE_VIN_SCHEMA
@@ -281,6 +294,12 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
         handle_start_front_defrost,
         schema=SERVICE_VIN_SCHEMA,
     )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_UPDATE_VEHICLE_DATA,
+        handle_update_vehicle_data,
+        schema=SERVICE_VIN_SCHEMA,
+    )
 
     LOGGER.info("Services registered for MG SAIC integration.")
 
@@ -302,5 +321,6 @@ async def async_unload_services(hass: HomeAssistant) -> None:
     hass.services.async_remove(DOMAIN, SERVICE_CONTROL_REAR_WINDOW_HEAT)
     hass.services.async_remove(DOMAIN, SERVICE_CONTROL_HEATED_SEATS)
     hass.services.async_remove(DOMAIN, SERVICE_START_FRONT_DEFROST)
+    hass.services.async_remove(DOMAIN, SERVICE_UPDATE_VEHICLE_DATA)
 
     LOGGER.info("Services unregistered for MG SAIC integration.")

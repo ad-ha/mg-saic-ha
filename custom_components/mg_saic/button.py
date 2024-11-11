@@ -16,6 +16,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         SAICMGTriggerAlarmButton(coordinator, client, vin_info, vin),
         SAICMGStartFrontDefrostButton(coordinator, client, vin_info, vin),
         SAICMGControlRearWindowHeatButton(coordinator, client, vin_info, vin),
+        SAICMGUpdateDataButton(coordinator, client, vin_info, vin),
     ]
 
     async_add_entities(buttons)
@@ -142,3 +143,20 @@ class SAICMGControlRearWindowHeatButton(SAICMGButton):
             LOGGER.error(
                 "Error activating rear window heat for VIN %s: %s", self._vin, e
             )
+
+
+class SAICMGUpdateDataButton(SAICMGButton):
+    """Button to manually update vehicle data."""
+
+    def __init__(self, coordinator, client, vin_info, vin):
+        super().__init__(
+            coordinator, client, vin_info, vin, "Update Vehicle Data", "mdi:update"
+        )
+
+    async def async_press(self):
+        """Handle the button press."""
+        try:
+            await self.coordinator.async_request_refresh()
+            LOGGER.info("Data update triggered for VIN: %s", self._vin)
+        except Exception as e:
+            LOGGER.error("Error triggering data update for VIN %s: %s", self._vin, e)
