@@ -163,7 +163,7 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - Revise code for setup of Fuel Level and Fuel Range sensors on ICE vehicles.
 - Add new "Update Vehicle Data" service, for manual updates.
 - Add new "Update Vehicle Data" button
-- Refactor Generic Reponse handling and retrying, to trigger on manual updates
+- Refactor Generic Response handling and retrying, to trigger on manual updates
 - Improve exceptions' handling on Generic Responses
 - Revise translations and typos.
 ```
