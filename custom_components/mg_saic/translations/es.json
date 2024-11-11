@@ -204,6 +204,16 @@
           "description": "El número de identificación del vehículo para encender el desempañador delantero."
         }
       }
+    },
+    "update_vehicle_data": {
+      "name": "Actualizar Datos del Vehículo",
+      "description": "Iniciar manualmente una actualización de datos desde el vehículo.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "El número de identificación del vehículo para actualizar los datos."
+        }
+      }
     }
   },
   "options": {

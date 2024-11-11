@@ -152,7 +152,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
             ),
         ]
 
-        if vehicle_type in ["PHEV", "HEV"]:
+        if vehicle_type in ["PHEV", "HEV", "ICE"]:
             sensors.append(
                 SAICMGVehicleSensor(
                     coordinator,

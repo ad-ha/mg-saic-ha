@@ -1,5 +1,3 @@
-# coordinator.py
-
 from datetime import timedelta
 import asyncio
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -65,38 +63,30 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         data = {}
         while retries < RETRY_LIMIT:
             try:
-                # Initialize variables to track data validity
-                valid_data_fetched = False
-
                 # Fetch charging info
                 charging_info = await self.client.get_charging_info()
-                if charging_info is None or self._is_generic_charging_response(
-                    charging_info
-                ):
-                    LOGGER.debug("Generic Vehicle Charging Data: %s", charging_info)
-                    LOGGER.warning("Charging info is invalid or generic.")
-                    charging_info = self.data.get("charging") if self.data else None
-                else:
-                    data["charging"] = charging_info
-                    valid_data_fetched = True
+                if charging_info is None:
+                    LOGGER.warning("Charging info returned None.")
+                    raise UpdateFailed("Charging info is None.")
+
+                # Check for generic charging response
+                self._is_generic_charging_response(charging_info)
+                data["charging"] = charging_info
 
                 # Determine charging status
-                if charging_info:
-                    bms_chrg_sts = getattr(
-                        getattr(charging_info, "chrgMgmtData", None), "bmsChrgSts", None
-                    )
-                    self.is_charging = bms_chrg_sts in CHARGING_STATUS_CODES
-                else:
-                    self.is_charging = False
+                bms_chrg_sts = getattr(
+                    getattr(charging_info, "chrgMgmtData", None), "bmsChrgSts", None
+                )
+                self.is_charging = bms_chrg_sts in CHARGING_STATUS_CODES
 
                 # Fetch vehicle status
                 vehicle_status = await self.client.get_vehicle_status()
-                if vehicle_status is None or self._is_generic_response(vehicle_status):
-                    LOGGER.warning("Vehicle status is invalid or generic.")
-                    vehicle_status = self.data.get("status") if self.data else None
-                else:
-                    data["status"] = vehicle_status
-                    valid_data_fetched = True
+                if vehicle_status is None:
+                    LOGGER.warning("Vehicle status returned None.")
+                    raise UpdateFailed("Vehicle status is None.")
+                # Check for generic vehicle status response
+                self._is_generic_response(vehicle_status)
+                data["status"] = vehicle_status
 
                 # Fetch vehicle info if needed
                 fetch_vehicle_info = (
@@ -109,10 +99,8 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                     vehicle_info = await self.client.get_vehicle_info()
                     if vehicle_info is None:
                         LOGGER.warning("Vehicle info returned None.")
-                        vehicle_info = self.data.get("info") if self.data else None
-                    else:
-                        data["info"] = vehicle_info
-                        valid_data_fetched = True
+                        raise UpdateFailed("Vehicle info is None.")
+                    data["info"] = vehicle_info
                 else:
                     vehicle_info = self.data.get("info") if self.data else None
                     data["info"] = vehicle_info
@@ -136,17 +124,15 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                         self._unsub_refresh()
                     self._schedule_refresh()
 
-                # If we have any valid data, return it
-                if valid_data_fetched:
-                    return data
-                else:
-                    LOGGER.warning(
-                        "No valid data fetched, using previous data if available."
-                    )
-                    if self.data:
-                        return self.data
-                    else:
-                        return {}
+                # Return the fetched data
+                return data
+
+            except (GenericResponseException, UpdateFailed) as e:
+                LOGGER.warning("Data invalid or generic: %s", e)
+                retries += 1
+                delay = min(retries * RETRY_BACKOFF_FACTOR, MAX_RETRY_DELAY)
+                LOGGER.info("Retrying in %s seconds...", delay)
+                await asyncio.sleep(delay)
 
             except Exception as e:
                 LOGGER.error("Error fetching data: %s", e)
@@ -176,10 +162,12 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                 and status.basicVehicleStatus.mileage
                 == GENERIC_RESPONSE_STATUS_THRESHOLD
             ):
-                return True
+                raise GenericResponseException(
+                    "Generic vehicle status response received."
+                )
             return False
         except Exception as e:
-            LOGGER.error("Error checking for generic response: %s", e)
+            LOGGER.error("Error: %s", e)
             return False
 
     def _is_generic_charging_response(self, charging_info):
@@ -191,11 +179,13 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                     chrgMgmtData.bmsPackSOCDsp is not None
                     and chrgMgmtData.bmsPackSOCDsp > GENERIC_RESPONSE_SOC_THRESHOLD
                 ):
-                    LOGGER.debug("Generic Chargind Data response.")
-                    return True
+                    LOGGER.debug("Generic Charging Data response.")
+                    raise GenericResponseException(
+                        "Generic charging response received."
+                    )
             return False
         except Exception as e:
-            LOGGER.error("Error checking for generic charging response: %s", e)
+            LOGGER.error("Error: %s", e)
             return False
 
     def _determine_vehicle_type(self, vehicle_info):
