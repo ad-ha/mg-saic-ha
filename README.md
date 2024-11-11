@@ -127,6 +127,7 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - Defrost Windshield
 - Control Heated Seats
 - Control Battery Heating
+- Update Vehicle Data
  
 ### SWITCHES
 - AC On/Off
@@ -139,6 +140,7 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - Start Front Defrost
 - Start Rear Window Heat
 - Tigger Alarm
+- Update Vehicle Data
 
 ### LOCK
 - Lock entity for lock/unlock doors
@@ -156,6 +158,16 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 
 
 ## Version History
+```
+0.4.5
+- Revise code for setup of Fuel Level and Fuel Range sensors on ICE vehicles.
+- Add new "Update Vehicle Data" service, for manual updates.
+- Add new "Update Vehicle Data" button
+- Refactor Generic Reponse handling and retrying, to trigger on manual updates
+- Improve exceptions' handling on Generic Responses
+- Revise translations and typos.
+```
+
 ```
 0.4.4
 - Refactor setup to avoid generic responses from blocking integration startup
