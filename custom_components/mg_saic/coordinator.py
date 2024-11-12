@@ -84,6 +84,7 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                 if vehicle_status is None:
                     LOGGER.warning("Vehicle status returned None.")
                     raise UpdateFailed("Vehicle status is None.")
+
                 # Check for generic vehicle status response
                 self._is_generic_response(vehicle_status)
                 data["status"] = vehicle_status
@@ -166,6 +167,8 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                     "Generic vehicle status response received."
                 )
             return False
+        except GenericResponseException:
+            raise
         except Exception as e:
             LOGGER.error("Error: %s", e)
             return False
@@ -184,8 +187,10 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                         "Generic charging response received."
                     )
             return False
+        except GenericResponseException:
+            raise
         except Exception as e:
-            LOGGER.error("Error: %s", e)
+            LOGGER.error("Error:: %s", e)
             return False
 
     def _determine_vehicle_type(self, vehicle_info):
