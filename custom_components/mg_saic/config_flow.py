@@ -8,6 +8,8 @@ from .const import (
     COUNTRY_CODES,
     UPDATE_INTERVAL,
     UPDATE_INTERVAL_CHARGING,
+    REGION_CHOICES,
+    REGION_BASE_URIS,
 )
 from saic_ismart_client_ng import SaicApi
 from saic_ismart_client_ng.model import SaicApiConfiguration
@@ -80,7 +82,7 @@ class SAICMGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 {
                     vol.Required("username"): str,
                     vol.Required("password"): str,
-                    vol.Required("region"): vol.In(["EU", "China", "Asia"]),
+                    vol.Required("region"): vol.In(REGION_CHOICES),
                 }
             )
         else:  # phone login
@@ -90,7 +92,7 @@ class SAICMGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Required("country_code"): vol.In(country_options),
                     vol.Required("username"): str,
                     vol.Required("password"): str,
-                    vol.Required("region"): vol.In(["EU", "China", "Asia"]),
+                    vol.Required("region"): vol.In(REGION_CHOICES),
                 }
             )
 
@@ -131,23 +133,30 @@ class SAICMGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def fetch_vehicle_data(self, username_is_email):
         """Authenticate and fetch vehicle data."""
 
+        # Get the base_url for the selected region
+        base_uri = REGION_BASE_URIS.get(self.region)
+        if not base_uri:
+            raise ValueError(f"Base URL not defined for region: {self.region}")
+
         config = SaicApiConfiguration(
             username=self.username,
             password=self.password,
-            region=self.region,
+            base_uri=base_uri,
             phone_country_code=self.country_code if not username_is_email else None,
             username_is_email=username_is_email,
         )
 
         LOGGER.debug(
-            "Logging in with username: %s, country_code: %s, is_email: %s, region: %s",
+            "Logging in with Username: %s, Country Code: %s, Email: %s, Region: %s, Base URL: %s",
             self.username,
             self.country_code,
             username_is_email,
             self.region,
+            base_uri,
         )
 
-        saic_api = SaicApi(config)
+        # Initialize SaicApi in the executor to avoid blocking the event loop
+        saic_api = await self.hass.async_add_executor_job(SaicApi, config)
 
         try:
             await saic_api.login()
