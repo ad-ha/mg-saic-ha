@@ -60,8 +60,8 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self):
         """Fetch data from the API."""
         retries = 0
-        data = {}
         while retries < RETRY_LIMIT:
+            data = {}
             try:
                 # Fetch charging info
                 charging_info = await self.client.get_charging_info()
@@ -137,24 +137,36 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                 LOGGER.warning("Data invalid or generic: %s", e)
                 retries += 1
                 delay = min(retries * RETRY_BACKOFF_FACTOR, MAX_RETRY_DELAY)
-                LOGGER.info("Retrying in %s seconds...", delay)
+                LOGGER.info(
+                    "Retrying in %s seconds... (Attempt %d/%d)",
+                    delay,
+                    retries,
+                    RETRY_LIMIT,
+                )
                 await asyncio.sleep(delay)
 
             except Exception as e:
                 LOGGER.error("Error fetching data: %s", e)
                 retries += 1
                 delay = min(retries * RETRY_BACKOFF_FACTOR, MAX_RETRY_DELAY)
-                LOGGER.info("Retrying in %s seconds...", delay)
+                LOGGER.info(
+                    "Retrying in %s seconds... (Attempt %d/%d)",
+                    delay,
+                    retries,
+                    RETRY_LIMIT,
+                )
                 await asyncio.sleep(delay)
 
         # After retries exhausted
-        LOGGER.error("Failed to fetch data after retries.")
-        if self.data:
-            LOGGER.info("Using previous data.")
-            return self.data
-        else:
-            LOGGER.error("No previous data available. Returning empty data.")
-            return {}
+        LOGGER.error("Failed to fetch data after %d retries.", RETRY_LIMIT)
+        # Proceed with partial or empty data
+        data = self.data or {}
+        data.setdefault("charging", None)
+        data.setdefault("status", None)
+        data.setdefault("info", None)
+        # Set is_charging to False as we don't have valid data
+        self.is_charging = False
+        return data
 
     def _is_generic_response(self, status):
         """Check if the vehicle status response is generic."""
