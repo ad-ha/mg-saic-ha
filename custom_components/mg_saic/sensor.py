@@ -18,6 +18,7 @@ from .const import (
     DATA_DECIMAL_CORRECTION_SOC,
     CHARGING_CURRENT_FACTOR,
     CHARGING_VOLTAGE_FACTOR,
+    DATA_100_DECIMAL_CORRECTION,
 )
 
 
@@ -284,7 +285,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                         UnitOfTime.MINUTES,
                         "mdi:timer-outline",
                         "measurement",
-                        1.0,
+                        DATA_100_DECIMAL_CORRECTION,
                         "rvsChargeStatus",
                     ),
                     SAICMGChargingSensor(

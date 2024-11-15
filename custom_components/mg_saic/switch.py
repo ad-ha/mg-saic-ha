@@ -1,6 +1,6 @@
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from .const import DOMAIN, LOGGER
+from .const import DOMAIN, LOGGER, CHARGING_STATUS_CODES
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -119,8 +119,10 @@ class SAICMGACSwitch(SAICMGVehicleSwitch):
         """Return true if AC is on."""
         status = self.coordinator.data.get("status")
         if status:
-            ac_status = getattr(status.basicVehicleStatus, "remoteClimateStatus", None)
-            return ac_status == 1
+            basic_status = getattr(status, "basicVehicleStatus", None)
+            if basic_status:
+                ac_status = getattr(basic_status, "remoteClimateStatus", None)
+                return ac_status == 1
         return False
 
     async def async_turn_on(self, **kwargs):
@@ -155,8 +157,12 @@ class SAICMGHeatedSeatsSwitch(SAICMGVehicleSwitch):
         """Return true if heated seats are on."""
         status = self.coordinator.data.get("status")
         if status:
-            seats_status = getattr(status.basicVehicleStatus, "heatedSeatsStatus", None)
-            return seats_status == 1
+            basic_status = getattr(status, "basicVehicleStatus", None)
+            if basic_status:
+                # Update is_on to check frontLeftSeatHeatLevel and frontRightSeatHeatLevel
+                front_left_level = getattr(basic_status, "frontLeftSeatHeatLevel", 0)
+                front_right_level = getattr(basic_status, "frontRightSeatHeatLevel", 0)
+                return front_left_level > 0 or front_right_level > 0
         return False
 
     async def async_turn_on(self, **kwargs):
@@ -191,8 +197,10 @@ class SAICMGChargingSwitch(SAICMGVehicleSwitch):
         """Return true if charging is active."""
         charging_data = self.coordinator.data.get("charging")
         if charging_data:
-            charging_status = getattr(charging_data, "chargingStatus", None)
-            return charging_status == 1
+            chrgMgmtData = getattr(charging_data, "chrgMgmtData", None)
+            if chrgMgmtData:
+                charging_status = getattr(chrgMgmtData, "bmsChrgSts", None)
+                return charging_status in CHARGING_STATUS_CODES
         return False
 
     async def async_turn_on(self, **kwargs):

@@ -223,8 +223,8 @@
           "scan_interval": "Intervalo de actualización (en segundos)",
           "charging_scan_interval": "Intervalo de actualización durante la carga (en segundos)"
         },
-        "description": "Define additional settings for MG/SAIC Integration",
-        "title": "MG/SAIC Options"
+        "description": "Define ajustes adicionales para la Integración MG/SAIC",
+        "title": "Opciones de MG/SAIC"
       }
     }
   }

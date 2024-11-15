@@ -2,7 +2,7 @@ import asyncio
 from saic_ismart_client_ng import SaicApi
 from saic_ismart_client_ng.model import SaicApiConfiguration
 from enum import Enum
-from .const import LOGGER
+from .const import LOGGER, REGION_BASE_URIS
 
 
 class SAICMGAPIClient:
@@ -20,22 +20,29 @@ class SAICMGAPIClient:
         self.vin = vin
         self.saic_api = None
         self.username_is_email = username_is_email
-        self.region = region
         self.country_code = country_code
+        if region is None:
+            LOGGER.debug("No region specified, defaulting to Europe.")
+        self.region_name = region if region is not None else "Europe"
 
     async def login(self):
         """Authenticate with the API."""
+        # Get the base_url for this region
+        base_uri = REGION_BASE_URIS.get(self.region_name)
+        if not base_uri:
+            raise ValueError(f"Base URL not defined for region: {self.region_name}")
+
         config = SaicApiConfiguration(
             username=self.username,
             password=self.password,
-            region=self.region,
+            base_uri=base_uri,
             phone_country_code=self.country_code
             if not self.username_is_email
             else None,
             username_is_email=self.username_is_email,
         )
         LOGGER.debug(
-            "Logging in with region-based endpoint for region: %s", self.region
+            "Logging in with base URL: %s for region: %s", base_uri, self.region_name
         )
 
         self.saic_api = await asyncio.to_thread(SaicApi, config)
