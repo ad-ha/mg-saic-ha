@@ -128,6 +128,11 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                 # Return the fetched data
                 return data
 
+            except asyncio.CancelledError:
+                # Allow the task to be cancelled
+                LOGGER.debug("Update task was cancelled.")
+                raise
+
             except (GenericResponseException, UpdateFailed) as e:
                 LOGGER.warning("Data invalid or generic: %s", e)
                 retries += 1

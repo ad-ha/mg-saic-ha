@@ -1,5 +1,3 @@
-"""Services for the MG SAIC integration."""
-
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 import voluptuous as vol

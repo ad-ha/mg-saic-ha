@@ -9,17 +9,22 @@ DOMAIN = "mg_saic"
 PRESSURE_TO_BAR = 0.04
 DATA_DECIMAL_CORRECTION = 0.1
 DATA_DECIMAL_CORRECTION_SOC = 0.1
+DATA_100_DECIMAL_CORRECTION = 0.01
 
 # Conversion factors for charging data
 CHARGING_CURRENT_FACTOR = 0.001
 CHARGING_VOLTAGE_FACTOR = 0.145
 
 # API Base Urls
-BASE_URLS = {
-    "EU": "https://gateway-mg-eu.soimt.com",
-    "China": "https://gateway-mg-china.soimt.com",
-    "Asia": "https://gateway-mg-asia.soimt.com",
+REGION_BASE_URIS = {
+    "EU": "https://gateway-mg-eu.soimt.com/api.app/v1/",
+    "China": "https://tap-cn.soimt.com/api.app/v1/",
+    "Rest of World": "https://gateway-mg-eu.soimt.com/api.app/v1/",
+    "Australia": "https://gateway-mg-au.soimt.com/api.app/v1/",
 }
+
+# List of regions for selection in the config flow
+REGION_CHOICES = list(REGION_BASE_URIS.keys())
 
 # Phone Login Country Codes
 COUNTRY_CODES = [
