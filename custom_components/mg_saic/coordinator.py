@@ -187,7 +187,7 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                     chrgMgmtData.bmsPackSOCDsp is not None
                     and chrgMgmtData.bmsPackSOCDsp > GENERIC_RESPONSE_SOC_THRESHOLD
                 ):
-                    LOGGER.debug("Generic Charging Data response.")
+                    LOGGER.debug("Generic Charging Data: %s", chrgMgmtData)
                     raise GenericResponseException(
                         "Generic charging response received."
                     )
