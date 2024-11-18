@@ -82,7 +82,7 @@ GENERIC_RESPONSE_STATUS_THRESHOLD = 0
 # Retry configuration
 RETRY_LIMIT = 5
 MAX_RETRY_DELAY = 60
-RETRY_BACKOFF_FACTOR = 10
+RETRY_BACKOFF_FACTOR = 15
 
 # Charging status codes indicating that the vehicle is charging
 CHARGING_STATUS_CODES = {1, 3, 10, 12}
