@@ -136,7 +136,7 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             except (GenericResponseException, UpdateFailed) as e:
                 LOGGER.warning("Data invalid or generic: %s", e)
                 retries += 1
-                delay = min(retries * RETRY_BACKOFF_FACTOR, MAX_RETRY_DELAY)
+                delay = min(RETRY_BACKOFF_FACTOR, MAX_RETRY_DELAY)
                 LOGGER.info(
                     "Retrying in %s seconds... (Attempt %d/%d)",
                     delay,
@@ -148,7 +148,7 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             except Exception as e:
                 LOGGER.error("Error fetching data: %s", e)
                 retries += 1
-                delay = min(retries * RETRY_BACKOFF_FACTOR, MAX_RETRY_DELAY)
+                delay = min(RETRY_BACKOFF_FACTOR, MAX_RETRY_DELAY)
                 LOGGER.info(
                     "Retrying in %s seconds... (Attempt %d/%d)",
                     delay,
