@@ -17,7 +17,7 @@ body:
       label: Home Assistant Version
       description: "What version of Home Assistant are you using?"
       placeholder: "e.g., 2024.11.1"
-  required: true
+    required: true
 
   - type: input
     id: integration_version
@@ -25,7 +25,7 @@ body:
       label: MG/SAIC Integration Version
       description: "What version of the integration are you using?"
       placeholder: "e.g., 0.4.8"
-  required: true
+    required: true
 
   - type: dropdown
     id: installation_method
@@ -33,28 +33,28 @@ body:
       label: Installation Method
       description: "How did you install the integration?"
       options:
-        - label: HACS
-        - label: Manual
-  required: true
+        - HACS
+        - Manual
+    required: true
 
-  - type: checkboxes
+  - type: dropdown
     id: prior_issue_check
     attributes:
       label: Did you check for existing issues?
       description: "You should check if there's a current or closed issue."
       options:
-        - label: Yes
-        - label: No
-  required: true
+        - Yes
+        - No
+    required: true
 
-  - type: checkboxes
+  - type: dropdown
     id: debug_enabled
     attributes:
       label: Did you enable debug logging before and are ready to post logs?
       options:
-        - label: Yes
-        - label: No
-  required: true
+        - Yes
+        - No
+    required: true
 
   - type: textarea
     id: issue_description
@@ -62,7 +62,7 @@ body:
       label: Describe the Issue
       description: "A clear and concise description of what the bug is."
       placeholder: "Provide a detailed description..."
-  required: true
+    required: true
 
   - type: markdown
     attributes:
