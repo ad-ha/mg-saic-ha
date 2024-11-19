@@ -32,12 +32,16 @@ COUNTRY_CODES = [
     {"code": "+7", "country": "Russia"},
     {"code": "+20", "country": "Egypt"},
     {"code": "+27", "country": "South Africa"},
+    {"code": "+30", "country": "Greece"},
     {"code": "+31", "country": "Netherlands"},
     {"code": "+32", "country": "Belgium"},
     {"code": "+33", "country": "France"},
     {"code": "+34", "country": "Spain"},
+    {"code": "+36", "country": "Hungary"},
     {"code": "+39", "country": "Italy"},
+    {"code": "+40", "country": "Romania"},
     {"code": "+41", "country": "Switzerland"},
+    {"code": "+43", "country": "Austria"},
     {"code": "+44", "country": "United Kingdom"},
     {"code": "+45", "country": "Denmark"},
     {"code": "+46", "country": "Sweden"},
@@ -55,6 +59,7 @@ COUNTRY_CODES = [
     {"code": "+61", "country": "Australia"},
     {"code": "+62", "country": "Indonesia"},
     {"code": "+63", "country": "Philippines"},
+    {"code": "+64", "country": "New Zealand"},
     {"code": "+65", "country": "Singapore"},
     {"code": "+66", "country": "Thailand"},
     {"code": "+81", "country": "Japan"},
@@ -63,10 +68,32 @@ COUNTRY_CODES = [
     {"code": "+90", "country": "Turkey"},
     {"code": "+91", "country": "India"},
     {"code": "+351", "country": "Portugal"},
+    {"code": "+355", "country": "Albania"},
+    {"code": "+357", "country": "Cyprus"},
+    {"code": "+358", "country": "Finland"},
+    {"code": "+359", "country": "Bulgaria"},
+    {"code": "+370", "country": "Lithuania"},
+    {"code": "+371", "country": "Latvia"},
+    {"code": "+372", "country": "Estonia"},
+    {"code": "+373", "country": "Moldova"},
+    {"code": "+385", "country": "Croatia"},
+    {"code": "+386", "country": "Slovenia"},
+    {"code": "+387", "country": "Bosnia and Herzegovina"},
+    {"code": "+389", "country": "North Macedonia"},
     {"code": "+420", "country": "Czech Republic"},
+    {"code": "+421", "country": "Slovakia"},
+    {"code": "+381", "country": "Serbia"},
+    {"code": "+382", "country": "Montenegro"},
+    {"code": "+354", "country": "Iceland"},
+    {"code": "+353", "country": "Ireland"},
+    {"code": "+380", "country": "Ukraine"},
+    {"code": "+596", "country": "Martinique"},
+    {"code": "+852", "country": "Hong Kong"},
     {"code": "+966", "country": "Saudi Arabia"},
     {"code": "+971", "country": "United Arab Emirates"},
+    {"code": "+972", "country": "Israel"},
 ]
+
 
 # Update Settings
 DEFAULT_SCAN_INTERVAL = timedelta(minutes=120)
@@ -81,8 +108,7 @@ GENERIC_RESPONSE_STATUS_THRESHOLD = 0
 
 # Retry configuration
 RETRY_LIMIT = 5
-MAX_RETRY_DELAY = 60
-RETRY_BACKOFF_FACTOR = 10
+RETRY_BACKOFF_FACTOR = 15
 
 # Charging status codes indicating that the vehicle is charging
 CHARGING_STATUS_CODES = {1, 3, 10, 12}
