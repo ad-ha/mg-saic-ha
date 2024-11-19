@@ -1,0 +1,108 @@
+---
+name: Bug Report
+about: Create a report to help us improve
+title: "[ISSUE] "
+labels: bug
+assignees: ''
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Please fill out this form to report a bug with the MG SAIC Integration.**
+
+  - type: input
+    id: home_assistant_version
+    attributes:
+      label: Home Assistant Version
+      description: "What version of Home Assistant are you using?"
+      placeholder: "e.g. 2024.11.1"
+      required: true
+
+  - type: input
+    id: integration_version
+    attributes:
+      label: MG/SAIC Integration Version
+      description: "What version of the integration are you using?"
+      placeholder: "e.g. 0.4.8"
+      required: true
+
+  - type: checkboxes
+    id: updated_version
+    attributes:
+      label: Did you check if the version you have is the latest available?
+      options:
+        - label: Yes
+          required: true
+        - label: No
+        
+  - type: dropdown
+    id: installation_method
+    attributes:
+      label: Installation Method
+      description: "How did you install the integration?"
+      options:
+        - HACS
+        - Manual
+      required: true
+
+  - type: checkboxes
+    id: prior_issue_check
+    attributes:
+      label: Did you check for existing issues?
+      description: "You should check if there's a current or closed issue."
+      options:
+        - label: Yes
+          required: true
+        - label: No
+
+  - type: checkboxes
+    id: debug_enabled
+    attributes:
+      label: Did you enable debug logging before and are ready to post logs? See logs section at the bottom.
+      options:
+        - label: Yes
+          required: true
+        - label: No
+
+  - type: textarea
+    id: issue_description
+    attributes:
+      label: Describe the Issue
+      description: "A clear and concise description of what the bug is."
+      placeholder: "Provide a detailed description..."
+      value: ''
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: "Paste your logs here."
+      render: yaml
+      required: false
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: Additional Context
+      description: "Add any other context about the problem here."
+      placeholder: "Any additional information..."
+      required: false
+
+  - type: markdown
+    attributes:
+      value: |
+        ### **Logs**
+
+        Please add the following to your `configuration.yaml` on your Home Assistant and restart:
+
+        ```yaml
+        logger:
+          default: warning
+          logs:
+            custom_components.mg_saic: debug
+        ```
+
+        See [Home Assistant Logger Documentation](https://www.home-assistant.io/integrations/logger) for more information.
+---
