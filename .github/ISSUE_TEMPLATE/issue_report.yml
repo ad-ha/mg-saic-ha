@@ -1,9 +1,9 @@
 ---
 name: Bug Report
-about: Create a report to help us improve
+description: Create a report to help us improve
 title: "[ISSUE] "
 labels: bug
-assignees: ''
+assignees: []
 
 body:
   - type: markdown
@@ -16,35 +16,26 @@ body:
     attributes:
       label: Home Assistant Version
       description: "What version of Home Assistant are you using?"
-      placeholder: "e.g. 2024.11.1"
-      required: true
+      placeholder: "e.g., 2024.11.1"
+  required: true
 
   - type: input
     id: integration_version
     attributes:
       label: MG/SAIC Integration Version
       description: "What version of the integration are you using?"
-      placeholder: "e.g. 0.4.8"
-      required: true
+      placeholder: "e.g., 0.4.8"
+  required: true
 
-  - type: checkboxes
-    id: updated_version
-    attributes:
-      label: Did you check if the version you have is the latest available?
-      options:
-        - label: Yes
-          required: true
-        - label: No
-        
   - type: dropdown
     id: installation_method
     attributes:
       label: Installation Method
       description: "How did you install the integration?"
       options:
-        - HACS
-        - Manual
-      required: true
+        - label: HACS
+        - label: Manual
+  required: true
 
   - type: checkboxes
     id: prior_issue_check
@@ -53,17 +44,17 @@ body:
       description: "You should check if there's a current or closed issue."
       options:
         - label: Yes
-          required: true
         - label: No
+  required: true
 
   - type: checkboxes
     id: debug_enabled
     attributes:
-      label: Did you enable debug logging before and are ready to post logs? See logs section at the bottom.
+      label: Did you enable debug logging before and are ready to post logs?
       options:
         - label: Yes
-          required: true
         - label: No
+  required: true
 
   - type: textarea
     id: issue_description
@@ -71,24 +62,7 @@ body:
       label: Describe the Issue
       description: "A clear and concise description of what the bug is."
       placeholder: "Provide a detailed description..."
-      value: ''
-      required: true
-
-  - type: textarea
-    id: logs
-    attributes:
-      label: Logs
-      description: "Paste your logs here."
-      render: yaml
-      required: false
-
-  - type: textarea
-    id: additional_context
-    attributes:
-      label: Additional Context
-      description: "Add any other context about the problem here."
-      placeholder: "Any additional information..."
-      required: false
+  required: true
 
   - type: markdown
     attributes:
@@ -105,4 +79,17 @@ body:
         ```
 
         See [Home Assistant Logger Documentation](https://www.home-assistant.io/integrations/logger) for more information.
----
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: "Paste your logs here."
+      render: yaml
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: Additional Context
+      description: "Add any other context about the problem here."
+      placeholder: "Any additional information..."
