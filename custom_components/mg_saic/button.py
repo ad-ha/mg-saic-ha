@@ -8,6 +8,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
     """Set up MG SAIC buttons."""
     coordinator = hass.data[DOMAIN][f"{entry.entry_id}_coordinator"]
     client = hass.data[DOMAIN][entry.entry_id]
+
+    if not coordinator.data.get("info"):
+        LOGGER.error("Vehicle info is not available. Buttons cannot be set up.")
+        return
+
     vin_info = coordinator.data["info"][0]
     vin = vin_info.vin
 

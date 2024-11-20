@@ -8,6 +8,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
     """Set up MG SAIC number entities."""
     coordinator = hass.data[DOMAIN][f"{entry.entry_id}_coordinator"]
     client = hass.data[DOMAIN][entry.entry_id]
+
+    if not coordinator.data.get("info"):
+        LOGGER.error("Vehicle info is not available. Numbers cannot be set up.")
+        return
+
     vin_info = coordinator.data["info"][0]
     vin = vin_info.vin
 
@@ -101,6 +106,14 @@ class SAICMGTargetSOCNumber(CoordinatorEntity, NumberEntity):
         else:
             # Return a default icon when native_value is None
             return "mdi:battery-charging-outline"
+
+    @property
+    def available(self):
+        """Return True if the number entity is available."""
+        return (
+            self.coordinator.last_update_success
+            and self.coordinator.data.get("charging") is not None
+        )
 
     async def async_set_native_value(self, value: float) -> None:
         """Set the target SOC to the specified value."""

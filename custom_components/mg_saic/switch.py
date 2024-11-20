@@ -7,6 +7,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
     """Set up MG SAIC switches."""
     coordinator = hass.data[DOMAIN][f"{entry.entry_id}_coordinator"]
     client = hass.data[DOMAIN][entry.entry_id]
+
+    if not coordinator.data.get("info"):
+        LOGGER.error("Vehicle info is not available. Switches cannot be set up.")
+        return
+
     vin_info = coordinator.data["info"][0]
     vin = vin_info.vin
 
@@ -100,6 +105,14 @@ class SAICMGVehicleSwitch(CoordinatorEntity, SwitchEntity):
         """Return true if the switch is on."""
         raise NotImplementedError()
 
+    @property
+    def available(self):
+        """Return True if the switch entity is available."""
+        return (
+            self.coordinator.last_update_success
+            and self.coordinator.data.get("status") is not None
+        )
+
 
 class SAICMGACSwitch(SAICMGVehicleSwitch):
     """Switch to control the vehicle's AC."""
@@ -124,6 +137,14 @@ class SAICMGACSwitch(SAICMGVehicleSwitch):
                 ac_status = getattr(basic_status, "remoteClimateStatus", None)
                 return ac_status == 1
         return False
+
+    @property
+    def available(self):
+        """Return True if the switch entity is available."""
+        return (
+            self.coordinator.last_update_success
+            and self.coordinator.data.get("status") is not None
+        )
 
     async def async_turn_on(self, **kwargs):
         """Turn the AC on."""
@@ -165,6 +186,14 @@ class SAICMGHeatedSeatsSwitch(SAICMGVehicleSwitch):
                 return front_left_level > 0 or front_right_level > 0
         return False
 
+    @property
+    def available(self):
+        """Return True if the switch entity is available."""
+        return (
+            self.coordinator.last_update_success
+            and self.coordinator.data.get("status") is not None
+        )
+
     async def async_turn_on(self, **kwargs):
         """Turn the heated seats on."""
         try:
@@ -202,6 +231,14 @@ class SAICMGChargingSwitch(SAICMGVehicleSwitch):
                 charging_status = getattr(chrgMgmtData, "bmsChrgSts", None)
                 return charging_status in CHARGING_STATUS_CODES
         return False
+
+    @property
+    def available(self):
+        """Return True if the switch entity is available."""
+        return (
+            self.coordinator.last_update_success
+            and self.coordinator.data.get("charging") is not None
+        )
 
     async def async_turn_on(self, **kwargs):
         """Start charging."""
@@ -245,6 +282,14 @@ class SAICMGBatteryHeatingSwitch(SAICMGVehicleSwitch):
                 bmsPTCHeatResp = getattr(chrgMgmtData, "bmsPTCHeatResp", None)
                 return bmsPTCHeatResp == 1
         return False
+
+    @property
+    def available(self):
+        """Return True if the switch entity is available."""
+        return (
+            self.coordinator.last_update_success
+            and self.coordinator.data.get("charging") is not None
+        )
 
     async def async_turn_on(self, **kwargs):
         """Start battery heating."""

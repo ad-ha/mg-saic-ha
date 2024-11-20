@@ -20,6 +20,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
     """Set up the MG SAIC climate entity."""
     coordinator = hass.data[DOMAIN][f"{entry.entry_id}_coordinator"]
     client = hass.data[DOMAIN][entry.entry_id]
+
+    if not coordinator.data.get("info"):
+        LOGGER.error("Vehicle info is not available. Climate cannot be set up.")
+        return
+
     vin_info = coordinator.data["info"][0]
     vin = vin_info.vin
 
@@ -141,6 +146,14 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
                 await self.coordinator.async_request_refresh()
         else:
             LOGGER.warning("Unsupported fan mode: %s", fan_mode)
+
+    @property
+    def available(self):
+        """Return True if the climate entity is available."""
+        return (
+            self.coordinator.last_update_success
+            and self.coordinator.data.get("status") is not None
+        )
 
     def _fan_speed_to_int(self):
         """Convert fan mode to integer value expected by the API."""
