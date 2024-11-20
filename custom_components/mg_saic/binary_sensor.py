@@ -11,8 +11,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
     coordinator = hass.data[DOMAIN][f"{entry.entry_id}_coordinator"]
 
     try:
-        if not coordinator.data["info"] or not coordinator.data["status"]:
-            LOGGER.error("Failed to retrieve vehicle info or status.")
+        if not coordinator.data.get("info"):
+            LOGGER.error("Failed to retrieve vehicle info.")
             return
 
         vin_info = coordinator.data["info"][0]
@@ -25,6 +25,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "driverDoor",
                 BinarySensorDeviceClass.DOOR,
                 "mdi:car-door",
+                "status",
             ),
             SAICMGBinarySensor(
                 coordinator,
@@ -33,6 +34,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "driverWindow",
                 BinarySensorDeviceClass.WINDOW,
                 "mdi:car-door",
+                "status",
             ),
             SAICMGBinarySensor(
                 coordinator,
@@ -41,6 +43,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "passengerDoor",
                 BinarySensorDeviceClass.DOOR,
                 "mdi:car-door",
+                "status",
             ),
             SAICMGBinarySensor(
                 coordinator,
@@ -49,6 +52,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "passengerWindow",
                 BinarySensorDeviceClass.WINDOW,
                 "mdi:car-door",
+                "status",
             ),
             SAICMGBinarySensor(
                 coordinator,
@@ -57,6 +61,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "rearLeftDoor",
                 BinarySensorDeviceClass.DOOR,
                 "mdi:car-door",
+                "status",
             ),
             SAICMGBinarySensor(
                 coordinator,
@@ -65,6 +70,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "rearLeftWindow",
                 BinarySensorDeviceClass.WINDOW,
                 "mdi:car-door",
+                "status",
             ),
             SAICMGBinarySensor(
                 coordinator,
@@ -73,6 +79,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "rearRightDoor",
                 BinarySensorDeviceClass.DOOR,
                 "mdi:car-door",
+                "status",
             ),
             SAICMGBinarySensor(
                 coordinator,
@@ -81,6 +88,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "rearRightWindow",
                 BinarySensorDeviceClass.WINDOW,
                 "mdi:car-door",
+                "status",
             ),
             SAICMGBinarySensor(
                 coordinator,
@@ -89,6 +97,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "sunroofStatus",
                 BinarySensorDeviceClass.WINDOW,
                 "mdi:car-door",
+                "status",
             ),
             SAICMGBinarySensor(
                 coordinator,
@@ -97,6 +106,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "bonnetStatus",
                 BinarySensorDeviceClass.DOOR,
                 "mdi:car",
+                "status",
             ),
             SAICMGBinarySensor(
                 coordinator,
@@ -105,6 +115,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "bootStatus",
                 BinarySensorDeviceClass.DOOR,
                 "mdi:car-back",
+                "status",
             ),
             SAICMGBinarySensor(
                 coordinator,
@@ -113,6 +124,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "lockStatus",
                 BinarySensorDeviceClass.LOCK,
                 "mdi:car-key",
+                "status",
             ),
             SAICMGBinarySensor(
                 coordinator,
@@ -121,6 +133,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "remoteClimateStatus",
                 BinarySensorDeviceClass.RUNNING,
                 "mdi:air-conditioner",
+                "status",
             ),
         ]
 
@@ -135,6 +148,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                     BinarySensorDeviceClass.PLUG,
                     "mdi:ev-plug-type2",
                     "rvsChargeStatus",
+                    "charging",
                 ),
             ]
 
@@ -149,13 +163,14 @@ async def async_setup_entry(hass, entry, async_add_entities):
 class SAICMGBinarySensor(CoordinatorEntity, BinarySensorEntity):
     """Representation of a MG SAIC binary sensor."""
 
-    def __init__(self, coordinator, entry, name, field, device_class, icon):
+    def __init__(self, coordinator, entry, name, field, device_class, icon, data_type):
         """Initialize the binary sensor."""
         super().__init__(coordinator)
         self._name = name
         self._field = field
         self._device_class = device_class
         self._icon = icon
+        self._data_type = data_type
         vin_info = self.coordinator.data["info"][0]
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}_binary_sensor"
 
@@ -170,17 +185,30 @@ class SAICMGBinarySensor(CoordinatorEntity, BinarySensorEntity):
         return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
 
     @property
+    def available(self):
+        """Return True if the entity is available."""
+        required_data = self.coordinator.data.get(self._data_type)
+        return self.coordinator.last_update_success and required_data is not None
+
+    @property
     def is_on(self):
-        data = self.coordinator.data.get("status")
+        data = self.coordinator.data.get(self._data_type)
         if data:
-            status_data = getattr(data, "basicVehicleStatus", None)
-            if status_data:
-                value = getattr(status_data, self._field, None)
-                if value is not None:
-                    if self._field == "lockStatus":
-                        return value == 0
-                    return bool(value)
-        return None
+            if self._data_type == "status":
+                status_data = getattr(data, "basicVehicleStatus", None)
+                if status_data:
+                    value = getattr(status_data, self._field, None)
+                    if value is not None:
+                        if self._field == "lockStatus":
+                            return value == 0
+                        return bool(value)
+            elif self._data_type == "charging":
+                charging_status_data = getattr(data, "rvsChargeStatus", None)
+                if charging_status_data:
+                    value = getattr(charging_status_data, self._field, None)
+                    if value is not None:
+                        return bool(value)
+        return False
 
     @property
     def device_class(self):
@@ -215,7 +243,8 @@ class SAICMGChargingBinarySensor(CoordinatorEntity, BinarySensorEntity):
         field,
         device_class,
         icon,
-        data_source="rvsChargeStatus",
+        data_source,
+        data_type,
     ):
         """Initialize the charging binary sensor."""
         super().__init__(coordinator)
@@ -224,6 +253,7 @@ class SAICMGChargingBinarySensor(CoordinatorEntity, BinarySensorEntity):
         self._device_class = device_class
         self._icon = icon
         self._data_source = data_source
+        self._data_type = data_type
         vin_info = self.coordinator.data["info"][0]
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}_binary_sensor"
 
@@ -239,9 +269,15 @@ class SAICMGChargingBinarySensor(CoordinatorEntity, BinarySensorEntity):
         return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
 
     @property
+    def available(self):
+        """Return True if the entity is available."""
+        required_data = self.coordinator.data.get(self._data_type)
+        return self.coordinator.last_update_success and required_data is not None
+
+    @property
     def is_on(self):
         """Return true if the charging gun is connected."""
-        charging_data = self.coordinator.data.get("charging")
+        charging_data = self.coordinator.data.get(self._data_type)
         if charging_data:
             data_source = getattr(charging_data, self._data_source, None)
             if data_source:

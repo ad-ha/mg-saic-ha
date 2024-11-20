@@ -27,8 +27,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
     coordinator = hass.data[DOMAIN][f"{entry.entry_id}_coordinator"]
 
     try:
-        if not coordinator.data["info"] or not coordinator.data["status"]:
-            LOGGER.error("Failed to retrieve vehicle info or status.")
+        if not coordinator.data.get("info"):
+            LOGGER.error("Failed to retrieve vehicle info.")
             return
 
         vin_info = coordinator.data["info"][0]
@@ -47,6 +47,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "mdi:car-battery",
                 "measurement",
                 DATA_DECIMAL_CORRECTION,
+                "status",
             ),
             SAICMGVehicleSensor(
                 coordinator,
@@ -59,6 +60,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "mdi:thermometer",
                 "measurement",
                 1.0,
+                "status",
             ),
             SAICMGVehicleSensor(
                 coordinator,
@@ -71,6 +73,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "mdi:thermometer",
                 "measurement",
                 1.0,
+                "status",
             ),
             SAICMGVehicleSensor(
                 coordinator,
@@ -83,6 +86,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "mdi:car-tire-alert",
                 "measurement",
                 PRESSURE_TO_BAR,
+                "status",
             ),
             SAICMGVehicleSensor(
                 coordinator,
@@ -95,6 +99,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "mdi:car-tire-alert",
                 "measurement",
                 PRESSURE_TO_BAR,
+                "status",
             ),
             SAICMGVehicleSensor(
                 coordinator,
@@ -107,6 +112,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "mdi:car-tire-alert",
                 "measurement",
                 PRESSURE_TO_BAR,
+                "status",
             ),
             SAICMGVehicleSensor(
                 coordinator,
@@ -119,6 +125,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "mdi:car-tire-alert",
                 "measurement",
                 PRESSURE_TO_BAR,
+                "status",
             ),
             SAICMGMileageSensor(
                 coordinator,
@@ -132,24 +139,28 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "mdi:counter",
                 "total_increasing",
                 DATA_DECIMAL_CORRECTION,
+                "status",
             ),
             SAICMGVehicleDetailSensor(
                 coordinator,
                 entry,
                 "Model Year",
                 "modelYear",
+                "info",
             ),
             SAICMGVehicleDetailSensor(
                 coordinator,
                 entry,
                 "Brand",
                 "brandName",
+                "info",
             ),
             SAICMGVehicleDetailSensor(
                 coordinator,
                 entry,
                 "Model",
                 "modelName",
+                "info",
             ),
         ]
 
@@ -166,6 +177,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                     "mdi:gas-station",
                     "measurement",
                     DATA_DECIMAL_CORRECTION,
+                    "status",
                 ),
             )
 
@@ -181,6 +193,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                     "mdi:gas-station",
                     "measurement",
                     1.0,
+                    "status",
                 ),
             )
 
@@ -197,6 +210,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                     PERCENTAGE,
                     "mdi:battery",
                     "measurement",
+                    "charging",
                 )
             )
 
@@ -212,6 +226,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                     "mdi:car-electric",
                     "measurement",
                     DATA_DECIMAL_CORRECTION,
+                    "status",
                 ),
             )
 
@@ -229,6 +244,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                         "measurement",
                         CHARGING_VOLTAGE_FACTOR,
                         "chrgMgmtData",
+                        "charging",
                     ),
                     SAICMGChargingSensor(
                         coordinator,
@@ -241,6 +257,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                         "measurement",
                         CHARGING_CURRENT_FACTOR,
                         "chrgMgmtData",
+                        "charging",
                     ),
                     SAICMGChargingPowerSensor(
                         coordinator,
@@ -251,6 +268,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                         "mdi:flash",
                         "measurement",
                         "chrgMgmtData",
+                        "charging",
                     ),
                     SAICMGChargingSensor(
                         coordinator,
@@ -263,6 +281,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                         "measurement",
                         1.0,
                         "chrgMgmtData",
+                        "charging",
                     ),
                     SAICMGChargingSensor(
                         coordinator,
@@ -275,6 +294,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                         "measurement",
                         1.0,
                         "chrgMgmtData",
+                        "charging",
                     ),
                     SAICMGChargingSensor(
                         coordinator,
@@ -287,6 +307,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                         "measurement",
                         DATA_100_DECIMAL_CORRECTION,
                         "rvsChargeStatus",
+                        "charging",
                     ),
                     SAICMGChargingSensor(
                         coordinator,
@@ -299,6 +320,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                         "measurement",
                         1.0,
                         "chrgMgmtData",
+                        "charging",
                     ),
                     SAICMGChargingSensor(
                         coordinator,
@@ -311,6 +333,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                         "measurement",
                         DATA_DECIMAL_CORRECTION,
                         "chrgMgmtData",
+                        "charging",
                     ),
                     SAICMGChargingSensor(
                         coordinator,
@@ -323,6 +346,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                         "total_increasing",
                         1.0,
                         "rvsChargeStatus",
+                        "charging",
                     ),
                     SAICMGChargingSensor(
                         coordinator,
@@ -335,6 +359,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                         "measurement",
                         DATA_DECIMAL_CORRECTION,
                         "rvsChargeStatus",
+                        "charging",
                     ),
                     SAICMGChargingSensor(
                         coordinator,
@@ -347,6 +372,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                         None,
                         1.0,
                         "chrgMgmtData",
+                        "charging",
                     ),
                     SAICMGChargingSensor(
                         coordinator,
@@ -359,6 +385,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                         None,
                         1.0,
                         "chrgMgmtData",
+                        "charging",
                     ),
                 ]
             )
@@ -385,6 +412,7 @@ class SAICMGVehicleSensor(CoordinatorEntity, SensorEntity):
         icon,
         state_class,
         factor,
+        data_type,
     ):
         """Initialize the sensor."""
         super().__init__(coordinator)
@@ -392,6 +420,7 @@ class SAICMGVehicleSensor(CoordinatorEntity, SensorEntity):
         self._field = field
         self._status_type = status_type
         self._factor = factor
+        self._data_type = data_type
         self._attr_device_class = device_class
         self._attr_native_unit_of_measurement = unit
         self._attr_icon = icon
@@ -409,23 +438,43 @@ class SAICMGVehicleSensor(CoordinatorEntity, SensorEntity):
         return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
 
     @property
+    def available(self):
+        """Return True if the entity is available."""
+        required_data = self.coordinator.data.get(self._data_type)
+        return self.coordinator.last_update_success and required_data is not None
+
+    @property
     def native_value(self):
-        data = self.coordinator.data.get("status")
+        data = self.coordinator.data.get(self._data_type)
         if data:
-            status_data = getattr(data, self._status_type, None)
-            if status_data:
-                raw_value = getattr(status_data, self._field, None)
+            if self._data_type == "status":
+                status_data = getattr(data, self._status_type, None)
+                if status_data:
+                    raw_value = getattr(status_data, self._field, None)
+                    if raw_value is not None:
+                        # Handle special cases where raw_value might be invalid
+                        if (
+                            self._field
+                            in ["interiorTemperature", "exteriorTemperature"]
+                            and raw_value == -128
+                        ):
+                            LOGGER.debug(
+                                "Sensor %s has invalid temperature value -128",
+                                self._name,
+                            )
+                            return None
+                        return raw_value * self._factor
+            elif self._data_type == "charging":
+                charging_data = getattr(data, self._status_type, None)
+                if charging_data:
+                    raw_value = getattr(charging_data, self._field, None)
+                    if raw_value is not None:
+                        return raw_value * self._factor
+            elif self._data_type == "info":
+                vin_info = data[0]
+                raw_value = getattr(vin_info, self._field, None)
                 if raw_value is not None:
-                    # Handle special cases where raw_value might be invalid
-                    if (
-                        self._field in ["interiorTemperature", "exteriorTemperature"]
-                        and raw_value == -128
-                    ):
-                        LOGGER.debug(
-                            "Sensor %s has invalid temperature value -128", self._name
-                        )
-                        return None
-                    return raw_value * self._factor
+                    return raw_value
         return None
 
     @property
@@ -455,6 +504,7 @@ class SAICMGSOCSensor(CoordinatorEntity, SensorEntity):
         unit,
         icon,
         state_class,
+        data_type,
     ):
         """Initialize the sensor."""
         super().__init__(coordinator)
@@ -466,6 +516,7 @@ class SAICMGSOCSensor(CoordinatorEntity, SensorEntity):
         self._attr_native_unit_of_measurement = unit
         self._attr_icon = icon
         self._attr_state_class = state_class
+        self._data_type = data_type
         vin_info = self.coordinator.data["info"][0]
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field_basic}_soc"
 
@@ -477,6 +528,12 @@ class SAICMGSOCSensor(CoordinatorEntity, SensorEntity):
     def name(self):
         vin_info = self.coordinator.data["info"][0]
         return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
+
+    @property
+    def available(self):
+        """Return True if the entity is available."""
+        required_data = self.coordinator.data.get(self._data_type)
+        return self.coordinator.last_update_success and required_data is not None
 
     @property
     def native_value(self):
@@ -520,11 +577,12 @@ class SAICMGSOCSensor(CoordinatorEntity, SensorEntity):
 class SAICMGVehicleDetailSensor(CoordinatorEntity, SensorEntity):
     """Representation of a sensor for MG SAIC vehicle details."""
 
-    def __init__(self, coordinator, entry, name, field):
+    def __init__(self, coordinator, entry, name, field, data_type):
         """Initialize the sensor."""
         super().__init__(coordinator)
         self._name = name
         self._field = field
+        self._data_type = data_type
         vin_info = self.coordinator.data["info"][0]
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}"
 
@@ -538,9 +596,20 @@ class SAICMGVehicleDetailSensor(CoordinatorEntity, SensorEntity):
         return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
 
     @property
+    def available(self):
+        """Return True if the entity is available."""
+        required_data = self.coordinator.data.get(self._data_type)
+        return self.coordinator.last_update_success and required_data is not None
+
+    @property
     def native_value(self):
-        vin_info = self.coordinator.data["info"][0]
-        return getattr(vin_info, self._field, None)
+        data = self.coordinator.data.get(self._data_type)
+        if data:
+            vin_info = data[0]
+            raw_value = getattr(vin_info, self._field, None)
+            if raw_value is not None:
+                return raw_value
+        return None
 
     @property
     def device_info(self):
@@ -570,18 +639,20 @@ class SAICMGMileageSensor(CoordinatorEntity, SensorEntity):
         icon,
         state_class,
         factor,
+        data_type,
     ):
         """Initialize the sensor."""
         super().__init__(coordinator)
         self._name = name
-        self._field = field  # "mileage"
-        self._status_type = status_type  # "basicVehicleStatus"
-        self._charging_status_type = charging_status_type  # "rvsChargeStatus"
-        self._factor = factor  # DATA_DECIMAL_CORRECTION
+        self._field = field
+        self._status_type = status_type
+        self._charging_status_type = charging_status_type
+        self._factor = factor
         self._attr_device_class = device_class
         self._attr_native_unit_of_measurement = unit
         self._attr_icon = icon
         self._attr_state_class = state_class
+        self._data_type = data_type
         vin_info = self.coordinator.data["info"][0]
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}"
 
@@ -593,6 +664,16 @@ class SAICMGMileageSensor(CoordinatorEntity, SensorEntity):
     def name(self):
         vin_info = self.coordinator.data["info"][0]
         return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
+
+    @property
+    def available(self):
+        """Return True if the entity is available."""
+        # This sensor depends on both 'status' and 'charging' data
+        return (
+            self.coordinator.last_update_success
+            and self.coordinator.data.get("status") is not None
+            and self.coordinator.data.get("charging") is not None
+        )
 
     @property
     def native_value(self):
@@ -651,6 +732,7 @@ class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
         state_class,
         factor=None,
         data_source="chrgMgmtData",
+        data_type="charging",
     ):
         """Initialize the sensor."""
         super().__init__(coordinator)
@@ -662,6 +744,7 @@ class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
         self._icon = icon
         self._factor = factor
         self._data_source = data_source
+        self._data_type = data_type
         self._attr_device_class = device_class
         self._attr_native_unit_of_measurement = unit
         self._attr_icon = icon
@@ -677,6 +760,12 @@ class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
     def name(self):
         vin_info = self.coordinator.data["info"][0]
         return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
+
+    @property
+    def available(self):
+        """Return True if the entity is available."""
+        required_data = self.coordinator.data.get(self._data_type)
+        return self.coordinator.last_update_success and required_data is not None
 
     @property
     def native_value(self):
@@ -789,6 +878,7 @@ class SAICMGChargingPowerSensor(CoordinatorEntity, SensorEntity):
         icon,
         state_class,
         data_source="chrgMgmtData",
+        data_type="charging",
     ):
         """Initialize the sensor."""
         super().__init__(coordinator)
@@ -802,6 +892,7 @@ class SAICMGChargingPowerSensor(CoordinatorEntity, SensorEntity):
         self._attr_native_unit_of_measurement = unit
         self._attr_icon = icon
         self._attr_state_class = state_class
+        self._data_type = data_type
         vin_info = self.coordinator.data["info"][0]
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_charging_power"
 
@@ -813,6 +904,12 @@ class SAICMGChargingPowerSensor(CoordinatorEntity, SensorEntity):
     def name(self):
         vin_info = self.coordinator.data["info"][0]
         return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
+
+    @property
+    def available(self):
+        """Return True if the entity is available."""
+        required_data = self.coordinator.data.get(self._data_type)
+        return self.coordinator.last_update_success and required_data is not None
 
     @property
     def native_value(self):

@@ -7,6 +7,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
     """Set up MG SAIC lock entity."""
     coordinator = hass.data[DOMAIN][f"{entry.entry_id}_coordinator"]
     client = hass.data[DOMAIN][entry.entry_id]
+
+    if not coordinator.data.get("info"):
+        LOGGER.error("Vehicle info is not available. Lock cannot be set up.")
+        return
+
     vin_info = coordinator.data["info"][0]
     vin = vin_info.vin
 
@@ -44,8 +49,16 @@ class SAICMGLockEntity(CoordinatorEntity, LockEntity):
         status = self.coordinator.data.get("status")
         if status:
             lock_status = getattr(status.basicVehicleStatus, "lockStatus", None)
-            return lock_status == 1  # Assuming 1 means locked
+            return lock_status == 1
         return None
+
+    @property
+    def available(self):
+        """Return True if the lock entity is available."""
+        return (
+            self.coordinator.last_update_success
+            and self.coordinator.data.get("status") is not None
+        )
 
     async def async_lock(self, **kwargs):
         """Lock the vehicle."""
