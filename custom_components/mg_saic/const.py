@@ -1,5 +1,6 @@
 import logging
 from datetime import timedelta
+from enum import Enum
 
 LOGGER = logging.getLogger(__package__)
 
@@ -12,8 +13,8 @@ DATA_DECIMAL_CORRECTION_SOC = 0.1
 DATA_100_DECIMAL_CORRECTION = 0.01
 
 # Conversion factors for charging data
-CHARGING_CURRENT_FACTOR = 0.001
-CHARGING_VOLTAGE_FACTOR = 0.145
+CHARGING_CURRENT_FACTOR = 0.00095
+CHARGING_VOLTAGE_FACTOR = 0.151
 
 # API Base Urls
 REGION_BASE_URIS = {
@@ -124,3 +125,25 @@ PLATFORMS = [
     "switch",
     "lock",
 ]
+
+
+# Battery SOC
+class BatterySoc(Enum):
+    SOC_40 = 1
+    SOC_50 = 2
+    SOC_60 = 3
+    SOC_70 = 4
+    SOC_80 = 5
+    SOC_90 = 6
+    SOC_100 = 7
+
+
+# Windows List
+class VehicleWindowId(Enum):
+    """Enum for identifying vehicle windows."""
+
+    DRIVER = "driver"
+    WINDOW_2 = "window_2"
+    WINDOW_3 = "window_3"
+    WINDOW_4 = "window_4"
+    SUNROOF = "sunroof"

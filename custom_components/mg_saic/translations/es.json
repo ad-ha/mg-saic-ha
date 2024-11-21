@@ -214,6 +214,34 @@
           "description": "El número de identificación del vehículo para actualizar los datos."
         }
       }
+    },
+    "control_sunroof": {
+        "name": "Controlar Techo Solar",
+        "description": "Controlar el techo solar (abrir o cerrar).",
+        "fields": {
+            "vin": {
+                "name": "VIN",
+                "description": "El número de identificación del vehículo para controlar el techo solar."
+            },
+            "should_open": {
+                "name": "Abrir",
+                "description": "True para abrir el techo solar, false para cerrar."
+            }
+        }
+    },
+    "control_charging_port_lock": {
+        "name": "Controlar Bloqueo de Puerto de Carga",
+        "description": "Controlar el bloqueo del puerto de carga (bloquear/desbloquear).",
+        "fields": {
+            "vin": {
+                "name": "VIN",
+                "description": "El número de identificación del vehículo para controlar el puerto de carga."
+            },
+            "unlock": {
+                "name": "Desbloquear",
+                "description": "True para desbloquear el puerto de carga, false para bloquear."
+            }
+        }
     }
   },
   "options": {

@@ -4,7 +4,7 @@ import voluptuous as vol
 import asyncio
 
 from .api import SAICMGAPIClient
-from .const import DOMAIN, LOGGER
+from .const import DOMAIN, LOGGER, VehicleWindowId
 
 SERVICE_LOCK_VEHICLE = "lock_vehicle"
 SERVICE_UNLOCK_VEHICLE = "unlock_vehicle"
@@ -22,6 +22,8 @@ SERVICE_START_FRONT_DEFROST = "start_front_defrost"
 SERVICE_SET_TARGET_SOC = "set_target_soc"
 SERVICE_START_AC_WITH_SETTINGS = "start_ac_with_settings"
 SERVICE_UPDATE_VEHICLE_DATA = "update_vehicle_data"
+SERVICE_CONTROL_SUNROOF = "control_sunroof"
+SERVICE_CONTROL_CHARGING_PORT_LOCK = "control_charging_port_lock"
 
 SERVICE_VIN_SCHEMA = vol.Schema({vol.Required("vin"): cv.string})
 
@@ -44,6 +46,20 @@ SERVICE_START_AC_WITH_SETTINGS_SCHEMA = vol.Schema(
         vol.Required("vin"): cv.string,
         vol.Required("temperature"): vol.Coerce(float),
         vol.Required("fan_speed"): vol.Coerce(int),
+    }
+)
+
+SERVICE_SUNROOF_SCHEMA = vol.Schema(
+    {
+        vol.Required("vin"): cv.string,
+        vol.Required("should_open"): cv.boolean,
+    }
+)
+
+SERVICE_PORT_LOCK_SCHEMA = vol.Schema(
+    {
+        vol.Required("vin"): cv.string,
+        vol.Required("unlock"): cv.boolean,
     }
 )
 
@@ -225,6 +241,24 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
         else:
             LOGGER.warning("Coordinator not found for VIN %s", vin)
 
+    async def handle_control_sunroof(call: ServiceCall) -> None:
+        vin = call.data["vin"]
+        should_open = call.data["should_open"]
+        try:
+            await client.control_sunroof(vin, should_open)
+            LOGGER.info("Sunroof control action completed for VIN: %s", vin)
+        except Exception as e:
+            LOGGER.error("Error controlling sunroof for VIN %s: %s", vin, e)
+
+    async def handle_control_charging_port_lock(call: ServiceCall) -> None:
+        vin = call.data["vin"]
+        unlock = call.data["unlock"]
+        try:
+            await client.control_charging_port_lock(vin, unlock)
+            LOGGER.info("Charging port lock control action completed for VIN: %s", vin)
+        except Exception as e:
+            LOGGER.error("Error controlling charging port lock for VIN %s: %s", vin, e)
+
     # Register services
     hass.services.async_register(
         DOMAIN, SERVICE_LOCK_VEHICLE, handle_lock_vehicle, schema=SERVICE_VIN_SCHEMA
@@ -298,6 +332,18 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
         handle_update_vehicle_data,
         schema=SERVICE_VIN_SCHEMA,
     )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_CONTROL_SUNROOF,
+        handle_control_sunroof,
+        schema=SERVICE_SUNROOF_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_CONTROL_CHARGING_PORT_LOCK,
+        handle_control_charging_port_lock,
+        schema=SERVICE_PORT_LOCK_SCHEMA,
+    )
 
     LOGGER.info("Services registered for MG SAIC integration.")
 
@@ -320,5 +366,7 @@ async def async_unload_services(hass: HomeAssistant) -> None:
     hass.services.async_remove(DOMAIN, SERVICE_CONTROL_HEATED_SEATS)
     hass.services.async_remove(DOMAIN, SERVICE_START_FRONT_DEFROST)
     hass.services.async_remove(DOMAIN, SERVICE_UPDATE_VEHICLE_DATA)
+    hass.services.async_remove(DOMAIN, SERVICE_CONTROL_SUNROOF)
+    hass.services.async_remove(DOMAIN, SERVICE_CONTROL_CHARGING_PORT_LOCK)
 
     LOGGER.info("Services unregistered for MG SAIC integration.")
