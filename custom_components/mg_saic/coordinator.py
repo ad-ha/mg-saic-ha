@@ -75,9 +75,6 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             # Cannot proceed without vehicle info
             raise UpdateFailed("Cannot proceed without vehicle info.")
 
-        # Determine vehicle type
-        self.vehicle_type = self._determine_vehicle_type(data["info"])
-
         # Fetch vehicle status with retries
         data["status"] = await self._fetch_with_retries(
             self.client.get_vehicle_status,
