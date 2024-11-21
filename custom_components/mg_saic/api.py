@@ -1,8 +1,7 @@
 import asyncio
 from saic_ismart_client_ng import SaicApi
 from saic_ismart_client_ng.model import SaicApiConfiguration
-from enum import Enum
-from .const import LOGGER, REGION_BASE_URIS
+from .const import LOGGER, REGION_BASE_URIS, BatterySoc, VehicleWindowId
 
 
 class SAICMGAPIClient:
@@ -294,6 +293,37 @@ class SAICMGAPIClient:
         except Exception as e:
             LOGGER.error("Error starting front defrost: %s", e)
 
+    # NEW FUNCTIONALITIES TO BE REORGANIZED
+    async def control_sunroof(self, vin, action):
+        """Control the sunroof (open/close)."""
+        await self._ensure_initialized()
+        try:
+            LOGGER.debug(f"Sunroof control - VIN: {vin}, action: {action}")
+            if action == "open":
+                await self.saic_api.control_sunroof(vin=vin, should_open=True)
+            else:
+                await self.saic_api.control_sunroof(vin=vin, should_open=False)
+                LOGGER.info(
+                    f"Sunroof {action} successfully successfully for VIN: {vin}"
+                )
+        except Exception as e:
+            LOGGER.error("Error controlling sunroof for VIN %s: %s", vin, e)
+            raise
+
+    async def control_charging_port_lock(self, vin: str, unlock: bool):
+        """Control the charging port lock (lock/unlock)."""
+        await self._ensure_initialized()
+        try:
+            await self.saic_api.control_charging_port_lock(vin=vin, unlock=unlock)
+            LOGGER.info(
+                "Charging port %s successfully for VIN: %s",
+                "unlocked" if unlock else "locked",
+                vin,
+            )
+        except Exception as e:
+            LOGGER.error("Error controlling charging port lock for VIN %s: %s", vin, e)
+            raise
+
     async def close(self):
         """Close the client session."""
         try:
@@ -301,13 +331,3 @@ class SAICMGAPIClient:
             LOGGER.info("Closed MG SAIC API session.")
         except Exception as e:
             LOGGER.error("Error closing MG SAIC API session: %s", e)
-
-
-class BatterySoc(Enum):
-    SOC_40 = 1
-    SOC_50 = 2
-    SOC_60 = 3
-    SOC_70 = 4
-    SOC_80 = 5
-    SOC_90 = 6
-    SOC_100 = 7

@@ -214,6 +214,34 @@
           "description": "The vehicle identification number of the car to update data."
         }
       }
+    },
+    "control_sunroof": {
+        "name": "Control Sunroof",
+        "description": "Control the sunroof (open or close).",
+        "fields": {
+            "vin": {
+                "name": "VIN",
+                "description": "The vehicle identification number to control the sunroof."
+            },
+            "should_open": {
+                "name": "Should Open",
+                "description": "True to open the sunroof, false to close."
+            }
+        }
+    },
+    "control_charging_port_lock": {
+        "name": "Control Charging Port Lock",
+        "description": "Control the charging port lock (lock/unlock).",
+        "fields": {
+            "vin": {
+                "name": "VIN",
+                "description": "The vehicle identification number to control the charging port lock."
+            },
+            "unlock": {
+                "name": "Unlock",
+                "description": "True to unlock the charging port, false to lock."
+            }
+        }
     }
   },
   "options": {

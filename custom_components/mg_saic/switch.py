@@ -1,6 +1,6 @@
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from .const import DOMAIN, LOGGER, CHARGING_STATUS_CODES
+from .const import DOMAIN, LOGGER, CHARGING_STATUS_CODES, VehicleWindowId
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -23,6 +23,9 @@ async def async_setup_entry(hass, entry, async_add_entities):
         for config in vin_info.vehicleModelConfiguration
     }
 
+    # Sunroof Switch
+    switches.append(SAICMGSunroofSwitch(coordinator, client, vin_info, vin))
+
     # AC Switch
     switches.append(SAICMGACSwitch(coordinator, client, vin_info, vin))
 
@@ -37,9 +40,12 @@ async def async_setup_entry(hass, entry, async_add_entities):
             f"Vehicle {vin} does not have heated seats. Skipping Heated Seats Switch."
         )
 
-    # Charging Switch (for electric vehicles)
+    # Charging Switches (for BEV and PHEV)
     if coordinator.vehicle_type in ["BEV", "PHEV"]:
         switches.append(SAICMGChargingSwitch(coordinator, client, vin_info, vin))
+        switches.append(
+            SAICMGChargingPortLockSwitch(coordinator, client, vin_info, vin)
+        )
 
         # Check if battery heating is supported
         charging_data = coordinator.data.get("charging")
@@ -308,3 +314,77 @@ class SAICMGBatteryHeatingSwitch(SAICMGVehicleSwitch):
             await self.coordinator.async_request_refresh()
         except Exception as e:
             LOGGER.error("Error stopping battery heating for VIN %s: %s", self._vin, e)
+
+
+class SAICMGSunroofSwitch(SAICMGVehicleSwitch):
+    """Switch to control the sunroof (open/close)."""
+
+    def __init__(self, coordinator, client, vin_info, vin):
+        super().__init__(
+            coordinator, client, vin_info, vin, "Sunroof", "mdi:car-select"
+        )
+
+    @property
+    def is_on(self):
+        """Return true if the sunroof is open."""
+        status = self.coordinator.data.get("status")
+        if status:
+            sunroof_status = getattr(status.basicVehicleStatus, "sunroofStatus", None)
+            return sunroof_status == 1
+        return False
+
+    async def async_turn_on(self, **kwargs):
+        """Open the sunroof."""
+        try:
+            await self._client.control_sunroof(self._vin, "open")
+            LOGGER.info("Sunroof opened for VIN: %s", self._vin)
+            await self.coordinator.async_request_refresh()
+        except Exception as e:
+            LOGGER.error("Error opening sunroof for VIN %s: %s", self._vin, e)
+
+    async def async_turn_off(self, **kwargs):
+        """Close the sunroof."""
+        try:
+            await self._client.control_sunroof(self._vin, "close")
+            LOGGER.info("Sunroof closed for VIN: %s", self._vin)
+            await self.coordinator.async_request_refresh()
+        except Exception as e:
+            LOGGER.error("Error closing sunroof for VIN %s: %s", self._vin, e)
+
+
+class SAICMGChargingPortLockSwitch(SAICMGVehicleSwitch):
+    """Switch to control the charging port lock (lock/unlock)."""
+
+    def __init__(self, coordinator, client, vin_info, vin):
+        super().__init__(
+            coordinator, client, vin_info, vin, "Charging Port Lock", "mdi:lock"
+        )
+
+    @property
+    def is_on(self):
+        """Return true if the charging port is locked."""
+        charging_data = self.coordinator.data.get("charging")
+        if charging_data:
+            lock_status = getattr(
+                charging_data.chrgMgmtData, "ccuEleccLckCtrlDspCmd", None
+            )
+            return lock_status == 1  # Assuming 1 represents locked
+        return False
+
+    async def async_turn_on(self, **kwargs):
+        """Lock the charging port."""
+        try:
+            await self._client.control_charging_port_lock(self._vin, unlock=False)
+            LOGGER.info("Charging port locked for VIN: %s", self._vin)
+            await self.coordinator.async_request_refresh()
+        except Exception as e:
+            LOGGER.error("Error locking charging port for VIN %s: %s", self._vin, e)
+
+    async def async_turn_off(self, **kwargs):
+        """Unlock the charging port."""
+        try:
+            await self._client.control_charging_port_lock(self._vin, unlock=True)
+            LOGGER.info("Charging port unlocked for VIN: %s", self._vin)
+            await self.coordinator.async_request_refresh()
+        except Exception as e:
+            LOGGER.error("Error unlocking charging port for VIN %s: %s", self._vin, e)
