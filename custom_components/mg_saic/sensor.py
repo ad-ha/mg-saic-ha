@@ -292,7 +292,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                         "chrgMgmtData",
                         "charging",
                     ),
-                    SAICMGChargingSensor(
+                    SAICMGChargingCurrentSensor(
                         coordinator,
                         entry,
                         "Charging Current",
@@ -997,6 +997,102 @@ class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
         }
 
 
+class SAICMGChargingCurrentSensor(CoordinatorEntity, SensorEntity):
+    """Representation of a MG SAIC charging current sensor"""
+
+    def __init__(
+        self,
+        coordinator,
+        entry,
+        name,
+        field,
+        device_class,
+        unit,
+        icon,
+        state_class,
+        factor=None,
+        data_source="chrgMgmtData",
+        data_type="charging",
+    ):
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._name = name
+        self._field = field
+        self._device_class = device_class
+        self._unit = unit
+        self._state_class = state_class
+        self._icon = icon
+        self._factor = factor
+        self._data_source = data_source
+        self._data_type = data_type
+        self._attr_device_class = device_class
+        self._attr_native_unit_of_measurement = unit
+        self._attr_icon = icon
+        self._attr_state_class = state_class
+        vin_info = self.coordinator.data["info"][0]
+        self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}_charge"
+
+    @property
+    def unique_id(self):
+        return self._unique_id
+
+    @property
+    def name(self):
+        vin_info = self.coordinator.data["info"][0]
+        return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
+
+    @property
+    def available(self):
+        """Return True if the entity is available."""
+        required_data = self.coordinator.data.get(self._data_type)
+        return self.coordinator.last_update_success and required_data is not None
+
+    @property
+    def native_value(self):
+        """Return the state of the sensor"""
+        try:
+            charging_data = getattr(
+                self.coordinator.data.get("charging"), self._data_source, None
+            )
+            if charging_data:
+                charging_status = getattr(charging_data, "bmsChrgSts", None)
+
+                if charging_status in [0, 5]:
+                    return 0
+
+                raw_value = getattr(charging_data, self._field, None)
+
+                # Calculate Current
+                if raw_value is not None and self._factor is not None:
+                    calculated_value = 1000 - (raw_value * self._factor)
+                    return round(calculated_value, 2)
+                else:
+                    return None
+            else:
+                LOGGER.error("No charging data available for %s", self._name)
+                return None
+
+        except Exception as e:
+            LOGGER.error(
+                "Error retrieving charging current sensor %s: %s",
+                self._name,
+                e,
+                exc_info=True,
+            )
+            return None
+
+    @property
+    def device_info(self):
+        vin_info = self.coordinator.data["info"][0]
+        return {
+            "identifiers": {(DOMAIN, vin_info.vin)},
+            "name": f"{vin_info.brandName} {vin_info.modelName}",
+            "manufacturer": vin_info.brandName,
+            "model": vin_info.modelName,
+            "serial_number": vin_info.vin,
+        }
+
+
 class SAICMGChargingPowerSensor(CoordinatorEntity, SensorEntity):
     """Sensor for Charging Power, calculated from voltage and current."""
 
@@ -1054,7 +1150,7 @@ class SAICMGChargingPowerSensor(CoordinatorEntity, SensorEntity):
                 # Fetch the charging status to determine if the sensor should display data
                 charging_status = getattr(charging_data, "bmsChrgSts", None)
 
-                if charging_status in [0, 5]:  # Not charging or Charging Finished
+                if charging_status in [0, 5]:
                     return 0
 
                 # Get raw current and voltage
@@ -1063,7 +1159,7 @@ class SAICMGChargingPowerSensor(CoordinatorEntity, SensorEntity):
 
                 if raw_current is not None and raw_voltage is not None:
                     # Apply decoding to current and voltage
-                    decoded_current = raw_current * CHARGING_CURRENT_FACTOR
+                    decoded_current = 1000 - raw_current * CHARGING_CURRENT_FACTOR
                     decoded_voltage = raw_voltage * CHARGING_VOLTAGE_FACTOR
 
                     # Calculate power in kW
