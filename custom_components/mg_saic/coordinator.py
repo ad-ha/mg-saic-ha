@@ -26,16 +26,17 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         self.is_initial_setup = False
 
         # Initialize update intervals from config_entry options, falling back to defaults if not set
-        self.update_interval = timedelta(
+        self.UPDATE_INTERVAL_DISCHARGING = timedelta(
             seconds=config_entry.options.get(
                 "scan_interval", UPDATE_INTERVAL.total_seconds()
             )
         )
-        self.update_interval_charging = timedelta(
+        self.UPDATE_INTERVAL_CHARGING = timedelta(
             seconds=config_entry.options.get(
                 "charging_scan_interval", UPDATE_INTERVAL_CHARGING.total_seconds()
             )
         )
+        self.update_interval = self.UPDATE_INTERVAL_DISCHARGING
 
         # Use the vehicle type from the config entry
         self.vehicle_type = self.config_entry.data.get("vehicle_type")
@@ -99,7 +100,7 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
 
         # Adjust update interval based on charging status
         new_interval = (
-            self.update_interval_charging if self.is_charging else self.update_interval
+            self.UPDATE_INTERVAL_CHARGING if self.is_charging else self.UPDATE_INTERVAL_DISCHARGING
         )
         if self.update_interval != new_interval:
             self.update_interval = new_interval
