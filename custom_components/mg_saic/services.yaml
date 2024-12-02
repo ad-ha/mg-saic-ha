@@ -1,12 +1,69 @@
-start_ac:
-  description: "Start the vehicle's AC system"
+control_charging_port_lock:
+  description: "Control the charging port lock (lock/unlock)."
+  fields:
+    vin:
+      description: "Vehicle Identification Number."
+      example: "1HGCM82633A123456"
+    unlock:
+      description: "True to unlock charging port, false to lock."
+      example: true
+
+control_heated_seats:
+  description: "Control the heated seats"
+  fields:
+    vin:
+      description: "Vehicle Identification Number"
+      example: "1HGCM82633A123456"
+    action:
+      description: "Turn on (true) or off (false)"
+      example: true
+
+control_rear_window_heat:
+  description: "Control the rear window heat"
+  fields:
+    vin:
+      description: "Vehicle Identification Number"
+      example: "1HGCM82633A123456"
+    action:
+      description: "Action to perform: 'start' or 'stop'"
+      example: "start"
+
+control_sunroof:
+  description: "Control the sunroof (open or close)."
+  fields:
+    vin:
+      description: "Vehicle Identification Number."
+      example: "1HGCM82633A123456"
+    should_open:
+      description: "True to open the sunroof, false to close."
+      example: true
+
+lock_vehicle:
+  description: "Lock the vehicle"
   fields:
     vin:
       description: "Vehicle Identification Number"
       example: "1HGCM82633A123456"
 
-stop_ac:
-  description: "Stop the vehicle's AC system"
+open_tailgate:
+  description: "Open the vehicle's tailgate"
+  fields:
+    vin:
+      description: "Vehicle Identification Number"
+      example: "1HGCM82633A123456"
+
+set_target_soc:
+  description: "Set the target SOC (State of Charge) for the vehicle."
+  fields:
+    vin:
+      description: "Vehicle Identification Number"
+      example: "1HGCM82633A123456"
+    target_soc:
+      description: "Desired target SOC percentage (10-100)"
+      example: 80
+
+start_ac:
+  description: "Start the vehicle's AC system"
   fields:
     vin:
       description: "Vehicle Identification Number"
@@ -25,6 +82,13 @@ start_ac_with_settings:
       description: "Fan speed level (e.g., 1-7)"
       example: 3
 
+start_battery_heating:
+  description: "Start the vehicle battery heating process"
+  fields:
+    vin:
+      description: "Vehicle Identification Number"
+      example: "1HGCM82633A123456"
+
 start_charging:
   description: "Start the vehicle charging process"
   fields:
@@ -32,15 +96,15 @@ start_charging:
       description: "Vehicle Identification Number"
       example: "1HGCM82633A123456"
 
-stop_charging:
-  description: "Stop the vehicle charging process"
+start_front_defrost:
+  description: "Start the front defrost system of the vehicle"
   fields:
     vin:
       description: "Vehicle Identification Number"
       example: "1HGCM82633A123456"
 
-start_battery_heating:
-  description: "Start the vehicle battery heating process"
+stop_ac:
+  description: "Stop the vehicle's AC system"
   fields:
     vin:
       description: "Vehicle Identification Number"
@@ -53,32 +117,8 @@ stop_battery_heating:
       description: "Vehicle Identification Number"
       example: "1HGCM82633A123456"
 
-set_target_soc:
-  description: "Set the target SOC (State of Charge) for the vehicle."
-  fields:
-    vin:
-      description: "Vehicle Identification Number"
-      example: "1HGCM82633A123456"
-    target_soc:
-      description: "Desired target SOC percentage (10-100)"
-      example: 80
-
-lock_vehicle:
-  description: "Lock the vehicle"
-  fields:
-    vin:
-      description: "Vehicle Identification Number"
-      example: "1HGCM82633A123456"
-
-unlock_vehicle:
-  description: "Unlock the vehicle"
-  fields:
-    vin:
-      description: "Vehicle Identification Number"
-      example: "1HGCM82633A123456"
-
-open_tailgate:
-  description: "Open the vehicle's tailgate"
+stop_charging:
+  description: "Stop the vehicle charging process"
   fields:
     vin:
       description: "Vehicle Identification Number"
@@ -91,28 +131,8 @@ trigger_alarm:
       description: "Vehicle Identification Number"
       example: "1HGCM82633A123456"
 
-control_rear_window_heat:
-  description: "Control the rear window heat"
-  fields:
-    vin:
-      description: "Vehicle Identification Number"
-      example: "1HGCM82633A123456"
-    action:
-      description: "Turn on (true) or off (false)"
-      example: true
-
-control_heated_seats:
-  description: "Control the heated seats"
-  fields:
-    vin:
-      description: "Vehicle Identification Number"
-      example: "1HGCM82633A123456"
-    action:
-      description: "Turn on (true) or off (false)"
-      example: true
-
-start_front_defrost:
-  description: "Start the front defrost system of the vehicle"
+unlock_vehicle:
+  description: "Unlock the vehicle"
   fields:
     vin:
       description: "Vehicle Identification Number"
@@ -124,23 +144,3 @@ update_vehicle_data:
     vin:
       description: "Vehicle Identification Number"
       example: "1HGCM82633A123456"
-
-control_sunroof:
-  description: "Control the sunroof (open or close)."
-  fields:
-    vin:
-      description: "Vehicle Identification Number."
-      example: "1HGCM82633A123456"
-    should_open:
-      description: "True to open the sunroof, false to close."
-      example: true
-
-control_charging_port_lock:
-  description: "Control the charging port lock (lock/unlock)."
-  fields:
-    vin:
-      description: "Vehicle Identification Number."
-      example: "1HGCM82633A123456"
-    unlock:
-      description: "True to unlock charging port, false to lock."
-      example: true

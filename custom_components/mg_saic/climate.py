@@ -56,7 +56,7 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
 
         # Initialize with default values
         self._attr_current_temperature = None
-        self._attr_target_temperature = 22.0  # Default target temperature
+        self._attr_target_temperature = 22.0
         self._attr_fan_mode = FAN_MEDIUM
         self._attr_hvac_mode = HVACMode.OFF
 
@@ -80,7 +80,7 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
                 status.basicVehicleStatus, "interiorTemperature", None
             )
             if interior_temp is not None and interior_temp != -128:
-                return interior_temp  # Adjust if necessary
+                return interior_temp
         return None
 
     @property
@@ -89,7 +89,7 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
         status = self.coordinator.data.get("status")
         if status:
             ac_status = getattr(status.basicVehicleStatus, "remoteClimateStatus", None)
-            if ac_status == 1:
+            if ac_status == 3:
                 return HVACMode.COOL
         return HVACMode.OFF
 

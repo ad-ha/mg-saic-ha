@@ -4,28 +4,27 @@ import voluptuous as vol
 import asyncio
 
 from .api import SAICMGAPIClient
-from .const import DOMAIN, LOGGER, VehicleWindowId
+from .const import DOMAIN, LOGGER
 
+SERVICE_CONTROL_CHARGING_PORT_LOCK = "control_charging_port_lock"
+SERVICE_CONTROL_HEATED_SEATS = "control_heated_seats"
+SERVICE_CONTROL_REAR_WINDOW_HEAT = "control_rear_window_heat"
+SERVICE_CONTROL_SUNROOF = "control_sunroof"
 SERVICE_LOCK_VEHICLE = "lock_vehicle"
 SERVICE_UNLOCK_VEHICLE = "unlock_vehicle"
 SERVICE_START_AC = "start_ac"
 SERVICE_STOP_AC = "stop_ac"
 SERVICE_OPEN_TAILGATE = "open_tailgate"
-SERVICE_TRIGGER_ALARM = "trigger_alarm"
-SERVICE_START_CHARGING = "start_charging"
-SERVICE_STOP_CHARGING = "stop_charging"
-SERVICE_START_BATTERY_HEATING = "start_battery_heating"
-SERVICE_STOP_BATTERY_HEATING = "stop_battery_heating"
-SERVICE_CONTROL_REAR_WINDOW_HEAT = "control_rear_window_heat"
-SERVICE_CONTROL_HEATED_SEATS = "control_heated_seats"
-SERVICE_START_FRONT_DEFROST = "start_front_defrost"
 SERVICE_SET_TARGET_SOC = "set_target_soc"
 SERVICE_START_AC_WITH_SETTINGS = "start_ac_with_settings"
+SERVICE_START_BATTERY_HEATING = "start_battery_heating"
+SERVICE_START_CHARGING = "start_charging"
+SERVICE_START_FRONT_DEFROST = "start_front_defrost"
+SERVICE_STOP_BATTERY_HEATING = "stop_battery_heating"
+SERVICE_STOP_CHARGING = "stop_charging"
+SERVICE_TRIGGER_ALARM = "trigger_alarm"
 SERVICE_UPDATE_VEHICLE_DATA = "update_vehicle_data"
-SERVICE_CONTROL_SUNROOF = "control_sunroof"
-SERVICE_CONTROL_CHARGING_PORT_LOCK = "control_charging_port_lock"
 
-SERVICE_VIN_SCHEMA = vol.Schema({vol.Required("vin"): cv.string})
 
 SERVICE_ACTION_SCHEMA = vol.Schema(
     {
@@ -34,10 +33,17 @@ SERVICE_ACTION_SCHEMA = vol.Schema(
     }
 )
 
-SERVICE_SET_TARGET_SOC_SCHEMA = vol.Schema(
+SERVICE_PORT_LOCK_SCHEMA = vol.Schema(
     {
         vol.Required("vin"): cv.string,
-        vol.Required("target_soc"): vol.In([40, 50, 60, 70, 80, 90, 100]),
+        vol.Required("unlock"): cv.boolean,
+    }
+)
+
+SERVICE_REAR_WINDOW_DEFROST_ACTION_SCHEMA = vol.Schema(
+    {
+        vol.Required("vin"): cv.string,
+        vol.Required("action"): vol.In(["start", "stop"]),
     }
 )
 
@@ -49,6 +55,13 @@ SERVICE_START_AC_WITH_SETTINGS_SCHEMA = vol.Schema(
     }
 )
 
+SERVICE_SET_TARGET_SOC_SCHEMA = vol.Schema(
+    {
+        vol.Required("vin"): cv.string,
+        vol.Required("target_soc"): vol.In([40, 50, 60, 70, 80, 90, 100]),
+    }
+)
+
 SERVICE_SUNROOF_SCHEMA = vol.Schema(
     {
         vol.Required("vin"): cv.string,
@@ -56,12 +69,7 @@ SERVICE_SUNROOF_SCHEMA = vol.Schema(
     }
 )
 
-SERVICE_PORT_LOCK_SCHEMA = vol.Schema(
-    {
-        vol.Required("vin"): cv.string,
-        vol.Required("unlock"): cv.boolean,
-    }
-)
+SERVICE_VIN_SCHEMA = vol.Schema({vol.Required("vin"): cv.string})
 
 
 async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> None:
@@ -207,7 +215,7 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
         action = call.data["action"]
         try:
             await client.control_rear_window_heat(vin, action)
-            LOGGER.info("Rear window heat controlled successfully for VIN: %s", vin)
+            LOGGER.info("Rear window heat %sed for VIN: %s", action, vin)
         except Exception as e:
             LOGGER.error("Error controlling rear window heat for VIN %s: %s", vin, e)
 
@@ -261,58 +269,10 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
 
     # Register services
     hass.services.async_register(
-        DOMAIN, SERVICE_LOCK_VEHICLE, handle_lock_vehicle, schema=SERVICE_VIN_SCHEMA
-    )
-    hass.services.async_register(
-        DOMAIN, SERVICE_UNLOCK_VEHICLE, handle_unlock_vehicle, schema=SERVICE_VIN_SCHEMA
-    )
-    hass.services.async_register(
-        DOMAIN, SERVICE_START_AC, handle_start_ac, schema=SERVICE_VIN_SCHEMA
-    )
-    hass.services.async_register(
-        DOMAIN, SERVICE_STOP_AC, handle_stop_ac, schema=SERVICE_VIN_SCHEMA
-    )
-    hass.services.async_register(
         DOMAIN,
-        SERVICE_START_AC_WITH_SETTINGS,
-        handle_start_ac_with_settings,
-        schema=SERVICE_START_AC_WITH_SETTINGS_SCHEMA,
-    )
-    hass.services.async_register(
-        DOMAIN, SERVICE_OPEN_TAILGATE, handle_open_tailgate, schema=SERVICE_VIN_SCHEMA
-    )
-    hass.services.async_register(
-        DOMAIN, SERVICE_TRIGGER_ALARM, handle_trigger_alarm, schema=SERVICE_VIN_SCHEMA
-    )
-    hass.services.async_register(
-        DOMAIN, SERVICE_START_CHARGING, handle_start_charging, schema=SERVICE_VIN_SCHEMA
-    )
-    hass.services.async_register(
-        DOMAIN, SERVICE_STOP_CHARGING, handle_stop_charging, schema=SERVICE_VIN_SCHEMA
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_START_BATTERY_HEATING,
-        handle_start_battery_heating,
-        schema=SERVICE_VIN_SCHEMA,
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_STOP_BATTERY_HEATING,
-        handle_stop_battery_heating,
-        schema=SERVICE_VIN_SCHEMA,
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_SET_TARGET_SOC,
-        handle_set_target_soc,
-        schema=SERVICE_SET_TARGET_SOC_SCHEMA,
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_CONTROL_REAR_WINDOW_HEAT,
-        handle_control_rear_window_heat,
-        schema=SERVICE_ACTION_SCHEMA,
+        SERVICE_CONTROL_CHARGING_PORT_LOCK,
+        handle_control_charging_port_lock,
+        schema=SERVICE_PORT_LOCK_SCHEMA,
     )
     hass.services.async_register(
         DOMAIN,
@@ -322,15 +282,9 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
     )
     hass.services.async_register(
         DOMAIN,
-        SERVICE_START_FRONT_DEFROST,
-        handle_start_front_defrost,
-        schema=SERVICE_VIN_SCHEMA,
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_UPDATE_VEHICLE_DATA,
-        handle_update_vehicle_data,
-        schema=SERVICE_VIN_SCHEMA,
+        SERVICE_CONTROL_REAR_WINDOW_HEAT,
+        handle_control_rear_window_heat,
+        schema=SERVICE_REAR_WINDOW_DEFROST_ACTION_SCHEMA,
     )
     hass.services.async_register(
         DOMAIN,
@@ -339,10 +293,64 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
         schema=SERVICE_SUNROOF_SCHEMA,
     )
     hass.services.async_register(
+        DOMAIN, SERVICE_LOCK_VEHICLE, handle_lock_vehicle, schema=SERVICE_VIN_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_OPEN_TAILGATE, handle_open_tailgate, schema=SERVICE_VIN_SCHEMA
+    )
+    hass.services.async_register(
         DOMAIN,
-        SERVICE_CONTROL_CHARGING_PORT_LOCK,
-        handle_control_charging_port_lock,
-        schema=SERVICE_PORT_LOCK_SCHEMA,
+        SERVICE_SET_TARGET_SOC,
+        handle_set_target_soc,
+        schema=SERVICE_SET_TARGET_SOC_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_START_AC, handle_start_ac, schema=SERVICE_VIN_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_START_AC_WITH_SETTINGS,
+        handle_start_ac_with_settings,
+        schema=SERVICE_START_AC_WITH_SETTINGS_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_START_BATTERY_HEATING,
+        handle_start_battery_heating,
+        schema=SERVICE_VIN_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_START_CHARGING, handle_start_charging, schema=SERVICE_VIN_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_START_FRONT_DEFROST,
+        handle_start_front_defrost,
+        schema=SERVICE_VIN_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_STOP_AC, handle_stop_ac, schema=SERVICE_VIN_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_STOP_BATTERY_HEATING,
+        handle_stop_battery_heating,
+        schema=SERVICE_VIN_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_STOP_CHARGING, handle_stop_charging, schema=SERVICE_VIN_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_TRIGGER_ALARM, handle_trigger_alarm, schema=SERVICE_VIN_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_UNLOCK_VEHICLE, handle_unlock_vehicle, schema=SERVICE_VIN_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_UPDATE_VEHICLE_DATA,
+        handle_update_vehicle_data,
+        schema=SERVICE_VIN_SCHEMA,
     )
 
     LOGGER.info("Services registered for MG SAIC integration.")
@@ -350,23 +358,23 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
 
 async def async_unload_services(hass: HomeAssistant) -> None:
     """Unload MG SAIC services."""
-    hass.services.async_remove(DOMAIN, SERVICE_LOCK_VEHICLE)
-    hass.services.async_remove(DOMAIN, SERVICE_UNLOCK_VEHICLE)
-    hass.services.async_remove(DOMAIN, SERVICE_START_AC)
-    hass.services.async_remove(DOMAIN, SERVICE_STOP_AC)
-    hass.services.async_remove(DOMAIN, SERVICE_START_AC_WITH_SETTINGS)
-    hass.services.async_remove(DOMAIN, SERVICE_OPEN_TAILGATE)
-    hass.services.async_remove(DOMAIN, SERVICE_TRIGGER_ALARM)
-    hass.services.async_remove(DOMAIN, SERVICE_START_CHARGING)
-    hass.services.async_remove(DOMAIN, SERVICE_STOP_CHARGING)
-    hass.services.async_remove(DOMAIN, SERVICE_START_BATTERY_HEATING)
-    hass.services.async_remove(DOMAIN, SERVICE_STOP_BATTERY_HEATING)
-    hass.services.async_remove(DOMAIN, SERVICE_SET_TARGET_SOC)
-    hass.services.async_remove(DOMAIN, SERVICE_CONTROL_REAR_WINDOW_HEAT)
-    hass.services.async_remove(DOMAIN, SERVICE_CONTROL_HEATED_SEATS)
-    hass.services.async_remove(DOMAIN, SERVICE_START_FRONT_DEFROST)
-    hass.services.async_remove(DOMAIN, SERVICE_UPDATE_VEHICLE_DATA)
-    hass.services.async_remove(DOMAIN, SERVICE_CONTROL_SUNROOF)
     hass.services.async_remove(DOMAIN, SERVICE_CONTROL_CHARGING_PORT_LOCK)
+    hass.services.async_remove(DOMAIN, SERVICE_CONTROL_HEATED_SEATS)
+    hass.services.async_remove(DOMAIN, SERVICE_CONTROL_REAR_WINDOW_HEAT)
+    hass.services.async_remove(DOMAIN, SERVICE_CONTROL_SUNROOF)
+    hass.services.async_remove(DOMAIN, SERVICE_LOCK_VEHICLE)
+    hass.services.async_remove(DOMAIN, SERVICE_OPEN_TAILGATE)
+    hass.services.async_remove(DOMAIN, SERVICE_SET_TARGET_SOC)
+    hass.services.async_remove(DOMAIN, SERVICE_START_AC)
+    hass.services.async_remove(DOMAIN, SERVICE_START_AC_WITH_SETTINGS)
+    hass.services.async_remove(DOMAIN, SERVICE_START_BATTERY_HEATING)
+    hass.services.async_remove(DOMAIN, SERVICE_START_CHARGING)
+    hass.services.async_remove(DOMAIN, SERVICE_START_FRONT_DEFROST)
+    hass.services.async_remove(DOMAIN, SERVICE_STOP_AC)
+    hass.services.async_remove(DOMAIN, SERVICE_STOP_BATTERY_HEATING)
+    hass.services.async_remove(DOMAIN, SERVICE_STOP_CHARGING)
+    hass.services.async_remove(DOMAIN, SERVICE_TRIGGER_ALARM)
+    hass.services.async_remove(DOMAIN, SERVICE_UNLOCK_VEHICLE)
+    hass.services.async_remove(DOMAIN, SERVICE_UPDATE_VEHICLE_DATA)
 
     LOGGER.info("Services unregistered for MG SAIC integration.")

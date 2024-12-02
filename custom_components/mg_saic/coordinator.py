@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import asyncio
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from .api import SAICMGAPIClient
@@ -8,6 +8,7 @@ from .const import (
     RETRY_LIMIT,
     UPDATE_INTERVAL,
     UPDATE_INTERVAL_CHARGING,
+    UPDATE_INTERVAL_POWERED,
     RETRY_BACKOFF_FACTOR,
     CHARGING_STATUS_CODES,
     GENERIC_RESPONSE_STATUS_THRESHOLD,
@@ -20,6 +21,13 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
 
     def __init__(self, hass, client: SAICMGAPIClient, config_entry):
         """Initialize."""
+        super().__init__(
+            hass,
+            LOGGER,
+            name="MG SAIC data update coordinator",
+            update_interval=None,
+        )
+
         self.client = client
         self.config_entry = config_entry
         self.is_charging = False
@@ -36,16 +44,46 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                 "charging_scan_interval", UPDATE_INTERVAL_CHARGING.total_seconds()
             )
         )
+        self.update_interval_powered = timedelta(
+            seconds=config_entry.options.get(
+                "powered_scan_interval", UPDATE_INTERVAL_POWERED.total_seconds()
+            )
+        )
+
+        LOGGER.debug(
+            f"Update intervals initialized: Default: {self.update_interval}, Charging: {self.update_interval_charging}, Powered: {self.update_interval_powered}"
+        )
 
         # Use the vehicle type from the config entry
         self.vehicle_type = self.config_entry.data.get("vehicle_type")
 
-        super().__init__(
-            hass,
-            LOGGER,
-            name="MG SAIC data update coordinator",
-            update_interval=self.update_interval,
+    async def async_update_options(self, options):
+        """Update options and reschedule refresh."""
+        # Update intervals from options
+        self.update_interval = timedelta(
+            seconds=options.get("scan_interval", self.update_interval.total_seconds())
         )
+        self.update_interval_charging = timedelta(
+            seconds=options.get(
+                "charging_scan_interval",
+                self.update_interval_charging.total_seconds(),
+            )
+        )
+        self.update_interval_powered = timedelta(
+            seconds=options.get(
+                "powered_scan_interval",
+                self.update_interval_powered.total_seconds(),
+            )
+        )
+
+        LOGGER.debug(
+            f"Update intervals updated via options: Normal: {self.update_interval}, Charging: {self.update_interval_charging}, Powered: {self.update_interval_powered}"
+        )
+
+        # Reschedule refresh
+        if self._unsub_refresh:
+            self._unsub_refresh()
+        self._schedule_refresh()
 
     async def async_setup(self):
         """Set up the coordinator."""
@@ -97,13 +135,26 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                 bms_chrg_sts = getattr(chrg_data, "bmsChrgSts", None)
                 self.is_charging = bms_chrg_sts in CHARGING_STATUS_CODES
 
-        # Adjust update interval based on charging status
-        new_interval = (
-            self.update_interval_charging if self.is_charging else self.update_interval
-        )
+        # Determine if the vehicle is powered on
+        status_data = data.get("status")
+        if status_data:
+            power_mode = getattr(status_data.basicVehicleStatus, "powerMode", None)
+            if power_mode in [2, 3]:
+                self.is_powered_on = True
+            else:
+                self.is_powered_on = False
+
+        # Adjust Update Intervals
+        if self.is_powered_on:
+            new_interval = self.update_interval_powered
+        elif self.is_charging:
+            new_interval = self.update_interval_charging
+        else:
+            new_interval = self.update_interval
+
         if self.update_interval != new_interval:
             self.update_interval = new_interval
-            LOGGER.debug("Update interval set to %s", self.update_interval)
+            LOGGER.debug(f"Update interval changed to {self.update_interval}")
             if self._unsub_refresh:
                 self._unsub_refresh()
             self._schedule_refresh()
@@ -113,6 +164,9 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         LOGGER.debug("Vehicle Info: %s", data.get("info"))
         LOGGER.debug("Vehicle Status: %s", data.get("status"))
         LOGGER.debug("Vehicle Charging Data: %s", data.get("charging"))
+
+        # Set the last update time
+        self.last_update_time = datetime.now(timezone.utc)
 
         return data
 

@@ -8,6 +8,7 @@ from .const import (
     COUNTRY_CODES,
     UPDATE_INTERVAL,
     UPDATE_INTERVAL_CHARGING,
+    UPDATE_INTERVAL_POWERED,
     REGION_CHOICES,
     REGION_BASE_URIS,
 )
@@ -189,14 +190,13 @@ class SAICMGOptionsFlowHandler(config_entries.OptionsFlow):
 
     def __init__(self, config_entry):
         """Initialize options flow."""
-        self.config_entry = config_entry
 
-    async def async_step_init(self, data=None):
+    async def async_step_init(self, user_input=None):
         """Manage the options."""
-        if data is not None:
-            return self.async_create_entry(title="", data=data)
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
 
-        data = vol.Schema(
+        data_schema = vol.Schema(
             {
                 vol.Optional(
                     "scan_interval",
@@ -211,7 +211,14 @@ class SAICMGOptionsFlowHandler(config_entries.OptionsFlow):
                         int(UPDATE_INTERVAL_CHARGING.total_seconds()),
                     ),
                 ): vol.All(vol.Coerce(int), vol.Range(min=60)),
+                vol.Optional(
+                    "powered_scan_interval",
+                    default=self.config_entry.options.get(
+                        "powered_scan_interval",
+                        int(UPDATE_INTERVAL_POWERED.total_seconds()),
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=60)),
             }
         )
 
-        return self.async_show_form(step_id="init", data_schema=data)
+        return self.async_show_form(step_id="init", data_schema=data_schema)

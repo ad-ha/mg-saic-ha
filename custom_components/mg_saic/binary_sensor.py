@@ -205,6 +205,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         LOGGER.error("Error setting up MG SAIC binary sensors: %s", e)
 
 
+# GENERAL VEHICLE BINARY SENSORS
 class SAICMGBinarySensor(CoordinatorEntity, BinarySensorEntity):
     """Representation of a MG SAIC binary sensor."""
 
@@ -277,6 +278,7 @@ class SAICMGBinarySensor(CoordinatorEntity, BinarySensorEntity):
         }
 
 
+# CHARGING SENSORS
 class SAICMGChargingBinarySensor(CoordinatorEntity, BinarySensorEntity):
     """Representation of a MG SAIC charging binary sensor."""
 
