@@ -112,6 +112,8 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 #### Others
 - Lock Status
 - Charging Gun Status
+- Last Key Seen
+- Last Update Time
 
 ### ACTIONS
 - Lock Vehicle
@@ -130,20 +132,22 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - Update Vehicle Data
  
 ### SWITCHES
-- AC On/Off
+- AC Blowing
+- Front Defrost
+- Rear Window Defrost
 - Heated Seats
 - Charging Start/Stop
 - Battery Heating
+- Sunroof
+- Charging Port
 
 ### BUTTONS
-- Open Tailgate
-- Start Front Defrost
-- Start Rear Window Heat
 - Tigger Alarm
 - Update Vehicle Data
 
 ### LOCK
 - Lock entity for lock/unlock doors
+- Boot/Tailgate lock entity
 
 ### CLIMATE
 - AC Control Climate entity
