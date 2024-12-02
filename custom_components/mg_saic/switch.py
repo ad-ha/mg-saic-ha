@@ -1,6 +1,6 @@
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from .const import DOMAIN, LOGGER, CHARGING_STATUS_CODES, VehicleWindowId
+from .const import DOMAIN, LOGGER, CHARGING_STATUS_CODES
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -23,11 +23,17 @@ async def async_setup_entry(hass, entry, async_add_entities):
         for config in vin_info.vehicleModelConfiguration
     }
 
-    # Sunroof Switch
-    switches.append(SAICMGSunroofSwitch(coordinator, client, vin_info, vin))
-
     # AC Switch
     switches.append(SAICMGACSwitch(coordinator, client, vin_info, vin))
+
+    # Front Defrost Switch (New)
+    switches.append(SAICMGFrontDefrostSwitch(coordinator, client, vin_info, vin))
+
+    # Rear Window Defrost
+    switches.append(SAICMGRearWindowDefrostSwitch(coordinator, client, vin_info, vin))
+
+    # Sunroof Switch
+    switches.append(SAICMGSunroofSwitch(coordinator, client, vin_info, vin))
 
     # Heated Seats Switch (if applicable)
     has_heated_seats = vehicle_config.get("HeatedSeat") == "1"
@@ -129,7 +135,7 @@ class SAICMGACSwitch(SAICMGVehicleSwitch):
             client,
             vin_info,
             vin,
-            "Air Conditioning",
+            "AC Blowing",
             "mdi:air-conditioner",
         )
 
@@ -141,7 +147,7 @@ class SAICMGACSwitch(SAICMGVehicleSwitch):
             basic_status = getattr(status, "basicVehicleStatus", None)
             if basic_status:
                 ac_status = getattr(basic_status, "remoteClimateStatus", None)
-                return ac_status == 1
+                return ac_status in (2, 3)
         return False
 
     @property
@@ -153,116 +159,22 @@ class SAICMGACSwitch(SAICMGVehicleSwitch):
         )
 
     async def async_turn_on(self, **kwargs):
-        """Turn the AC on."""
+        """Start AC Blowing."""
         try:
             await self._client.start_ac(self._vin)
-            LOGGER.info("AC started for VIN: %s", self._vin)
+            LOGGER.info("AC Blowing started for VIN: %s", self._vin)
             await self.coordinator.async_request_refresh()
         except Exception as e:
-            LOGGER.error("Error starting AC for VIN %s: %s", self._vin, e)
+            LOGGER.error("Error starting AC Blowing for VIN %s: %s", self._vin, e)
 
     async def async_turn_off(self, **kwargs):
-        """Turn the AC off."""
+        """Stop AC Blowing."""
         try:
             await self._client.stop_ac(self._vin)
-            LOGGER.info("AC stopped for VIN: %s", self._vin)
+            LOGGER.info("AC Blowing stopped for VIN: %s", self._vin)
             await self.coordinator.async_request_refresh()
         except Exception as e:
-            LOGGER.error("Error stopping AC for VIN %s: %s", self._vin, e)
-
-
-class SAICMGHeatedSeatsSwitch(SAICMGVehicleSwitch):
-    """Switch to control the heated seats."""
-
-    def __init__(self, coordinator, client, vin_info, vin):
-        super().__init__(
-            coordinator, client, vin_info, vin, "Heated Seats", "mdi:seat-recline-extra"
-        )
-
-    @property
-    def is_on(self):
-        """Return true if heated seats are on."""
-        status = self.coordinator.data.get("status")
-        if status:
-            basic_status = getattr(status, "basicVehicleStatus", None)
-            if basic_status:
-                # Update is_on to check frontLeftSeatHeatLevel and frontRightSeatHeatLevel
-                front_left_level = getattr(basic_status, "frontLeftSeatHeatLevel", 0)
-                front_right_level = getattr(basic_status, "frontRightSeatHeatLevel", 0)
-                return front_left_level > 0 or front_right_level > 0
-        return False
-
-    @property
-    def available(self):
-        """Return True if the switch entity is available."""
-        return (
-            self.coordinator.last_update_success
-            and self.coordinator.data.get("status") is not None
-        )
-
-    async def async_turn_on(self, **kwargs):
-        """Turn the heated seats on."""
-        try:
-            await self._client.control_heated_seats(self._vin, True)
-            LOGGER.info("Heated seats turned on for VIN: %s", self._vin)
-            await self.coordinator.async_request_refresh()
-        except Exception as e:
-            LOGGER.error("Error turning on heated seats for VIN %s: %s", self._vin, e)
-
-    async def async_turn_off(self, **kwargs):
-        """Turn the heated seats off."""
-        try:
-            await self._client.control_heated_seats(self._vin, False)
-            LOGGER.info("Heated seats turned off for VIN: %s", self._vin)
-            await self.coordinator.async_request_refresh()
-        except Exception as e:
-            LOGGER.error("Error turning off heated seats for VIN %s: %s", self._vin, e)
-
-
-class SAICMGChargingSwitch(SAICMGVehicleSwitch):
-    """Switch to control vehicle charging."""
-
-    def __init__(self, coordinator, client, vin_info, vin):
-        super().__init__(
-            coordinator, client, vin_info, vin, "Charging", "mdi:ev-station"
-        )
-
-    @property
-    def is_on(self):
-        """Return true if charging is active."""
-        charging_data = self.coordinator.data.get("charging")
-        if charging_data:
-            chrgMgmtData = getattr(charging_data, "chrgMgmtData", None)
-            if chrgMgmtData:
-                charging_status = getattr(chrgMgmtData, "bmsChrgSts", None)
-                return charging_status in CHARGING_STATUS_CODES
-        return False
-
-    @property
-    def available(self):
-        """Return True if the switch entity is available."""
-        return (
-            self.coordinator.last_update_success
-            and self.coordinator.data.get("charging") is not None
-        )
-
-    async def async_turn_on(self, **kwargs):
-        """Start charging."""
-        try:
-            await self._client.send_vehicle_charging_control(self._vin, "start")
-            LOGGER.info("Charging started for VIN: %s", self._vin)
-            await self.coordinator.async_request_refresh()
-        except Exception as e:
-            LOGGER.error("Error starting charging for VIN %s: %s", self._vin, e)
-
-    async def async_turn_off(self, **kwargs):
-        """Stop charging."""
-        try:
-            await self._client.send_vehicle_charging_control(self._vin, "stop")
-            LOGGER.info("Charging stopped for VIN: %s", self._vin)
-            await self.coordinator.async_request_refresh()
-        except Exception as e:
-            LOGGER.error("Error stopping charging for VIN %s: %s", self._vin, e)
+            LOGGER.error("Error stopping AC Blowing for VIN %s: %s", self._vin, e)
 
 
 class SAICMGBatteryHeatingSwitch(SAICMGVehicleSwitch):
@@ -316,42 +228,6 @@ class SAICMGBatteryHeatingSwitch(SAICMGVehicleSwitch):
             LOGGER.error("Error stopping battery heating for VIN %s: %s", self._vin, e)
 
 
-class SAICMGSunroofSwitch(SAICMGVehicleSwitch):
-    """Switch to control the sunroof (open/close)."""
-
-    def __init__(self, coordinator, client, vin_info, vin):
-        super().__init__(
-            coordinator, client, vin_info, vin, "Sunroof", "mdi:car-select"
-        )
-
-    @property
-    def is_on(self):
-        """Return true if the sunroof is open."""
-        status = self.coordinator.data.get("status")
-        if status:
-            sunroof_status = getattr(status.basicVehicleStatus, "sunroofStatus", None)
-            return sunroof_status == 1
-        return False
-
-    async def async_turn_on(self, **kwargs):
-        """Open the sunroof."""
-        try:
-            await self._client.control_sunroof(self._vin, "open")
-            LOGGER.info("Sunroof opened for VIN: %s", self._vin)
-            await self.coordinator.async_request_refresh()
-        except Exception as e:
-            LOGGER.error("Error opening sunroof for VIN %s: %s", self._vin, e)
-
-    async def async_turn_off(self, **kwargs):
-        """Close the sunroof."""
-        try:
-            await self._client.control_sunroof(self._vin, "close")
-            LOGGER.info("Sunroof closed for VIN: %s", self._vin)
-            await self.coordinator.async_request_refresh()
-        except Exception as e:
-            LOGGER.error("Error closing sunroof for VIN %s: %s", self._vin, e)
-
-
 class SAICMGChargingPortLockSwitch(SAICMGVehicleSwitch):
     """Switch to control the charging port lock (lock/unlock)."""
 
@@ -388,3 +264,225 @@ class SAICMGChargingPortLockSwitch(SAICMGVehicleSwitch):
             await self.coordinator.async_request_refresh()
         except Exception as e:
             LOGGER.error("Error unlocking charging port for VIN %s: %s", self._vin, e)
+
+
+class SAICMGChargingSwitch(SAICMGVehicleSwitch):
+    """Switch to control vehicle charging."""
+
+    def __init__(self, coordinator, client, vin_info, vin):
+        super().__init__(
+            coordinator, client, vin_info, vin, "Charging", "mdi:ev-station"
+        )
+
+    @property
+    def is_on(self):
+        """Return true if charging is active."""
+        charging_data = self.coordinator.data.get("charging")
+        if charging_data:
+            chrgMgmtData = getattr(charging_data, "chrgMgmtData", None)
+            if chrgMgmtData:
+                charging_status = getattr(chrgMgmtData, "bmsChrgSts", None)
+                return charging_status in CHARGING_STATUS_CODES
+        return False
+
+    @property
+    def available(self):
+        """Return True if the switch entity is available."""
+        return (
+            self.coordinator.last_update_success
+            and self.coordinator.data.get("charging") is not None
+        )
+
+    async def async_turn_on(self, **kwargs):
+        """Start charging."""
+        try:
+            await self._client.send_vehicle_charging_control(self._vin, "start")
+            LOGGER.info("Charging started for VIN: %s", self._vin)
+            await self.coordinator.async_request_refresh()
+        except Exception as e:
+            LOGGER.error("Error starting charging for VIN %s: %s", self._vin, e)
+
+    async def async_turn_off(self, **kwargs):
+        """Stop charging."""
+        try:
+            await self._client.send_vehicle_charging_control(self._vin, "stop")
+            LOGGER.info("Charging stopped for VIN: %s", self._vin)
+            await self.coordinator.async_request_refresh()
+        except Exception as e:
+            LOGGER.error("Error stopping charging for VIN %s: %s", self._vin, e)
+
+
+class SAICMGFrontDefrostSwitch(SAICMGVehicleSwitch):
+    """Switch to control the front defrost."""
+
+    def __init__(self, coordinator, client, vin_info, vin):
+        super().__init__(
+            coordinator,
+            client,
+            vin_info,
+            vin,
+            "Front Defrost",
+            "mdi:car-defrost-front",
+        )
+
+    @property
+    def is_on(self):
+        """Return true if front defrost is on."""
+        status = self.coordinator.data.get("status")
+        if status:
+            basic_status = getattr(status, "basicVehicleStatus", None)
+            if basic_status:
+                remote_climate_status = getattr(
+                    basic_status, "remoteClimateStatus", None
+                )
+                return remote_climate_status == 5
+        return False
+
+    async def async_turn_on(self, **kwargs):
+        """Start front defrost."""
+        try:
+            await self._client.start_front_defrost(self._vin)
+            LOGGER.info("Front defrost started for VIN: %s", self._vin)
+            await self.coordinator.async_request_refresh()
+        except Exception as e:
+            LOGGER.error("Error starting front defrost for VIN %s: %s", self._vin, e)
+
+    async def async_turn_off(self, **kwargs):
+        """Stop front defrost by stopping the AC."""
+        try:
+            await self._client.stop_ac(self._vin)
+            LOGGER.info("Front defrost stopped (AC stopped) for VIN: %s", self._vin)
+            await self.coordinator.async_request_refresh()
+        except Exception as e:
+            LOGGER.error("Error stopping front defrost for VIN %s: %s", self._vin, e)
+
+
+class SAICMGHeatedSeatsSwitch(SAICMGVehicleSwitch):
+    """Switch to control the heated seats."""
+
+    def __init__(self, coordinator, client, vin_info, vin):
+        super().__init__(
+            coordinator, client, vin_info, vin, "Heated Seats", "mdi:seat-recline-extra"
+        )
+
+    @property
+    def is_on(self):
+        """Return true if heated seats are on."""
+        status = self.coordinator.data.get("status")
+        if status:
+            basic_status = getattr(status, "basicVehicleStatus", None)
+            if basic_status:
+                # Update is_on to check frontLeftSeatHeatLevel and frontRightSeatHeatLevel
+                front_left_level = getattr(basic_status, "frontLeftSeatHeatLevel", 0)
+                front_right_level = getattr(basic_status, "frontRightSeatHeatLevel", 0)
+                return front_left_level > 0 or front_right_level > 0
+        return False
+
+    @property
+    def available(self):
+        """Return True if the switch entity is available."""
+        return (
+            self.coordinator.last_update_success
+            and self.coordinator.data.get("status") is not None
+        )
+
+    async def async_turn_on(self, **kwargs):
+        """Turn the heated seats on."""
+        try:
+            await self._client.control_heated_seats(self._vin, True)
+            LOGGER.info("Heated seats turned on for VIN: %s", self._vin)
+            await self.coordinator.async_request_refresh()
+        except Exception as e:
+            LOGGER.error("Error turning on heated seats for VIN %s: %s", self._vin, e)
+
+    async def async_turn_off(self, **kwargs):
+        """Turn the heated seats off."""
+        try:
+            await self._client.control_heated_seats(self._vin, False)
+            LOGGER.info("Heated seats turned off for VIN: %s", self._vin)
+            await self.coordinator.async_request_refresh()
+        except Exception as e:
+            LOGGER.error("Error turning off heated seats for VIN %s: %s", self._vin, e)
+
+
+class SAICMGRearWindowDefrostSwitch(SAICMGVehicleSwitch):
+    """Switch to control the rear window defrost."""
+
+    def __init__(self, coordinator, client, vin_info, vin):
+        super().__init__(
+            coordinator,
+            client,
+            vin_info,
+            vin,
+            "Rear Window Defrost",
+            "mdi:car-defrost-rear",
+        )
+
+    @property
+    def is_on(self):
+        """Return true if rear window defrost is on."""
+        status = self.coordinator.data.get("status")
+        if status:
+            basic_status = getattr(status, "basicVehicleStatus", None)
+            if basic_status:
+                rear_window_heat_status = getattr(basic_status, "rmtHtdRrWndSt", None)
+                return rear_window_heat_status == 1
+        return False
+
+    async def async_turn_on(self, **kwargs):
+        """Turn the rear window defrost on."""
+        try:
+            await self._client.control_rear_window_heat(self._vin, "start")
+            LOGGER.info("Rear window defrost turned on for VIN: %s", self._vin)
+            await self.coordinator.async_request_refresh()
+        except Exception as e:
+            LOGGER.error(
+                "Error turning on rear window defrost for VIN %s: %s", self._vin, e
+            )
+
+    async def async_turn_off(self, **kwargs):
+        """Turn the rear window defrost off."""
+        try:
+            await self._client.control_rear_window_heat(self._vin, "stop")
+            LOGGER.info("Rear window defrost turned off for VIN: %s", self._vin)
+            await self.coordinator.async_request_refresh()
+        except Exception as e:
+            LOGGER.error(
+                "Error turning off rear window defrost for VIN %s: %s", self._vin, e
+            )
+
+
+class SAICMGSunroofSwitch(SAICMGVehicleSwitch):
+    """Switch to control the sunroof (open/close)."""
+
+    def __init__(self, coordinator, client, vin_info, vin):
+        super().__init__(
+            coordinator, client, vin_info, vin, "Sunroof", "mdi:car-select"
+        )
+
+    @property
+    def is_on(self):
+        """Return true if the sunroof is open."""
+        status = self.coordinator.data.get("status")
+        if status:
+            sunroof_status = getattr(status.basicVehicleStatus, "sunroofStatus", None)
+            return sunroof_status == 1
+        return False
+
+    async def async_turn_on(self, **kwargs):
+        """Open the sunroof."""
+        try:
+            await self._client.control_sunroof(self._vin, "open")
+            LOGGER.info("Sunroof opened for VIN: %s", self._vin)
+            await self.coordinator.async_request_refresh()
+        except Exception as e:
+            LOGGER.error("Error opening sunroof for VIN %s: %s", self._vin, e)
+
+    async def async_turn_off(self, **kwargs):
+        """Close the sunroof."""
+        try:
+            await self._client.control_sunroof(self._vin, "close")
+            LOGGER.info("Sunroof closed for VIN: %s", self._vin)
+            await self.coordinator.async_request_refresh()
+        except Exception as e:
+            LOGGER.error("Error closing sunroof for VIN %s: %s", self._vin, e)

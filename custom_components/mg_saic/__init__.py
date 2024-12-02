@@ -47,6 +47,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         hass.data[DOMAIN].setdefault("coordinators_by_vin", {})
         hass.data[DOMAIN]["coordinators_by_vin"][vin] = coordinator
 
+        # Register an update listener to handle options updates
+        entry.async_on_unload(entry.add_update_listener(update_listener))
+
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
         # Register Services
@@ -57,6 +60,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     except Exception as e:
         LOGGER.error("Failed to set up MG SAIC integration: %s", e)
         return False
+
+
+async def update_listener(hass: HomeAssistant, entry: ConfigEntry):
+    """Handle options update."""
+    coordinator = hass.data[DOMAIN][f"{entry.entry_id}_coordinator"]
+    await coordinator.async_update_options(entry.options)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):

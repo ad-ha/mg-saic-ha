@@ -39,7 +39,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
             SAICMGVehicleSensor(
                 coordinator,
                 entry,
-                "Battery Voltage",
+                "Ancillary Battery Voltage",
                 "batteryVoltage",
                 "basicVehicleStatus",
                 SensorDeviceClass.VOLTAGE,
@@ -81,6 +81,29 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "measurement",
                 1.0,
                 "status",
+            ),
+            SAICMGVehicleSensor(
+                coordinator,
+                entry,
+                "Last Key Seen",
+                "lastKeySeen",
+                "basicVehicleStatus",
+                None,
+                None,
+                "mdi:key",
+                None,
+                1.0,
+                "status",
+            ),
+            SAICMGLastUpdateSensor(
+                coordinator,
+                entry,
+                "Last Update Time",
+                SensorDeviceClass.TIMESTAMP,
+                None,
+                "mdi:update",
+                None,
+                None,
             ),
             SAICMGMileageSensor(
                 coordinator,
@@ -430,6 +453,101 @@ async def async_setup_entry(hass, entry, async_add_entities):
         LOGGER.error("Error setting up MG SAIC sensors: %s", e)
 
 
+# GENERAL VEHICLE DETAIL SENSORS
+class SAICMGMileageSensor(CoordinatorEntity, SensorEntity):
+    """Sensor for Mileage, uses data from both VehicleStatusResp and ChrgMgmtDataResp."""
+
+    def __init__(
+        self,
+        coordinator,
+        entry,
+        name,
+        field,
+        status_type,
+        charging_status_type,
+        device_class,
+        unit,
+        icon,
+        state_class,
+        factor,
+        data_type,
+    ):
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._name = name
+        self._field = field
+        self._status_type = status_type
+        self._charging_status_type = charging_status_type
+        self._factor = factor
+        self._attr_device_class = device_class
+        self._attr_native_unit_of_measurement = unit
+        self._attr_icon = icon
+        self._attr_state_class = state_class
+        self._data_type = data_type
+        vin_info = self.coordinator.data["info"][0]
+        self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}"
+
+    @property
+    def unique_id(self):
+        return self._unique_id
+
+    @property
+    def name(self):
+        vin_info = self.coordinator.data["info"][0]
+        return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
+
+    @property
+    def available(self):
+        """Return True if the entity is available."""
+        # This sensor depends on both 'status' and 'charging' data
+        return (
+            self.coordinator.last_update_success
+            and self.coordinator.data.get("status") is not None
+            and self.coordinator.data.get("charging") is not None
+        )
+
+    @property
+    def native_value(self):
+        # First, try to get mileage from VehicleStatusResp
+        data = self.coordinator.data.get("status")
+        mileage = None
+        if data:
+            status_data = getattr(data, self._status_type, None)
+            if status_data:
+                mileage = getattr(status_data, self._field, None)
+                if mileage == 0 or mileage is None:
+                    mileage = None  # Invalid or zero mileage
+                else:
+                    mileage = mileage * self._factor
+
+        # If mileage is None or zero, try to get from ChrgMgmtDataResp
+        if mileage is None:
+            charging_data = self.coordinator.data.get("charging")
+            if charging_data:
+                charging_status_data = getattr(
+                    charging_data, self._charging_status_type, None
+                )
+                if charging_status_data:
+                    mileage = getattr(charging_status_data, self._field, None)
+                    if mileage == 0 or mileage is None:
+                        mileage = None
+                    else:
+                        mileage = mileage * self._factor
+
+        return mileage
+
+    @property
+    def device_info(self):
+        vin_info = self.coordinator.data["info"][0]
+        return {
+            "identifiers": {(DOMAIN, vin_info.vin)},
+            "name": f"{vin_info.brandName} {vin_info.modelName}",
+            "manufacturer": vin_info.brandName,
+            "model": vin_info.modelName,
+            "serial_number": vin_info.vin,
+        }
+
+
 class SAICMGVehicleSensor(CoordinatorEntity, SensorEntity):
     """Representation of a MG SAIC vehicle sensor."""
 
@@ -530,6 +648,56 @@ class SAICMGVehicleSensor(CoordinatorEntity, SensorEntity):
         }
 
 
+class SAICMGVehicleDetailSensor(CoordinatorEntity, SensorEntity):
+    """Representation of a sensor for MG SAIC vehicle details."""
+
+    def __init__(self, coordinator, entry, name, field, data_type):
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._name = name
+        self._field = field
+        self._data_type = data_type
+        vin_info = self.coordinator.data["info"][0]
+        self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}"
+
+    @property
+    def unique_id(self):
+        return self._unique_id
+
+    @property
+    def name(self):
+        vin_info = self.coordinator.data["info"][0]
+        return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
+
+    @property
+    def available(self):
+        """Return True if the entity is available."""
+        required_data = self.coordinator.data.get(self._data_type)
+        return self.coordinator.last_update_success and required_data is not None
+
+    @property
+    def native_value(self):
+        data = self.coordinator.data.get(self._data_type)
+        if data:
+            vin_info = data[0]
+            raw_value = getattr(vin_info, self._field, None)
+            if raw_value is not None:
+                return raw_value
+        return None
+
+    @property
+    def device_info(self):
+        vin_info = self.coordinator.data["info"][0]
+        return {
+            "identifiers": {(DOMAIN, vin_info.vin)},
+            "name": f"{vin_info.brandName} {vin_info.modelName}",
+            "manufacturer": vin_info.brandName,
+            "model": vin_info.modelName,
+            "serial_number": vin_info.vin,
+        }
+
+
+# STATUS SENSORS
 class SAICMGElectricRangeSensor(CoordinatorEntity, SensorEntity):
     """Sensor for Electric Range, uses data from both RvsChargeStatus and VehicleStatusResp."""
 
@@ -706,297 +874,7 @@ class SAICMGSOCSensor(CoordinatorEntity, SensorEntity):
         }
 
 
-class SAICMGVehicleDetailSensor(CoordinatorEntity, SensorEntity):
-    """Representation of a sensor for MG SAIC vehicle details."""
-
-    def __init__(self, coordinator, entry, name, field, data_type):
-        """Initialize the sensor."""
-        super().__init__(coordinator)
-        self._name = name
-        self._field = field
-        self._data_type = data_type
-        vin_info = self.coordinator.data["info"][0]
-        self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}"
-
-    @property
-    def unique_id(self):
-        return self._unique_id
-
-    @property
-    def name(self):
-        vin_info = self.coordinator.data["info"][0]
-        return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
-
-    @property
-    def available(self):
-        """Return True if the entity is available."""
-        required_data = self.coordinator.data.get(self._data_type)
-        return self.coordinator.last_update_success and required_data is not None
-
-    @property
-    def native_value(self):
-        data = self.coordinator.data.get(self._data_type)
-        if data:
-            vin_info = data[0]
-            raw_value = getattr(vin_info, self._field, None)
-            if raw_value is not None:
-                return raw_value
-        return None
-
-    @property
-    def device_info(self):
-        vin_info = self.coordinator.data["info"][0]
-        return {
-            "identifiers": {(DOMAIN, vin_info.vin)},
-            "name": f"{vin_info.brandName} {vin_info.modelName}",
-            "manufacturer": vin_info.brandName,
-            "model": vin_info.modelName,
-            "serial_number": vin_info.vin,
-        }
-
-
-class SAICMGMileageSensor(CoordinatorEntity, SensorEntity):
-    """Sensor for Mileage, uses data from both VehicleStatusResp and ChrgMgmtDataResp."""
-
-    def __init__(
-        self,
-        coordinator,
-        entry,
-        name,
-        field,
-        status_type,
-        charging_status_type,
-        device_class,
-        unit,
-        icon,
-        state_class,
-        factor,
-        data_type,
-    ):
-        """Initialize the sensor."""
-        super().__init__(coordinator)
-        self._name = name
-        self._field = field
-        self._status_type = status_type
-        self._charging_status_type = charging_status_type
-        self._factor = factor
-        self._attr_device_class = device_class
-        self._attr_native_unit_of_measurement = unit
-        self._attr_icon = icon
-        self._attr_state_class = state_class
-        self._data_type = data_type
-        vin_info = self.coordinator.data["info"][0]
-        self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}"
-
-    @property
-    def unique_id(self):
-        return self._unique_id
-
-    @property
-    def name(self):
-        vin_info = self.coordinator.data["info"][0]
-        return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
-
-    @property
-    def available(self):
-        """Return True if the entity is available."""
-        # This sensor depends on both 'status' and 'charging' data
-        return (
-            self.coordinator.last_update_success
-            and self.coordinator.data.get("status") is not None
-            and self.coordinator.data.get("charging") is not None
-        )
-
-    @property
-    def native_value(self):
-        # First, try to get mileage from VehicleStatusResp
-        data = self.coordinator.data.get("status")
-        mileage = None
-        if data:
-            status_data = getattr(data, self._status_type, None)
-            if status_data:
-                mileage = getattr(status_data, self._field, None)
-                if mileage == 0 or mileage is None:
-                    mileage = None  # Invalid or zero mileage
-                else:
-                    mileage = mileage * self._factor
-
-        # If mileage is None or zero, try to get from ChrgMgmtDataResp
-        if mileage is None:
-            charging_data = self.coordinator.data.get("charging")
-            if charging_data:
-                charging_status_data = getattr(
-                    charging_data, self._charging_status_type, None
-                )
-                if charging_status_data:
-                    mileage = getattr(charging_status_data, self._field, None)
-                    if mileage == 0 or mileage is None:
-                        mileage = None
-                    else:
-                        mileage = mileage * self._factor
-
-        return mileage
-
-    @property
-    def device_info(self):
-        vin_info = self.coordinator.data["info"][0]
-        return {
-            "identifiers": {(DOMAIN, vin_info.vin)},
-            "name": f"{vin_info.brandName} {vin_info.modelName}",
-            "manufacturer": vin_info.brandName,
-            "model": vin_info.modelName,
-            "serial_number": vin_info.vin,
-        }
-
-
-class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
-    """Representation of a MG SAIC charging sensor."""
-
-    def __init__(
-        self,
-        coordinator,
-        entry,
-        name,
-        field,
-        device_class,
-        unit,
-        icon,
-        state_class,
-        factor=None,
-        data_source="chrgMgmtData",
-        data_type="charging",
-    ):
-        """Initialize the sensor."""
-        super().__init__(coordinator)
-        self._name = name
-        self._field = field
-        self._device_class = device_class
-        self._unit = unit
-        self._state_class = state_class
-        self._icon = icon
-        self._factor = factor
-        self._data_source = data_source
-        self._data_type = data_type
-        self._attr_device_class = device_class
-        self._attr_native_unit_of_measurement = unit
-        self._attr_icon = icon
-        self._attr_state_class = state_class
-        vin_info = self.coordinator.data["info"][0]
-        self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}_charge"
-
-    @property
-    def unique_id(self):
-        return self._unique_id
-
-    @property
-    def name(self):
-        vin_info = self.coordinator.data["info"][0]
-        return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
-
-    @property
-    def available(self):
-        """Return True if the entity is available."""
-        required_data = self.coordinator.data.get(self._data_type)
-        return self.coordinator.last_update_success and required_data is not None
-
-    @property
-    def native_value(self):
-        """Return the state of the sensor."""
-        try:
-            charging_data = getattr(
-                self.coordinator.data.get("charging"), self._data_source, None
-            )
-            raw_value = None
-
-            if charging_data:
-                # Fetch the charging status to determine if the sensor should display data
-                charging_status = getattr(charging_data, "bmsChrgSts", None)
-
-                # Apply the "Not charging" condition only for the specified sensors
-                if self._field in [
-                    "bmsPackVol",
-                    "bmsPackCrnt",
-                    "lastChargeEndingPower",
-                    "bmsChrgOtptCrntReq",
-                    "chargingDuration",
-                    "chrgngRmnngTime",
-                    "chrgngAddedElecRng",
-                ]:
-                    if charging_status in [0, 5]:
-                        return 0  # Display 0 for these sensors when not charging
-                    else:
-                        raw_value = getattr(charging_data, self._field, None)
-                        return (
-                            raw_value * self._factor if raw_value is not None else None
-                        )
-
-                elif self._field == "bmsOnBdChrgTrgtSOCDspCmd":
-                    # Map the target SOC values to percentages
-                    raw_value = getattr(charging_data, self._field, None)
-                    return {
-                        1: 40,
-                        2: 50,
-                        3: 60,
-                        4: 70,
-                        5: 80,
-                        6: 90,
-                        7: 100,
-                    }.get(raw_value, None)
-
-                elif self._field == "bmsChrgSts":
-                    # Map bmsChrgSts values to charging statuses (these are strings)
-                    raw_value = getattr(charging_data, self._field, None)
-                    return {
-                        0: "Not Charging",
-                        1: "Charging (AC)",
-                        2: "Charging Finished",
-                        3: "Charging",
-                        4: "Fault Charging",
-                        5: "Charging Finished",
-                        6: "Unrecognized Connection",
-                        7: "Plugged In",
-                        8: "Charging Stopped",
-                        9: "Scheduled Charging",
-                        10: "Charging (DC)",
-                        11: "Super Offboard Charging",
-                        12: "Charging",
-                    }.get(raw_value, f"Unknown ({raw_value})")
-
-                elif self._field == "bmsPTCHeatResp":
-                    # Map bmsPTCHeatResp values to status strings
-                    return {
-                        0: "Off",
-                        1: "On",
-                        2: "Error",
-                    }.get(raw_value, f"Unknown ({raw_value})")
-
-                else:
-                    # Handle other numeric fields
-                    raw_value = getattr(charging_data, self._field, None)
-                    return raw_value * self._factor if raw_value is not None else None
-
-            if raw_value is None:
-                LOGGER.warning("Field %s returned None in charging data.", self._field)
-            else:
-                LOGGER.error("No charging data available for %s", self._name)
-                return None
-
-        except Exception as e:
-            LOGGER.error("Error retrieving charging sensor %s: %s", self._name, e)
-            return None
-
-    @property
-    def device_info(self):
-        vin_info = self.coordinator.data["info"][0]
-        return {
-            "identifiers": {(DOMAIN, vin_info.vin)},
-            "name": f"{vin_info.brandName} {vin_info.modelName}",
-            "manufacturer": vin_info.brandName,
-            "model": vin_info.modelName,
-            "serial_number": vin_info.vin,
-        }
-
-
+# CHARGING SENSORS
 class SAICMGChargingCurrentSensor(CoordinatorEntity, SensorEntity):
     """Representation of a MG SAIC charging current sensor"""
 
@@ -1179,6 +1057,231 @@ class SAICMGChargingPowerSensor(CoordinatorEntity, SensorEntity):
     @property
     def device_info(self):
         vin_info = self.coordinator.data["info"][0]
+        return {
+            "identifiers": {(DOMAIN, vin_info.vin)},
+            "name": f"{vin_info.brandName} {vin_info.modelName}",
+            "manufacturer": vin_info.brandName,
+            "model": vin_info.modelName,
+            "serial_number": vin_info.vin,
+        }
+
+
+class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
+    """Representation of a MG SAIC charging sensor."""
+
+    def __init__(
+        self,
+        coordinator,
+        entry,
+        name,
+        field,
+        device_class,
+        unit,
+        icon,
+        state_class,
+        factor=None,
+        data_source="chrgMgmtData",
+        data_type="charging",
+    ):
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._name = name
+        self._field = field
+        self._device_class = device_class
+        self._unit = unit
+        self._state_class = state_class
+        self._icon = icon
+        self._factor = factor
+        self._data_source = data_source
+        self._data_type = data_type
+        self._attr_device_class = device_class
+        self._attr_native_unit_of_measurement = unit
+        self._attr_icon = icon
+        self._attr_state_class = state_class
+        vin_info = self.coordinator.data["info"][0]
+        self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}_charge"
+
+    @property
+    def unique_id(self):
+        return self._unique_id
+
+    @property
+    def name(self):
+        vin_info = self.coordinator.data["info"][0]
+        return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
+
+    @property
+    def available(self):
+        """Return True if the entity is available."""
+        required_data = self.coordinator.data.get(self._data_type)
+        return self.coordinator.last_update_success and required_data is not None
+
+    @property
+    def native_value(self):
+        """Return the state of the sensor."""
+        try:
+            charging_data = getattr(
+                self.coordinator.data.get("charging"), self._data_source, None
+            )
+            raw_value = None
+
+            if charging_data:
+                # Fetch the charging status to determine if the sensor should display data
+                charging_status = getattr(charging_data, "bmsChrgSts", None)
+
+                # Apply the "Not charging" condition only for the specified sensors
+                if self._field in [
+                    "bmsPackVol",
+                    "bmsPackCrnt",
+                    "lastChargeEndingPower",
+                    "bmsChrgOtptCrntReq",
+                    "chargingDuration",
+                    "chrgngRmnngTime",
+                    "chrgngAddedElecRng",
+                ]:
+                    if charging_status in [0, 5]:
+                        return 0  # Display 0 for these sensors when not charging
+                    else:
+                        raw_value = getattr(charging_data, self._field, None)
+                        return (
+                            raw_value * self._factor if raw_value is not None else None
+                        )
+
+                elif self._field == "bmsOnBdChrgTrgtSOCDspCmd":
+                    # Map the target SOC values to percentages
+                    raw_value = getattr(charging_data, self._field, None)
+                    return {
+                        1: 40,
+                        2: 50,
+                        3: 60,
+                        4: 70,
+                        5: 80,
+                        6: 90,
+                        7: 100,
+                    }.get(raw_value, None)
+
+                elif self._field == "bmsChrgSts":
+                    # Map bmsChrgSts values to charging statuses (these are strings)
+                    raw_value = getattr(charging_data, self._field, None)
+                    return {
+                        0: "Not Charging",
+                        1: "Charging (AC)",
+                        2: "Charging Finished",
+                        3: "Charging",
+                        4: "Fault Charging",
+                        5: "Charging Finished",
+                        6: "Unrecognized Connection",
+                        7: "Plugged In",
+                        8: "Charging Stopped",
+                        9: "Scheduled Charging",
+                        10: "Charging (DC)",
+                        11: "Super Offboard Charging",
+                        12: "Charging",
+                    }.get(raw_value, f"Unknown ({raw_value})")
+
+                elif self._field == "bmsPTCHeatResp":
+                    # Map bmsPTCHeatResp values to status strings
+                    return {
+                        0: "Off",
+                        1: "On",
+                        2: "Error",
+                    }.get(raw_value, f"Unknown ({raw_value})")
+
+                else:
+                    # Handle other numeric fields
+                    raw_value = getattr(charging_data, self._field, None)
+                    return raw_value * self._factor if raw_value is not None else None
+
+            if raw_value is None:
+                LOGGER.warning("Field %s returned None in charging data.", self._field)
+            else:
+                LOGGER.error("No charging data available for %s", self._name)
+                return None
+
+        except Exception as e:
+            LOGGER.error("Error retrieving charging sensor %s: %s", self._name, e)
+            return None
+
+    @property
+    def device_info(self):
+        vin_info = self.coordinator.data["info"][0]
+        return {
+            "identifiers": {(DOMAIN, vin_info.vin)},
+            "name": f"{vin_info.brandName} {vin_info.modelName}",
+            "manufacturer": vin_info.brandName,
+            "model": vin_info.modelName,
+            "serial_number": vin_info.vin,
+        }
+
+
+# LAST UPDATE DATA SENSOR
+class SAICMGLastUpdateSensor(CoordinatorEntity, SensorEntity):
+    """Sensor to display the timestamp of the last successful data update."""
+
+    def __init__(
+        self,
+        coordinator,
+        entry,
+        name,
+        device_class,
+        unit,
+        icon,
+        state_class,
+        data_type,
+    ):
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._name = name
+        self._device_class = device_class
+        self._unit = unit
+        self._icon = icon
+        self._state_class = state_class
+        self._data_type = data_type  # This can be None for this sensor
+        vin_info = self.coordinator.data["info"][0]
+        self._vin_info = vin_info
+        self._unique_id = f"{entry.entry_id}_{vin_info.vin}_last_update_time"
+
+    @property
+    def unique_id(self):
+        return self._unique_id
+
+    @property
+    def name(self):
+        return f"{self._vin_info.brandName} {self._vin_info.modelName} {self._name}"
+
+    @property
+    def available(self):
+        """Return True if the entity is available."""
+        return (
+            self.coordinator.last_update_success
+            and hasattr(self.coordinator, "last_update_time")
+            and self.coordinator.last_update_time is not None
+        )
+
+    @property
+    def native_value(self):
+        """Return the timestamp of the last successful data update."""
+        return self.coordinator.last_update_time
+
+    @property
+    def device_class(self):
+        return self._device_class
+
+    @property
+    def icon(self):
+        return self._icon
+
+    @property
+    def native_unit_of_measurement(self):
+        return self._unit
+
+    @property
+    def state_class(self):
+        return self._state_class
+
+    @property
+    def device_info(self):
+        vin_info = self._vin_info
         return {
             "identifiers": {(DOMAIN, vin_info.vin)},
             "name": f"{vin_info.brandName} {vin_info.modelName}",

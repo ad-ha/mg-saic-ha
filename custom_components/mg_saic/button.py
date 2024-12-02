@@ -17,10 +17,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     vin = vin_info.vin
 
     buttons = [
-        SAICMGOpenTailgateButton(coordinator, client, vin_info, vin),
         SAICMGTriggerAlarmButton(coordinator, client, vin_info, vin),
-        SAICMGStartFrontDefrostButton(coordinator, client, vin_info, vin),
-        SAICMGControlRearWindowHeatButton(coordinator, client, vin_info, vin),
         SAICMGUpdateDataButton(coordinator, client, vin_info, vin),
     ]
 
@@ -66,24 +63,6 @@ class SAICMGButton(CoordinatorEntity, ButtonEntity):
             LOGGER.warning("Coordinator not found for VIN %s", self._vin)
 
 
-class SAICMGOpenTailgateButton(SAICMGButton):
-    """Button to open the tailgate."""
-
-    def __init__(self, coordinator, client, vin_info, vin):
-        super().__init__(
-            coordinator, client, vin_info, vin, "Open Tailgate", "mdi:car-back"
-        )
-
-    async def async_press(self):
-        """Handle the button press."""
-        try:
-            await self._client.open_tailgate(self._vin)
-            LOGGER.info("Tailgate opened for VIN: %s", self._vin)
-            await self.schedule_data_refresh()
-        except Exception as e:
-            LOGGER.error("Error opening tailgate for VIN %s: %s", self._vin, e)
-
-
 class SAICMGTriggerAlarmButton(SAICMGButton):
     """Button to trigger the vehicle alarm."""
 
@@ -100,54 +79,6 @@ class SAICMGTriggerAlarmButton(SAICMGButton):
             await self.schedule_data_refresh()
         except Exception as e:
             LOGGER.error("Error triggering alarm for VIN %s: %s", self._vin, e)
-
-
-class SAICMGStartFrontDefrostButton(SAICMGButton):
-    """Button to start front defrost."""
-
-    def __init__(self, coordinator, client, vin_info, vin):
-        super().__init__(
-            coordinator,
-            client,
-            vin_info,
-            vin,
-            "Start Front Defrost",
-            "mdi:car-defrost-front",
-        )
-
-    async def async_press(self):
-        """Handle the button press."""
-        try:
-            await self._client.start_front_defrost(self._vin)
-            LOGGER.info("Front defrost started for VIN: %s", self._vin)
-            await self.schedule_data_refresh()
-        except Exception as e:
-            LOGGER.error("Error starting front defrost for VIN %s: %s", self._vin, e)
-
-
-class SAICMGControlRearWindowHeatButton(SAICMGButton):
-    """Button to activate rear window heat."""
-
-    def __init__(self, coordinator, client, vin_info, vin):
-        super().__init__(
-            coordinator,
-            client,
-            vin_info,
-            vin,
-            "Activate Rear Window Heat",
-            "mdi:car-defrost-rear",
-        )
-
-    async def async_press(self):
-        """Handle the button press."""
-        try:
-            await self._client.control_rear_window_heat(self._vin, True)
-            LOGGER.info("Rear window heat activated for VIN: %s", self._vin)
-            await self.schedule_data_refresh()
-        except Exception as e:
-            LOGGER.error(
-                "Error activating rear window heat for VIN %s: %s", self._vin, e
-            )
 
 
 class SAICMGUpdateDataButton(SAICMGButton):
