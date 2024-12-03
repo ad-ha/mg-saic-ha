@@ -119,6 +119,16 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 DATA_DECIMAL_CORRECTION,
                 "status",
             ),
+            SAICMGNextUpdateSensor(
+                coordinator,
+                entry,
+                "Next Update Time",
+                SensorDeviceClass.TIMESTAMP,
+                None,
+                "mdi:update",
+                None,
+                None,
+            ),
             SAICMGVehicleDetailSensor(
                 coordinator,
                 entry,
@@ -1214,7 +1224,7 @@ class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
         }
 
 
-# LAST UPDATE DATA SENSOR
+# LAST UPDATE TIME DATA SENSOR
 class SAICMGLastUpdateSensor(CoordinatorEntity, SensorEntity):
     """Sensor to display the timestamp of the last successful data update."""
 
@@ -1236,7 +1246,7 @@ class SAICMGLastUpdateSensor(CoordinatorEntity, SensorEntity):
         self._unit = unit
         self._icon = icon
         self._state_class = state_class
-        self._data_type = data_type  # This can be None for this sensor
+        self._data_type = data_type
         vin_info = self.coordinator.data["info"][0]
         self._vin_info = vin_info
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_last_update_time"
@@ -1262,6 +1272,83 @@ class SAICMGLastUpdateSensor(CoordinatorEntity, SensorEntity):
     def native_value(self):
         """Return the timestamp of the last successful data update."""
         return self.coordinator.last_update_time
+
+    @property
+    def device_class(self):
+        return self._device_class
+
+    @property
+    def icon(self):
+        return self._icon
+
+    @property
+    def native_unit_of_measurement(self):
+        return self._unit
+
+    @property
+    def state_class(self):
+        return self._state_class
+
+    @property
+    def device_info(self):
+        vin_info = self._vin_info
+        return {
+            "identifiers": {(DOMAIN, vin_info.vin)},
+            "name": f"{vin_info.brandName} {vin_info.modelName}",
+            "manufacturer": vin_info.brandName,
+            "model": vin_info.modelName,
+            "serial_number": vin_info.vin,
+        }
+
+
+# NEXT UPDATE TIME DATA SENSOR
+class SAICMGNextUpdateSensor(CoordinatorEntity, SensorEntity):
+    """Sensor to display the timestamp of the next scheduled data update."""
+
+    def __init__(
+        self,
+        coordinator,
+        entry,
+        name,
+        device_class,
+        unit,
+        icon,
+        state_class,
+        data_type,
+    ):
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._name = name
+        self._device_class = device_class
+        self._unit = unit
+        self._icon = icon
+        self._state_class = state_class
+        self._data_type = data_type
+        vin_info = self.coordinator.data["info"][0]
+        self._vin_info = vin_info
+        self._unique_id = f"{entry.entry_id}_{vin_info.vin}_next_update_time"
+
+    @property
+    def unique_id(self):
+        return self._unique_id
+
+    @property
+    def name(self):
+        return f"{self._vin_info.brandName} {self._vin_info.modelName} {self._name}"
+
+    @property
+    def available(self):
+        """Return True if the entity is available."""
+        return (
+            self.coordinator.last_update_success
+            and hasattr(self.coordinator, "next_update_time")
+            and self.coordinator.next_update_time is not None
+        )
+
+    @property
+    def native_value(self):
+        """Return the timestamp of the next scheduled data update."""
+        return self.coordinator.next_update_time
 
     @property
     def device_class(self):
