@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import asyncio
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util.dt import utcnow
 from .api import SAICMGAPIClient
 from .const import (
     DOMAIN,
@@ -31,10 +32,11 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         self.client = client
         self.config_entry = config_entry
         self.is_charging = False
+        self.is_powered_on = False
         self.is_initial_setup = False
 
         # Initialize update intervals from config_entry options, falling back to defaults if not set
-        self.update_interval = timedelta(
+        self.default_update_interval = timedelta(
             seconds=config_entry.options.get(
                 "scan_interval", UPDATE_INTERVAL.total_seconds()
             )
@@ -50,8 +52,14 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             )
         )
 
+        # Start with the default update interval
+        self.update_interval = self.default_update_interval
+
+        # Initialize next_update_time
+        self.next_update_time = None
+
         LOGGER.debug(
-            f"Update intervals initialized: Default: {self.update_interval}, Charging: {self.update_interval_charging}, Powered: {self.update_interval_powered}"
+            f"Update intervals initialized: Default: {self.default_update_interval}, Charging: {self.update_interval_charging}, Powered: {self.update_interval_powered}"
         )
 
         # Use the vehicle type from the config entry
@@ -60,8 +68,10 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
     async def async_update_options(self, options):
         """Update options and reschedule refresh."""
         # Update intervals from options
-        self.update_interval = timedelta(
-            seconds=options.get("scan_interval", self.update_interval.total_seconds())
+        self.default_update_interval = timedelta(
+            seconds=options.get(
+                "scan_interval", self.default_update_interval.total_seconds()
+            )
         )
         self.update_interval_charging = timedelta(
             seconds=options.get(
@@ -77,13 +87,19 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         )
 
         LOGGER.debug(
-            f"Update intervals updated via options: Normal: {self.update_interval}, Charging: {self.update_interval_charging}, Powered: {self.update_interval_powered}"
+            f"Update intervals updated via options: Default: {self.default_update_interval}, Charging: {self.update_interval_charging}, Powered: {self.update_interval_powered}"
         )
 
-        # Reschedule refresh
-        if self._unsub_refresh:
-            self._unsub_refresh()
-        self._schedule_refresh()
+        # Adjust the update interval if not charging or powered on
+        if not self.is_charging and not self.is_powered_on:
+            if self.update_interval != self.default_update_interval:
+                self.update_interval = self.default_update_interval
+                LOGGER.debug(
+                    f"Update interval reset to default: {self.update_interval}"
+                )
+                if self._unsub_refresh:
+                    self._unsub_refresh()
+                self._schedule_refresh()
 
     async def async_setup(self):
         """Set up the coordinator."""
@@ -129,20 +145,31 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             )
 
         # Determine charging status
+        self.is_charging = False
         if data.get("charging") is not None:
             chrg_data = getattr(data["charging"], "chrgMgmtData", None)
             if chrg_data is not None:
                 bms_chrg_sts = getattr(chrg_data, "bmsChrgSts", None)
                 self.is_charging = bms_chrg_sts in CHARGING_STATUS_CODES
+                LOGGER.debug(
+                    f"Charging status code: {bms_chrg_sts}, is_charging: {self.is_charging}"
+                )
+        else:
+            LOGGER.debug("Charging data not available.")
 
         # Determine if the vehicle is powered on
+        self.is_powered_on = False
         status_data = data.get("status")
         if status_data:
-            power_mode = getattr(status_data.basicVehicleStatus, "powerMode", None)
-            if power_mode in [2, 3]:
-                self.is_powered_on = True
-            else:
-                self.is_powered_on = False
+            basic_status = getattr(status_data, "basicVehicleStatus", None)
+            if basic_status:
+                power_mode = getattr(basic_status, "powerMode", None)
+                self.is_powered_on = power_mode in [2, 3]
+                LOGGER.debug(
+                    f"Power mode: {power_mode}, is_powered_on: {self.is_powered_on}"
+                )
+        else:
+            LOGGER.debug("Vehicle status data not available.")
 
         # Adjust Update Intervals
         if self.is_powered_on:
@@ -150,11 +177,13 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         elif self.is_charging:
             new_interval = self.update_interval_charging
         else:
-            new_interval = self.update_interval
+            new_interval = self.default_update_interval
 
         if self.update_interval != new_interval:
+            LOGGER.debug(
+                f"Update interval changed from {self.update_interval} to {new_interval}"
+            )
             self.update_interval = new_interval
-            LOGGER.debug(f"Update interval changed to {self.update_interval}")
             if self._unsub_refresh:
                 self._unsub_refresh()
             self._schedule_refresh()
@@ -169,6 +198,27 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         self.last_update_time = datetime.now(timezone.utc)
 
         return data
+
+    def _schedule_refresh(self):
+        """Schedule a refresh, and update next_update_time."""
+        if self._unsub_refresh:
+            self._unsub_refresh()
+            self._unsub_refresh = None
+
+        if self.update_interval is not None and self.update_interval > timedelta(0):
+            self._unsub_refresh = self.hass.helpers.event.async_track_point_in_utc_time(
+                self._handle_refresh_interval, utcnow() + self.update_interval
+            )
+            self.next_update_time = utcnow() + self.update_interval
+            LOGGER.debug(f"Next update scheduled at {self.next_update_time}")
+        else:
+            self.next_update_time = None
+            LOGGER.debug("Update interval is None or zero, no next update scheduled.")
+
+    async def _handle_refresh_interval(self, now):
+        """Handle a scheduled refresh."""
+        self._unsub_refresh = None
+        await self.async_refresh()
 
     async def _fetch_with_retries(self, fetch_func, is_generic_func, data_name):
         """Fetch data with retries and handle generic responses."""
