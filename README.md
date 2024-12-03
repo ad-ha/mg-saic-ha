@@ -71,6 +71,8 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - HVAC Status
 - Interior Temperature
 - Exterior Temperature
+- Last Update TIme
+- Next Update Time
 
 #### Tyre Pressure
 - Front Left Tyre Pressure
