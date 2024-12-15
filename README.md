@@ -46,7 +46,7 @@
 1. Go to Configuration -> Integrations.
 2. Click on the "+ Add Integration" button.
 3. Search for "MG SAIC" and follow the instructions to set up the integration.
-4. Select your type of account (email or phone), enter the details and select your region (EU, Asia, China)
+4. Select your type of account (email or phone), enter the details and select your region (EU, China, Australia, Rest of World)
 5. Once connected to the API, a list of available VINs associated with your account will be shown. Select the vehicle that you want to integrate and finish the process.
 
 You may add additional vehicles by following the same steps as above.
