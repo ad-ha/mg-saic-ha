@@ -73,6 +73,11 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - Exterior Temperature
 - Last Update TIme
 - Next Update Time
+- Front Left Heated Seat Level
+- Front Right Heated Seat Level
+- Last Powered Off
+- Last Powered On
+- Last Vehicle Activity
 
 #### Tyre Pressure
 - Front Left Tyre Pressure
@@ -84,6 +89,7 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - Charging Status
 - Charging Voltage
 - Charging Current
+- Charging Current Limit
 - Charging Power
 - Estimated Range After Charging
 - Charging Target SOC
@@ -123,6 +129,7 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - Start AC
 - Stop AC
 - Set Target SOC
+- Set Charging Current Limit
 - Open Tailgate
 - Tigger Find My Car Alarm
 - Start Charging (sometimes this service fails)
@@ -142,6 +149,7 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - Battery Heating
 - Sunroof
 - Charging Port
+- Individual Heated Seats
 
 ### BUTTONS
 - Tigger Alarm
@@ -158,6 +166,10 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 
 ### SLIDERS
 - Target SOC
+
+### SELECT
+- Charging Current Limit
+- Heated Seats Level
 
 **Note: Actions (Services) can be accessed and activated from the Actions menu under Developer Tools.**
 ![image](https://github.com/user-attachments/assets/14be0d41-ae65-4738-8bc0-5b0f743c290f)
