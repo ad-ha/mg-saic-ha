@@ -13,7 +13,10 @@ from homeassistant.const import (
     ATTR_TEMPERATURE,
 )
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from .const import DOMAIN, LOGGER
+from .const import (
+    DOMAIN,
+    LOGGER,
+)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -107,15 +110,38 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
             LOGGER.warning("Unsupported HVAC mode: %s", hvac_mode)
             return
         # Schedule data refresh
-        await self.coordinator.async_request_refresh()
+        immediate_interval = self.coordinator.after_action_delay
+        long_interval = self.coordinator.ac_long_interval
+
+        await self.coordinator.schedule_action_refresh(
+            self._vin,
+            immediate_interval,
+            long_interval,
+        )
 
     async def async_turn_on(self):
         """Turn the climate entity on."""
+        immediate_interval = self.coordinator.after_action_delay
+        long_interval = self.coordinator.ac_long_interval
+
         await self.async_set_hvac_mode(HVACMode.COOL)
+        await self.coordinator.schedule_action_refresh(
+            self._vin,
+            immediate_interval,
+            long_interval,
+        )
 
     async def async_turn_off(self):
         """Turn the climate entity off."""
+        immediate_interval = self.coordinator.after_action_delay
+        long_interval = self.coordinator.ac_long_interval
+
         await self.async_set_hvac_mode(HVACMode.OFF)
+        await self.coordinator.schedule_action_refresh(
+            self._vin,
+            immediate_interval,
+            long_interval,
+        )
 
     async def async_set_temperature(self, **kwargs):
         """Set new target temperature."""

@@ -4,29 +4,60 @@ control_charging_port_lock:
     vin:
       description: "Vehicle Identification Number."
       example: "1HGCM82633A123456"
+      selector:
+        text: {}
     unlock:
       description: "True to unlock charging port, false to lock."
       example: true
+      selector:
+        boolean: {}
 
 control_heated_seats:
-  description: "Control the heated seats"
+  description: "Control the heated seat levels for both front seats."
   fields:
     vin:
-      description: "Vehicle Identification Number"
+      description: "Vehicle Identification Number."
       example: "1HGCM82633A123456"
-    action:
-      description: "Turn on (true) or off (false)"
-      example: true
+      selector:
+        text: {}
+    left_level:
+      description: "Heating level for the left seat (0 = Off, 1 = Low, 2 = Medium, 3 = High)."
+      example: 2
+      selector:
+        select:
+          options:
+            - "0"
+            - "1"
+            - "2"
+            - "3"
+    right_level:
+      description: "Heating level for the right seat (0 = Off, 1 = Low, 2 = Medium, 3 = High)."
+      example: 3
+      selector:
+        select:
+          options:
+            - "0"
+            - "1"
+            - "2"
+            - "3"
+
 
 control_rear_window_heat:
-  description: "Control the rear window heat"
+  description: "Control the rear window heat."
   fields:
     vin:
-      description: "Vehicle Identification Number"
+      description: "Vehicle Identification Number."
       example: "1HGCM82633A123456"
+      selector:
+        text: {}
     action:
-      description: "Action to perform: 'start' or 'stop'"
+      description: "Action to perform."
       example: "start"
+      selector:
+        select:
+          options:
+            - "start"
+            - "stop"
 
 control_sunroof:
   description: "Control the sunroof (open or close)."
@@ -34,113 +65,180 @@ control_sunroof:
     vin:
       description: "Vehicle Identification Number."
       example: "1HGCM82633A123456"
+      selector:
+        text: {}
     should_open:
       description: "True to open the sunroof, false to close."
       example: true
+      selector:
+        boolean: {}
 
 lock_vehicle:
-  description: "Lock the vehicle"
+  description: "Lock the vehicle."
   fields:
     vin:
-      description: "Vehicle Identification Number"
+      description: "Vehicle Identification Number."
       example: "1HGCM82633A123456"
+      selector:
+        text: {}
 
 open_tailgate:
-  description: "Open the vehicle's tailgate"
+  description: "Open the vehicle's tailgate."
   fields:
     vin:
-      description: "Vehicle Identification Number"
+      description: "Vehicle Identification Number."
       example: "1HGCM82633A123456"
+      selector:
+        text: {}
+
+set_charging_current_limit:
+  description: "Set the charging current limit for the vehicle."
+  fields:
+    vin:
+      description: "Vehicle Identification Number."
+      example: "1HGCM82633A123456"
+      selector:
+        text: {}
+    current_limit:
+      description: "Select the desired charging current limit."
+      example: "16A"
+      selector:
+        select:
+          options:
+            - "0 (Ignore)"
+            - "6A"
+            - "8A"
+            - "16A"
+            - "Max"
 
 set_target_soc:
   description: "Set the target SOC (State of Charge) for the vehicle."
   fields:
     vin:
-      description: "Vehicle Identification Number"
+      description: "Vehicle Identification Number."
       example: "1HGCM82633A123456"
+      selector:
+        text: {}
     target_soc:
-      description: "Desired target SOC percentage (10-100)"
+      description: "Desired target SOC percentage (10-100)."
       example: 80
+      selector:
+        number:
+          min: 10
+          max: 100
+          step: 1
 
 start_ac:
-  description: "Start the vehicle's AC system"
+  description: "Start the vehicle's AC system."
   fields:
     vin:
-      description: "Vehicle Identification Number"
+      description: "Vehicle Identification Number."
       example: "1HGCM82633A123456"
+      selector:
+        text: {}
 
 start_ac_with_settings:
   description: "Start the vehicle's AC system with temperature and fan settings."
   fields:
     vin:
-      description: "Vehicle Identification Number"
+      description: "Vehicle Identification Number."
       example: "1HGCM82633A123456"
+      selector:
+        text: {}
     temperature:
-      description: "Desired temperature in degrees Celsius"
+      description: "Desired temperature in degrees Celsius."
       example: 22.5
+      selector:
+        number:
+          min: 16
+          max: 30
+          step: 0.5
     fan_speed:
-      description: "Fan speed level (e.g., 1-7)"
+      description: "Fan speed level (e.g., 1-7)."
       example: 3
+      selector:
+        number:
+          min: 1
+          max: 7
+          step: 1
 
 start_battery_heating:
-  description: "Start the vehicle battery heating process"
+  description: "Start the vehicle battery heating process."
   fields:
     vin:
-      description: "Vehicle Identification Number"
+      description: "Vehicle Identification Number."
       example: "1HGCM82633A123456"
+      selector:
+        text: {}
 
 start_charging:
-  description: "Start the vehicle charging process"
+  description: "Start the vehicle charging process."
   fields:
     vin:
-      description: "Vehicle Identification Number"
+      description: "Vehicle Identification Number."
       example: "1HGCM82633A123456"
+      selector:
+        text: {}
 
 start_front_defrost:
-  description: "Start the front defrost system of the vehicle"
+  description: "Start the front defrost system of the vehicle."
   fields:
     vin:
-      description: "Vehicle Identification Number"
+      description: "Vehicle Identification Number."
       example: "1HGCM82633A123456"
+      selector:
+        text: {}
 
 stop_ac:
-  description: "Stop the vehicle's AC system"
+  description: "Stop the vehicle's AC system."
   fields:
     vin:
-      description: "Vehicle Identification Number"
+      description: "Vehicle Identification Number."
       example: "1HGCM82633A123456"
+      selector:
+        text: {}
 
 stop_battery_heating:
-  description: "Stop the vehicle battery heating process"
+  description: "Stop the vehicle battery heating process."
   fields:
     vin:
-      description: "Vehicle Identification Number"
+      description: "Vehicle Identification Number."
       example: "1HGCM82633A123456"
+      selector:
+        text: {}
 
 stop_charging:
-  description: "Stop the vehicle charging process"
+  description: "Stop the vehicle charging process."
   fields:
     vin:
-      description: "Vehicle Identification Number"
+      description: "Vehicle Identification Number."
       example: "1HGCM82633A123456"
+      selector:
+        text: {}
 
 trigger_alarm:
-  description: "Trigger the vehicle's alarm"
+  description: "Trigger the vehicle's alarm."
   fields:
     vin:
-      description: "Vehicle Identification Number"
+      description: "Vehicle Identification Number."
       example: "1HGCM82633A123456"
+      selector:
+        text: {}
 
 unlock_vehicle:
-  description: "Unlock the vehicle"
+  description: "Unlock the vehicle."
   fields:
     vin:
-      description: "Vehicle Identification Number"
+      description: "Vehicle Identification Number."
       example: "1HGCM82633A123456"
+      selector:
+        text: {}
 
 update_vehicle_data:
   description: "Manually trigger a data update from the vehicle."
   fields:
     vin:
-      description: "Vehicle Identification Number"
+      description: "Vehicle Identification Number."
       example: "1HGCM82633A123456"
+      selector:
+        text: {}

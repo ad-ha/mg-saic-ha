@@ -4,7 +4,17 @@ import voluptuous as vol
 import asyncio
 
 from .api import SAICMGAPIClient
-from .const import DOMAIN, LOGGER
+from .coordinator import SAICMGDataUpdateCoordinator
+from .const import (
+    DOMAIN,
+    LOGGER,
+    ChargeCurrentLimitOption,
+    BatterySoc,
+)
+from saic_ismart_client_ng.api.vehicle_charging import (
+    TargetBatteryCode,
+    ChargeCurrentLimitCode as ExternalChargeCurrentLimitCode,
+)
 
 SERVICE_CONTROL_CHARGING_PORT_LOCK = "control_charging_port_lock"
 SERVICE_CONTROL_HEATED_SEATS = "control_heated_seats"
@@ -15,6 +25,7 @@ SERVICE_UNLOCK_VEHICLE = "unlock_vehicle"
 SERVICE_START_AC = "start_ac"
 SERVICE_STOP_AC = "stop_ac"
 SERVICE_OPEN_TAILGATE = "open_tailgate"
+SERVICE_SET_CHARGING_CURRENT_LIMIT = "set_charging_current_limit"
 SERVICE_SET_TARGET_SOC = "set_target_soc"
 SERVICE_START_AC_WITH_SETTINGS = "start_ac_with_settings"
 SERVICE_START_BATTERY_HEATING = "start_battery_heating"
@@ -30,6 +41,14 @@ SERVICE_ACTION_SCHEMA = vol.Schema(
     {
         vol.Required("vin"): cv.string,
         vol.Required("action"): cv.boolean,
+    }
+)
+
+SERVICE_CONTROL_HEATED_SEAT_SCHEMA = vol.Schema(
+    {
+        vol.Required("vin"): cv.string,
+        vol.Required("seat"): vol.In(["front_left", "front_right"]),
+        vol.Required("level"): vol.All(vol.Coerce(int), vol.Range(min=0, max=3)),
     }
 )
 
@@ -55,6 +74,15 @@ SERVICE_START_AC_WITH_SETTINGS_SCHEMA = vol.Schema(
     }
 )
 
+SERVICE_SET_CHARGING_CURRENT_LIMIT_SCHEMA = vol.Schema(
+    {
+        vol.Required("vin"): cv.string,
+        vol.Required("current_limit"): vol.In(
+            [e.limit for e in ChargeCurrentLimitOption]
+        ),
+    }
+)
+
 SERVICE_SET_TARGET_SOC_SCHEMA = vol.Schema(
     {
         vol.Required("vin"): cv.string,
@@ -72,29 +100,27 @@ SERVICE_SUNROOF_SCHEMA = vol.Schema(
 SERVICE_VIN_SCHEMA = vol.Schema({vol.Required("vin"): cv.string})
 
 
-async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> None:
+async def async_setup_services(
+    hass: HomeAssistant,
+    client: SAICMGAPIClient,
+    coordinator: SAICMGDataUpdateCoordinator,
+) -> None:
     """Set up services for the MG SAIC integration."""
-
-    async def schedule_data_refresh(vin: str):
-        """Schedule a data refresh for the coordinator associated with the VIN."""
-        coordinators_by_vin = hass.data[DOMAIN].get("coordinators_by_vin", {})
-        coordinator = coordinators_by_vin.get(vin)
-        if coordinator:
-
-            async def delayed_refresh():
-                await asyncio.sleep(15)
-                await coordinator.async_request_refresh()
-
-            hass.async_create_task(delayed_refresh())
-        else:
-            LOGGER.warning("Coordinator not found for VIN %s", vin)
 
     async def handle_lock_vehicle(call: ServiceCall) -> None:
         """Handle the lock_vehicle service call."""
         vin = call.data["vin"]
         try:
+            immediate_interval = coordinator.after_action_delay
+            long_interval = coordinator.ac_long_interval
+
             await client.lock_vehicle(vin)
             LOGGER.info("Vehicle locked successfully for VIN: %s", vin)
+            await coordinator.schedule_action_refresh(
+                vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
             LOGGER.error("Error locking vehicle for VIN %s: %s", vin, e)
 
@@ -111,8 +137,16 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
         """Handle the start_ac service call."""
         vin = call.data["vin"]
         try:
+            immediate_interval = coordinator.after_action_delay
+            long_interval = coordinator.ac_long_interval
+
             await client.start_ac(vin)
             LOGGER.info("AC started successfully for VIN: %s", vin)
+            await coordinator.schedule_action_refresh(
+                vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
             LOGGER.error("Error starting AC for VIN %s: %s", vin, e)
 
@@ -120,8 +154,16 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
         """Handle the stop_ac service call."""
         vin = call.data["vin"]
         try:
+            immediate_interval = coordinator.after_action_delay
+            long_interval = coordinator.ac_long_interval
+
             await client.stop_ac(vin)
             LOGGER.info("AC stopped successfully for VIN: %s", vin)
+            await coordinator.schedule_action_refresh(
+                vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
             LOGGER.error("Error stopping AC for VIN %s: %s", vin, e)
 
@@ -131,6 +173,9 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
         temperature = call.data["temperature"]
         fan_speed = call.data["fan_speed"]
         try:
+            immediate_interval = coordinator.after_action_delay
+            long_interval = coordinator.ac_long_interval
+
             await client.start_climate(vin, temperature, fan_speed)
             LOGGER.info(
                 "AC started with temperature %s°C and fan speed %s for VIN: %s",
@@ -138,7 +183,11 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
                 fan_speed,
                 vin,
             )
-            await schedule_data_refresh(vin)
+            await coordinator.schedule_action_refresh(
+                vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
             LOGGER.error("Error starting AC with settings for VIN %s: %s", vin, e)
 
@@ -146,8 +195,16 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
         """Handle the open_tailgate service call."""
         vin = call.data["vin"]
         try:
+            immediate_interval = coordinator.after_action_delay
+            long_interval = coordinator.tailgate_long_interval
+
             await client.open_tailgate(vin)
             LOGGER.info("Tailgate opened successfully for VIN: %s", vin)
+            await coordinator.schedule_action_refresh(
+                vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
             LOGGER.error("Error opening tailgate for VIN %s: %s", vin, e)
 
@@ -155,8 +212,15 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
         """Handle the trigger_alarm service call."""
         vin = call.data["vin"]
         try:
+            immediate_interval = coordinator.after_action_delay
+            long_interval = coordinator.alarm_long_interval
             await client.trigger_alarm(vin)
             LOGGER.info("Alarm triggered successfully for VIN: %s", vin)
+            await coordinator.schedule_action_refresh(
+                vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
             LOGGER.error("Error triggering alarm for VIN %s: %s", vin, e)
 
@@ -164,9 +228,17 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
         """Handle the start_charging service call."""
         vin = call.data["vin"]
         try:
+            immediate_interval = coordinator.after_action_delay
+            long_interval = coordinator.charging_long_interval
+
             LOGGER.debug(f"Sending start charging command for VIN: {vin}")
             await client.send_vehicle_charging_control(vin, "start")
             LOGGER.info(f"Charging started successfully for VIN: {vin}")
+            await coordinator.schedule_action_refresh(
+                vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
             LOGGER.error(f"Error starting charging for VIN {vin}: {e}")
 
@@ -174,9 +246,17 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
         """Handle the stop_charging service call."""
         vin = call.data["vin"]
         try:
+            immediate_interval = coordinator.after_action_delay
+            long_interval = coordinator.charging_long_interval
+
             LOGGER.debug(f"Sending stop charging command for VIN: {vin}")
             await client.send_vehicle_charging_control(vin, "stop")
             LOGGER.info(f"Charging stopped successfully for VIN: {vin}")
+            await coordinator.schedule_action_refresh(
+                vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
             LOGGER.error(f"Error stopping charging for VIN {vin}: {e}")
 
@@ -184,9 +264,17 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
         """Handle the start_battery_heating service call."""
         vin = call.data["vin"]
         try:
+            immediate_interval = coordinator.after_action_delay
+            long_interval = coordinator.battery_heating_long_interval
+
             LOGGER.debug(f"Sending start battery heating command for VIN: {vin}")
             await client.send_vehicle_charging_ptc_heat(vin, "start")
             LOGGER.info(f"Battery heating started successfully for VIN: {vin}")
+            await coordinator.schedule_action_refresh(
+                vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
             LOGGER.error(f"Error starting battery heating for VIN {vin}: {e}")
 
@@ -194,18 +282,98 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
         """Handle the stop_battery_heating service call."""
         vin = call.data["vin"]
         try:
+            immediate_interval = coordinator.after_action_delay
+            long_interval = coordinator.battery_heating_long_interval
+
             LOGGER.debug(f"Sending stop battery heating command for VIN: {vin}")
             await client.send_vehicle_charging_ptc_heat(vin, "stop")
             LOGGER.info(f"Battery heating stopped successfully for VIN: {vin}")
+            await coordinator.schedule_action_refresh(
+                vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
             LOGGER.error(f"Error stopping battery heating for VIN {vin}: {e}")
+
+    async def handle_set_charging_current(call: ServiceCall):
+        """Handle the service call to set charging current."""
+        vin = call.data["vin"]
+        current_limit = call.data["current_limit"]
+        try:
+            immediate_interval = coordinator.after_action_delay
+            long_interval = coordinator.charging_current_long_interval
+
+            # Map the string option to the local enum
+            selected_code = ChargeCurrentLimitOption.to_code(current_limit)
+
+            # Get the current target_soc from coordinator's data
+            charging_data = coordinator.data.get("charging")
+            if not charging_data:
+                LOGGER.error(
+                    "No charging data available to set charging current limit."
+                )
+                return
+
+            chrg_mgmt_data = getattr(charging_data, "chrgMgmtData", None)
+            if not chrg_mgmt_data:
+                LOGGER.error(
+                    "No charging management data available to set charging current limit."
+                )
+                return
+
+            target_soc_value = getattr(chrg_mgmt_data, "bmsOnBdChrgTrgtSOCDspCmd", None)
+            if target_soc_value is None:
+                LOGGER.error(
+                    "Target SOC value is not available to set charging current limit."
+                )
+                return
+
+            # Map the target_soc_value to BatterySoc enum
+            target_soc_enum = {
+                1: BatterySoc.SOC_40,
+                2: BatterySoc.SOC_50,
+                3: BatterySoc.SOC_60,
+                4: BatterySoc.SOC_70,
+                5: BatterySoc.SOC_80,
+                6: BatterySoc.SOC_90,
+                7: BatterySoc.SOC_100,
+            }.get(target_soc_value, None)
+
+            if target_soc_enum is None:
+                LOGGER.error(f"Unknown target SOC value: {target_soc_value}")
+                raise ValueError(f"Unknown target SOC value: {target_soc_value}")
+
+            # Set the charging current limit with target_soc
+            await client.set_current_limit(vin, target_soc_enum, selected_code)
+            LOGGER.info(
+                "Charging current limit set to %s successfully for VIN: %s",
+                current_limit,
+                vin,
+            )
+            await coordinator.schedule_action_refresh(
+                vin,
+                immediate_interval,
+                long_interval,
+            )
+        except Exception as e:
+            LOGGER.error("Failed to set charging current limit for VIN %s: %s", vin, e)
 
     async def handle_set_target_soc(call: ServiceCall) -> None:
         """Handle the set_target_soc service call."""
         vin = call.data["vin"]
         target_soc = call.data["target_soc"]
         try:
+            immediate_interval = coordinator.after_action_delay
+            long_interval = coordinator.target_soc_long_interval
+
             await client.set_target_soc(vin, target_soc)
+            LOGGER.info("%s Target SOC set for VIN: %s", target_soc, vin)
+            await coordinator.schedule_action_refresh(
+                vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
             LOGGER.error("Error setting target SOC for VIN %s: %s", vin, e)
 
@@ -214,18 +382,40 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
         vin = call.data["vin"]
         action = call.data["action"]
         try:
+            immediate_interval = coordinator.after_action_delay
+            long_interval = coordinator.rear_window_heat_long_interval
+
             await client.control_rear_window_heat(vin, action)
             LOGGER.info("Rear window heat %sed for VIN: %s", action, vin)
+            await coordinator.schedule_action_refresh(
+                vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
             LOGGER.error("Error controlling rear window heat for VIN %s: %s", vin, e)
 
     async def handle_control_heated_seats(call: ServiceCall) -> None:
         """Handle the control_heated_seats service call."""
         vin = call.data["vin"]
-        action = call.data["action"]
+        left_level = call.data.get("left_level", 0)
+        right_level = call.data.get("right_level", 0)
         try:
-            await client.control_heated_seats(vin, action)
-            LOGGER.info("Heated seats controlled successfully for VIN: %s", vin)
+            immediate_interval = coordinator.after_action_delay
+            long_interval = coordinator.heated_seats_long_interval
+
+            await client.control_heated_seats(vin, left_level, right_level)
+            LOGGER.info(
+                "Heated seats set: Left = %d, Right = %d for VIN: %s",
+                left_level,
+                right_level,
+                vin,
+            )
+            await coordinator.schedule_action_refresh(
+                vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
             LOGGER.error("Error controlling heated seats for VIN %s: %s", vin, e)
 
@@ -233,8 +423,16 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
         """Handle the start_front_defrost service call."""
         vin = call.data["vin"]
         try:
+            immediate_interval = coordinator.after_action_delay
+            long_interval = coordinator.front_defrost_long_interval
+
             await client.start_front_defrost(vin)
             LOGGER.info("Front defrost started successfully for VIN: %s", vin)
+            await coordinator.schedule_action_refresh(
+                vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
             LOGGER.error("Error starting front defrost for VIN %s: %s", vin, e)
 
@@ -253,8 +451,16 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
         vin = call.data["vin"]
         should_open = call.data["should_open"]
         try:
+            immediate_interval = coordinator.after_action_delay
+            long_interval = coordinator.sunroof_long_interval
+
             await client.control_sunroof(vin, should_open)
             LOGGER.info("Sunroof control action completed for VIN: %s", vin)
+            await coordinator.schedule_action_refresh(
+                vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
             LOGGER.error("Error controlling sunroof for VIN %s: %s", vin, e)
 
@@ -262,8 +468,16 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
         vin = call.data["vin"]
         unlock = call.data["unlock"]
         try:
+            immediate_interval = coordinator.after_action_delay
+            long_interval = coordinator.charging_port_lock_long_interval
+
             await client.control_charging_port_lock(vin, unlock)
             LOGGER.info("Charging port lock control action completed for VIN: %s", vin)
+            await coordinator.schedule_action_refresh(
+                vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
             LOGGER.error("Error controlling charging port lock for VIN %s: %s", vin, e)
 
@@ -278,7 +492,7 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
         DOMAIN,
         SERVICE_CONTROL_HEATED_SEATS,
         handle_control_heated_seats,
-        schema=SERVICE_ACTION_SCHEMA,
+        schema=SERVICE_CONTROL_HEATED_SEAT_SCHEMA,
     )
     hass.services.async_register(
         DOMAIN,
@@ -297,6 +511,12 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
     )
     hass.services.async_register(
         DOMAIN, SERVICE_OPEN_TAILGATE, handle_open_tailgate, schema=SERVICE_VIN_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_CHARGING_CURRENT_LIMIT,
+        handle_set_charging_current,
+        schema=SERVICE_SET_CHARGING_CURRENT_LIMIT_SCHEMA,
     )
     hass.services.async_register(
         DOMAIN,
@@ -364,6 +584,7 @@ async def async_unload_services(hass: HomeAssistant) -> None:
     hass.services.async_remove(DOMAIN, SERVICE_CONTROL_SUNROOF)
     hass.services.async_remove(DOMAIN, SERVICE_LOCK_VEHICLE)
     hass.services.async_remove(DOMAIN, SERVICE_OPEN_TAILGATE)
+    hass.services.async_remove(DOMAIN, SERVICE_SET_CHARGING_CURRENT_LIMIT)
     hass.services.async_remove(DOMAIN, SERVICE_SET_TARGET_SOC)
     hass.services.async_remove(DOMAIN, SERVICE_START_AC)
     hass.services.async_remove(DOMAIN, SERVICE_START_AC_WITH_SETTINGS)

@@ -6,16 +6,33 @@ from .const import (
     DOMAIN,
     LOGGER,
     COUNTRY_CODES,
+    REGION_CHOICES,
+    REGION_BASE_URIS,
     UPDATE_INTERVAL,
     UPDATE_INTERVAL_CHARGING,
     UPDATE_INTERVAL_POWERED,
-    REGION_CHOICES,
-    REGION_BASE_URIS,
+    UPDATE_INTERVAL_AFTER_SHUTDOWN,
+    UPDATE_INTERVAL_GRACE_PERIOD,
+    AFTER_ACTION_UPDATE_INTERVAL_DELAY,
+    DEFAULT_ALARM_LONG_INTERVAL,
+    DEFAULT_AC_LONG_INTERVAL,
+    DEFAULT_FRONT_DEFROST_LONG_INTERVAL,
+    DEFAULT_REAR_WINDOW_HEAT_LONG_INTERVAL,
+    DEFAULT_LOCK_UNLOCK_LONG_INTERVAL,
+    DEFAULT_CHARGING_PORT_LOCK_LONG_INTERVAL,
+    DEFAULT_HEATED_SEATS_LONG_INTERVAL,
+    DEFAULT_BATTERY_HEATING_LONG_INTERVAL,
+    DEFAULT_CHARGING_LONG_INTERVAL,
+    DEFAULT_SUNROOF_LONG_INTERVAL,
+    DEFAULT_TAILGATE_LONG_INTERVAL,
+    DEFAULT_TARGET_SOC_LONG_INTERVAL,
+    DEFAULT_CHARGING_CURRENT_LONG_INTERVAL,
+    CONF_HAS_SUNROOF,
+    CONF_HAS_HEATED_SEATS,
+    CONF_HAS_BATTERY_HEATING,
 )
 from saic_ismart_client_ng import SaicApi
 from saic_ismart_client_ng.model import SaicApiConfiguration
-
-_LOGGER = logging.getLogger(__name__)
 
 
 @callback
@@ -40,7 +57,7 @@ class SAICMGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self.region = None
         self.vin = None
         self.vehicles = []
-        self.vehicle_type = None  # Store vehicle type (BEV, PHEV, HEV, ICE)
+        self.vehicle_type = None
 
     async def async_step_user(self, user_input=None):
         errors = {}
@@ -131,6 +148,37 @@ class SAICMGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="select_vehicle", data_schema=data_schema, errors=errors
         )
 
+    async def async_step_vehicle_capabilities(self, user_input=None):
+        """Step for configuring vehicle capabilities."""
+        errors = {}
+        if user_input is not None:
+            return self.async_create_entry(
+                title=f"MG SAIC - {self.vin}",
+                data={
+                    "username": self.username,
+                    "password": self.password,
+                    "country_code": self.country_code,
+                    "region": self.region,
+                    "vin": self.vin,
+                    "login_type": self.login_type,
+                    "has_sunroof": user_input["has_sunroof"],
+                    "has_heated_seats": user_input["has_heated_seats"],
+                    "has_battery_heating": user_input["has_battery_heating"],
+                },
+            )
+
+        data_schema = vol.Schema(
+            {
+                vol.Required("has_sunroof", default=False): bool,
+                vol.Required("has_heated_seats", default=False): bool,
+                vol.Required("has_battery_heating", default=False): bool,
+            }
+        )
+
+        return self.async_show_form(
+            step_id="vehicle_capabilities", data_schema=data_schema, errors=errors
+        )
+
     async def fetch_vehicle_data(self, username_is_email):
         """Authenticate and fetch vehicle data."""
 
@@ -190,36 +238,174 @@ class SAICMGOptionsFlowHandler(config_entries.OptionsFlow):
 
     def __init__(self, config_entry):
         """Initialize options flow."""
-        self.config_entry = config_entry
+        self.entry_id = config_entry.entry_id
 
     async def async_step_init(self, user_input=None):
         """Manage the options."""
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
+        self.options = self.config_entry.options
+
+        # Access options directly using self.options
         data_schema = vol.Schema(
             {
+                # Vehicle Capabilities
                 vol.Optional(
-                    "scan_interval",
-                    default=self.config_entry.options.get(
-                        "scan_interval", int(UPDATE_INTERVAL.total_seconds())
-                    ),
-                ): vol.All(vol.Coerce(int), vol.Range(min=60)),
+                    "has_sunroof",
+                    default=self.options.get("has_sunroof", False),
+                ): bool,
                 vol.Optional(
-                    "charging_scan_interval",
-                    default=self.config_entry.options.get(
-                        "charging_scan_interval",
-                        int(UPDATE_INTERVAL_CHARGING.total_seconds()),
-                    ),
-                ): vol.All(vol.Coerce(int), vol.Range(min=60)),
+                    "has_heated_seats",
+                    default=self.options.get("has_heated_seats", False),
+                ): bool,
                 vol.Optional(
-                    "powered_scan_interval",
-                    default=self.config_entry.options.get(
-                        "powered_scan_interval",
-                        int(UPDATE_INTERVAL_POWERED.total_seconds()),
+                    "has_battery_heating",
+                    default=self.options.get("has_battery_heating", False),
+                ): bool,
+                # Update Intervals in minutes
+                vol.Optional(
+                    "update_interval",
+                    default=self.options.get(
+                        "update_interval", self.get_minutes(UPDATE_INTERVAL)
                     ),
-                ): vol.All(vol.Coerce(int), vol.Range(min=60)),
+                ): vol.All(vol.Coerce(int), vol.Range(min=1)),
+                vol.Optional(
+                    "charging_update_interval",
+                    default=self.options.get(
+                        "charging_update_interval",
+                        self.get_minutes(UPDATE_INTERVAL_CHARGING),
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=1)),
+                vol.Optional(
+                    "powered_update_interval",
+                    default=self.options.get(
+                        "powered_update_interval",
+                        self.get_minutes(UPDATE_INTERVAL_POWERED),
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=1)),
+                vol.Optional(
+                    "after_shutdown_update_interval",
+                    default=self.options.get(
+                        "after_shutdown_update_interval",
+                        self.get_minutes(UPDATE_INTERVAL_AFTER_SHUTDOWN),
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=1)),
+                vol.Optional(
+                    "grace_period_update_interval",
+                    default=self.options.get(
+                        "grace_period_update_interval",
+                        self.get_minutes(UPDATE_INTERVAL_GRACE_PERIOD),
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=1)),
+                # After action delay in seconds
+                vol.Optional(
+                    "after_action_delay",
+                    default=self.options.get(
+                        "after_action_delay",
+                        self.get_seconds(AFTER_ACTION_UPDATE_INTERVAL_DELAY),
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=1)),
+                # Long-interval updates after actions in minutes
+                vol.Optional(
+                    "alarm_long_interval",
+                    default=self.options.get(
+                        "alarm_long_interval",
+                        self.get_minutes(DEFAULT_ALARM_LONG_INTERVAL),
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=1)),
+                vol.Optional(
+                    "ac_long_interval",
+                    default=self.options.get(
+                        "ac_long_interval", self.get_minutes(DEFAULT_AC_LONG_INTERVAL)
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=1)),
+                vol.Optional(
+                    "front_defrost_long_interval",
+                    default=self.options.get(
+                        "front_defrost_long_interval",
+                        self.get_minutes(DEFAULT_FRONT_DEFROST_LONG_INTERVAL),
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=1)),
+                vol.Optional(
+                    "rear_window_heat_long_interval",
+                    default=self.options.get(
+                        "rear_window_heat_long_interval",
+                        self.get_minutes(DEFAULT_REAR_WINDOW_HEAT_LONG_INTERVAL),
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=1)),
+                vol.Optional(
+                    "lock_unlock_long_interval",
+                    default=self.options.get(
+                        "lock_unlock_long_interval",
+                        self.get_minutes(DEFAULT_LOCK_UNLOCK_LONG_INTERVAL),
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=1)),
+                vol.Optional(
+                    "charging_port_lock_long_interval",
+                    default=self.options.get(
+                        "charging_port_lock_long_interval",
+                        self.get_minutes(DEFAULT_CHARGING_PORT_LOCK_LONG_INTERVAL),
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=1)),
+                vol.Optional(
+                    "heated_seats_long_interval",
+                    default=self.options.get(
+                        "heated_seats_long_interval",
+                        self.get_minutes(DEFAULT_HEATED_SEATS_LONG_INTERVAL),
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=1)),
+                vol.Optional(
+                    "battery_heating_long_interval",
+                    default=self.options.get(
+                        "battery_heating_long_interval",
+                        self.get_minutes(DEFAULT_BATTERY_HEATING_LONG_INTERVAL),
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=1)),
+                vol.Optional(
+                    "charging_long_interval",
+                    default=self.options.get(
+                        "charging_long_interval",
+                        self.get_minutes(DEFAULT_CHARGING_LONG_INTERVAL),
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=1)),
+                vol.Optional(
+                    "sunroof_long_interval",
+                    default=self.options.get(
+                        "sunroof_long_interval",
+                        self.get_minutes(DEFAULT_SUNROOF_LONG_INTERVAL),
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=1)),
+                vol.Optional(
+                    "tailgate_long_interval",
+                    default=self.options.get(
+                        "tailgate_long_interval",
+                        self.get_minutes(DEFAULT_TAILGATE_LONG_INTERVAL),
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=1)),
+                vol.Optional(
+                    "target_soc_long_interval",
+                    default=self.options.get(
+                        "target_soc_long_interval",
+                        self.get_minutes(DEFAULT_TARGET_SOC_LONG_INTERVAL),
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=1)),
+                vol.Optional(
+                    "charging_current_long_interval",
+                    default=self.options.get(
+                        "charging_current_long_interval",
+                        self.get_minutes(DEFAULT_CHARGING_CURRENT_LONG_INTERVAL),
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=1)),
             }
         )
 
         return self.async_show_form(step_id="init", data_schema=data_schema)
+
+    def get_minutes(self, interval):
+        """Convert timedelta to minutes."""
+        return int(interval.total_seconds() // 60)
+
+    def get_seconds(self, interval):
+        """Convert timedelta to seconds."""
+        return int(interval.total_seconds())

@@ -1,27 +1,20 @@
 import logging
+import voluptuous as vol
+from homeassistant.helpers import config_validation as cv
 from datetime import timedelta
 from enum import Enum
+from typing import Union
 
 LOGGER = logging.getLogger(__package__)
 
 DOMAIN = "mg_saic"
 
-# Conversion factors
-PRESSURE_TO_BAR = 0.04
-DATA_DECIMAL_CORRECTION = 0.1
-DATA_DECIMAL_CORRECTION_SOC = 0.1
-DATA_100_DECIMAL_CORRECTION = 0.01
-
-# Conversion factors for charging data
-CHARGING_CURRENT_FACTOR = 0.05
-CHARGING_VOLTAGE_FACTOR = 0.25
-
 # API Base Urls
 REGION_BASE_URIS = {
     "EU": "https://gateway-mg-eu.soimt.com/api.app/v1/",
     "China": "https://tap-cn.soimt.com/api.app/v1/",
-    "Rest of World": "https://gateway-mg-eu.soimt.com/api.app/v1/",
     "Australia": "https://gateway-mg-au.soimt.com/api.app/v1/",
+    "Rest of World": "https://gateway-mg-eu.soimt.com/api.app/v1/",
 }
 
 # List of regions for selection in the config flow
@@ -95,11 +88,47 @@ COUNTRY_CODES = [
     {"code": "+972", "country": "Israel"},
 ]
 
+# Conversion factors
+PRESSURE_TO_BAR = 0.04
+DATA_DECIMAL_CORRECTION = 0.1
+DATA_DECIMAL_CORRECTION_SOC = 0.1
+DATA_100_DECIMAL_CORRECTION = 0.01
 
-# Update Settings
-UPDATE_INTERVAL = timedelta(minutes=120)
+# Conversion factors for charging data
+CHARGING_CURRENT_FACTOR = 0.05
+CHARGING_VOLTAGE_FACTOR = 0.25
+
+# Base update intervals
+UPDATE_INTERVAL = timedelta(minutes=60)
 UPDATE_INTERVAL_CHARGING = timedelta(minutes=10)
 UPDATE_INTERVAL_POWERED = timedelta(minutes=15)
+
+# Additional Update Intervals
+UPDATE_INTERVAL_AFTER_SHUTDOWN = timedelta(minutes=2)
+UPDATE_INTERVAL_GRACE_PERIOD = timedelta(minutes=10)
+
+# After action immediate and refresh intervals
+AFTER_ACTION_UPDATE_INTERVAL_DELAY = timedelta(seconds=15)
+
+# Default additional long-interval updates after actions
+DEFAULT_ALARM_LONG_INTERVAL = timedelta(minutes=5)
+DEFAULT_AC_LONG_INTERVAL = timedelta(minutes=15)
+DEFAULT_FRONT_DEFROST_LONG_INTERVAL = timedelta(minutes=15)
+DEFAULT_REAR_WINDOW_HEAT_LONG_INTERVAL = timedelta(minutes=15)
+DEFAULT_LOCK_UNLOCK_LONG_INTERVAL = timedelta(minutes=5)
+DEFAULT_CHARGING_PORT_LOCK_LONG_INTERVAL = timedelta(minutes=5)
+DEFAULT_HEATED_SEATS_LONG_INTERVAL = timedelta(minutes=15)
+DEFAULT_BATTERY_HEATING_LONG_INTERVAL = timedelta(minutes=15)
+DEFAULT_CHARGING_LONG_INTERVAL = timedelta(minutes=5)
+DEFAULT_SUNROOF_LONG_INTERVAL = timedelta(minutes=5)
+DEFAULT_TAILGATE_LONG_INTERVAL = timedelta(minutes=5)
+DEFAULT_TARGET_SOC_LONG_INTERVAL = timedelta(minutes=5)
+DEFAULT_CHARGING_CURRENT_LONG_INTERVAL = timedelta(minutes=5)
+
+# Configuration Options
+CONF_HAS_SUNROOF = "has_sunroof"
+CONF_HAS_HEATED_SEATS = "has_heated_seats"
+CONF_HAS_BATTERY_HEATING = "has_battery_heating"
 
 # Generic response tresholds
 GENERIC_RESPONSE_SOC_THRESHOLD = 1000
@@ -112,21 +141,27 @@ RETRY_BACKOFF_FACTOR = 15
 # Charging status codes indicating that the vehicle is charging
 CHARGING_STATUS_CODES = {1, 3, 10, 12}
 
+# Charging Current Limit options
+CHARGING_CURRENT_OPTIONS = ["0A (Ignore)", "6A", "8A", "16A", "Max"]
+
 # Platforms
 PLATFORMS = [
-    "sensor",
     "binary_sensor",
-    "device_tracker",
     "button",
     "climate",
-    "number",
-    "switch",
+    "device_tracker",
     "lock",
+    "number",
+    "select",
+    "sensor",
+    "switch",
 ]
 
 
 # Battery SOC
 class BatterySoc(Enum):
+    """Enum for Battery SOC identification"""
+
     SOC_40 = 1
     SOC_50 = 2
     SOC_60 = 3
@@ -134,6 +169,57 @@ class BatterySoc(Enum):
     SOC_80 = 5
     SOC_90 = 6
     SOC_100 = 7
+
+
+# Charge Current Limit
+class ChargeCurrentLimitOption(Enum):
+    C_IGNORE = 0
+    C_6A = 1
+    C_8A = 2
+    C_16A = 3
+    C_MAX = 4
+
+    @staticmethod
+    def to_code(limit: Union[str, "ChargeCurrentLimitOption"]):
+        LOGGER.debug(f"Converting limit: {limit} (type: {type(limit)}) to code")
+        if isinstance(limit, ChargeCurrentLimitOption):
+            return limit
+        if isinstance(limit, str):
+            limit_upper = limit.upper()
+            match limit_upper:
+                case "6A":
+                    return ChargeCurrentLimitOption.C_6A
+                case "8A":
+                    return ChargeCurrentLimitOption.C_8A
+                case "16A":
+                    return ChargeCurrentLimitOption.C_16A
+                case "MAX":
+                    return ChargeCurrentLimitOption.C_MAX
+                case "0A (IGNORE)":
+                    return ChargeCurrentLimitOption.C_IGNORE
+                case "0A":
+                    return ChargeCurrentLimitOption.C_IGNORE
+                case _:
+                    LOGGER.error(f"Unknown charge current limit: {limit}")
+                    raise ValueError(f"Unknown charge current limit: {limit}")
+        LOGGER.error(f"Invalid type for limit: {type(limit)}")
+        raise TypeError(f"Invalid type for limit: {type(limit)}")
+
+    @property
+    def limit(self) -> str:
+        match self:
+            case ChargeCurrentLimitOption.C_6A:
+                return "6A"
+            case ChargeCurrentLimitOption.C_8A:
+                return "8A"
+            case ChargeCurrentLimitOption.C_16A:
+                return "16A"
+            case ChargeCurrentLimitOption.C_MAX:
+                return "Max"
+            case ChargeCurrentLimitOption.C_IGNORE:
+                return "0A (Ignore)"
+            case _:
+                raise ValueError(f"Unknown charge current limit code: {self}")
 
 
 # Windows List

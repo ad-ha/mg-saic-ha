@@ -1,7 +1,10 @@
+import asyncio
 from homeassistant.components.button import ButtonEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from .const import DOMAIN, LOGGER
-import asyncio
+from .const import (
+    DOMAIN,
+    LOGGER,
+)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -74,9 +77,16 @@ class SAICMGTriggerAlarmButton(SAICMGButton):
     async def async_press(self):
         """Handle the button press."""
         try:
+            immediate_interval = self.coordinator.after_action_delay
+            long_interval = self.coordinator.alarm_long_interval
+
             await self._client.trigger_alarm(self._vin)
             LOGGER.info("Alarm triggered for VIN: %s", self._vin)
-            await self.schedule_data_refresh()
+            await self.coordinator.schedule_action_refresh(
+                self._vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
             LOGGER.error("Error triggering alarm for VIN %s: %s", self._vin, e)
 

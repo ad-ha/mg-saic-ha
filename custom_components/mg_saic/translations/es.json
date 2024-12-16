@@ -50,30 +50,34 @@
       }
     },
     "control_heated_seats": {
-      "name": "Controlar Asientos Calefaccionados",
-      "description": "Controlar los asientos calefaccionados del vehículo.",
+      "name": "Controlar Asientos Calefactables",
+      "description": "Establece los niveles de calefacción para ambos asientos delanteros.",
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "El número de identificación del vehículo para controlar los asientos calefaccionados."
+          "description": "El número de identificación del vehículo."
         },
-        "action": {
-          "name": "Acción",
-          "description": "Encender (true) o apagar (false)."
+        "left_level": {
+          "name": "Nivel del Asiento Izquierdo",
+          "description": "Nivel de calefacción para el asiento izquierdo (Apagado = 0, Bajo = 1, Medio = 2, Alto = 3)."
+        },
+        "right_level": {
+          "name": "Nivel del Asiento Derecho",
+          "description": "Nivel de calefacción para el asiento derecho (Apagado = 0, Bajo = 1, Medio = 2, Alto = 3)."
         }
       }
     },
     "control_rear_window_heat": {
       "name": "Controlar Calefacción de la Ventana Trasera",
-      "description": "Controlar la calefacción de la ventana trasera del vehículo.",
+      "description": "Controla la calefacción de la ventana trasera del vehículo.",
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "El número de identificación del vehículo para controlar la calefacción de la ventana trasera."
+          "description": "El número de identificación del vehículo."
         },
         "action": {
           "name": "Acción",
-          "description": "Encender (start) o apagar (stop)."
+          "description": "Selecciona 'start' para habilitar o 'stop' para deshabilitar."
         }
       }
     },
@@ -111,17 +115,31 @@
         }
       }
     },
-    "set_target_soc": {
-      "name": "Definir limite de carga",
-      "description": "Define el limite de porcentaje de carga del vehículo.",
+    "set_charging_current_limit": {
+      "name": "Definir Límite de Corriente de Carga",
+      "description": "Establece el límite de corriente de carga para el vehículo.",
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "El número de identificación del vehículo para definir el limite de carga."
+          "description": "El número de identificación del vehículo."
+        },
+        "current_limit": {
+          "name": "Límite de Corriente de Carga",
+          "description": "Selecciona el límite de corriente deseado."
+        }
+      }
+    },
+    "set_target_soc": {
+      "name": "Definir Límite de Carga",
+      "description": "Define el límite de porcentaje de carga del vehículo.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "El número de identificación del vehículo."
         },
         "target_soc": {
-          "name": "Limite de carga",
-          "description": "Porcentaje de limite de carga deseado (10-100)."
+          "name": "Límite de Carga",
+          "description": "Porcentaje de límite de carga deseado (10-100)."
         }
       }
     },
@@ -248,9 +266,28 @@
     "step": {
       "init": {
         "data": {
-          "scan_interval": "Intervalo de actualización (en segundos)",
-          "charging_scan_interval": "Intervalo de actualización durante la carga (en segundos)",
-          "powered_scan_interval": "Intervalo de actualización durante si vehículo arrancado (en segundos)"
+          "has_sunroof": "Tiene Techo Solar",
+          "has_heated_seats": "Tiene Asientos Calefactables",
+          "has_battery_heating": "Tiene Calefacción de Batería",
+          "update_interval": "Intervalo de Actualización (en minutos)",
+          "charging_update_interval": "Intervalo de Actualización durante la Carga (en minutos)",
+          "powered_update_interval": "Intervalo de Actualización cuando el Vehículo Está Encendido (en minutos)",
+          "after_shutdown_update_interval": "Intervalo de Actualización Después del Apagado (en minutos)",
+          "grace_period_update_interval": "Intervalo de Actualización del Período de Gracia (en minutos)",
+          "after_action_delay": "Retraso Después de la Acción (en segundos)",
+          "alarm_long_interval": "Intervalo Largo de Alarma (en minutos)",
+          "ac_long_interval": "Intervalo Largo de AC (en minutos)",
+          "front_defrost_long_interval": "Intervalo Largo de Desempañador Delantero (en minutos)",
+          "rear_window_heat_long_interval": "Intervalo Largo de Calefacción de Ventana Trasera (en minutos)",
+          "lock_unlock_long_interval": "Intervalo Largo de Bloqueo/Desbloqueo (en minutos)",
+          "charging_port_lock_long_interval": "Intervalo Largo de Bloqueo de Puerto de Carga (en minutos)",
+          "heated_seats_long_interval": "Intervalo Largo de Asientos Calefaccionados (en minutos)",
+          "battery_heating_long_interval": "Intervalo Largo de Calefacción de Batería (en minutos)",
+          "charging_long_interval": "Intervalo Largo de Carga (en minutos)",
+          "sunroof_long_interval": "Intervalo Largo de Techo Solar (en minutos)",
+          "tailgate_long_interval": "Intervalo Largo de Portón Trasero (en minutos)",
+          "target_soc_long_interval": "Intervalo Largo de SOC Objetivo (en minutos)",
+          "charging_current_long_interval": "Intervalo Largo de Corriente de Carga (en minutos)"
         },
         "description": "Define ajustes adicionales para la Integración MG/SAIC",
         "title": "Opciones de MG/SAIC"
