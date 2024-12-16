@@ -17,6 +17,23 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
         vin_info = coordinator.data["info"][0]
 
+        # Determine if vehicle is RHD
+        lrd_value = None
+        for config_item in vin_info.vehicleModelConfiguration:
+            if config_item.itemCode == "LRD":
+                lrd_value = config_item.itemValue
+                break
+
+        is_rhd = lrd_value == "1"
+
+        # Set door names based on LHD/RHD
+        if is_rhd:
+            driver_door_name = "Door Front Right"
+            passenger_door_name = "Door Front Left"
+        else:
+            driver_door_name = "Door Front Left"
+            passenger_door_name = "Door Front Right"
+
         binary_sensors = [
             SAICMGBinarySensor(
                 coordinator,
@@ -48,7 +65,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
             SAICMGBinarySensor(
                 coordinator,
                 entry,
-                "Door Front Left",
+                driver_door_name,
                 "driverDoor",
                 BinarySensorDeviceClass.DOOR,
                 "mdi:car-door",
@@ -57,7 +74,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
             SAICMGBinarySensor(
                 coordinator,
                 entry,
-                "Door Front Right",
+                passenger_door_name,
                 "passengerDoor",
                 BinarySensorDeviceClass.DOOR,
                 "mdi:car-door",
@@ -129,15 +146,6 @@ async def async_setup_entry(hass, entry, async_add_entities):
             SAICMGBinarySensor(
                 coordinator,
                 entry,
-                "Sunroof Status",
-                "sunroofStatus",
-                BinarySensorDeviceClass.WINDOW,
-                "mdi:car-door",
-                "status",
-            ),
-            SAICMGBinarySensor(
-                coordinator,
-                entry,
                 "Wheel Tyre Monitor Status",
                 "wheelTyreMonitorStatus",
                 BinarySensorDeviceClass.PROBLEM,
@@ -198,6 +206,19 @@ async def async_setup_entry(hass, entry, async_add_entities):
             ]
 
             binary_sensors.extend(charging_binary_sensors)
+
+        if coordinator.has_sunroof:
+            binary_sensors.append(
+                SAICMGBinarySensor(
+                    coordinator,
+                    entry,
+                    "Sunroof Status",
+                    "sunroofStatus",
+                    BinarySensorDeviceClass.WINDOW,
+                    "mdi:car-door",
+                    "status",
+                ),
+            )
 
         async_add_entities(binary_sensors, update_before_add=True)
 

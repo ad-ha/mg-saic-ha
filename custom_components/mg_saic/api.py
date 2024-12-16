@@ -1,7 +1,12 @@
 import asyncio
+from enum import Enum
 from saic_ismart_client_ng import SaicApi
 from saic_ismart_client_ng.model import SaicApiConfiguration
-from .const import LOGGER, REGION_BASE_URIS, BatterySoc
+from saic_ismart_client_ng.api.vehicle_charging import (
+    TargetBatteryCode,
+    ChargeCurrentLimitCode as ExternalChargeCurrentLimitCode,
+)
+from .const import LOGGER, REGION_BASE_URIS, BatterySoc, ChargeCurrentLimitOption
 
 
 class SAICMGAPIClient:
@@ -186,6 +191,61 @@ class SAICMGAPIClient:
             )
             raise
 
+    async def set_current_limit(
+        self,
+        vin: str,
+        target_soc: BatterySoc,
+        current_limit_code: ChargeCurrentLimitOption,
+    ):
+        """Set the charging current limit."""
+        try:
+            LOGGER.debug(
+                "Setting charging current limit for VIN %s to %s (%s)",
+                vin,
+                current_limit_code.limit,
+                current_limit_code,
+            )
+
+            # Map local enum to external enum
+            external_charge_current_limit = self.map_to_external_charge_current_limit(
+                current_limit_code
+            )
+
+            # Call the API method with the target_soc and new charge_current_limit
+            response = await self._make_api_call(
+                self.saic_api.set_target_battery_soc,
+                vin,
+                target_soc,
+                external_charge_current_limit,
+            )
+
+            LOGGER.info("Charging current limit set successfully: %s", response)
+            return response
+
+        except ValueError as e:
+            LOGGER.error("Invalid charging current limit: %s", current_limit_code)
+            raise
+        except Exception as e:
+            LOGGER.error("Error setting charging current limit for VIN %s: %s", vin, e)
+            raise
+
+    def map_to_external_charge_current_limit(
+        self, local_limit: ChargeCurrentLimitOption
+    ) -> ExternalChargeCurrentLimitCode:
+        """Map local charging current limit to external ChargeCurrentLimitCode."""
+        mapping = {
+            ChargeCurrentLimitOption.C_IGNORE: ExternalChargeCurrentLimitCode.C_IGNORE,
+            ChargeCurrentLimitOption.C_6A: ExternalChargeCurrentLimitCode.C_6A,
+            ChargeCurrentLimitOption.C_8A: ExternalChargeCurrentLimitCode.C_8A,
+            ChargeCurrentLimitOption.C_16A: ExternalChargeCurrentLimitCode.C_16A,
+            ChargeCurrentLimitOption.C_MAX: ExternalChargeCurrentLimitCode.C_MAX,
+        }
+        external_code = mapping.get(local_limit)
+        if external_code is None:
+            LOGGER.error(f"Mapping not found for local limit: {local_limit}")
+            raise ValueError(f"Mapping not found for local limit: {local_limit}")
+        return external_code
+
     async def set_target_soc(self, vin, target_soc_percentage):
         """Set the target SOC of the vehicle."""
         try:
@@ -216,13 +276,25 @@ class SAICMGAPIClient:
             raise
 
     # CLIMATE CONTROL
-    async def control_heated_seats(self, vin, action):
+    async def control_heated_seats(self, vin, left_side_level=0, right_side_level=0):
         """Control the heated seats."""
         try:
-            await self._make_api_call(self.saic_api.control_heated_seats, vin, action)
-            LOGGER.info("Heated seats controlled successfully.")
+            # Call the API method with the levels for each side
+            await self._make_api_call(
+                self.saic_api.control_heated_seats,
+                vin=vin,
+                left_side_level=left_side_level,
+                right_side_level=right_side_level,
+            )
+            LOGGER.info(
+                "Heated seats updated: Left = %d, Right = %d for VIN: %s",
+                left_side_level,
+                right_side_level,
+                vin,
+            )
         except Exception as e:
-            LOGGER.error("Error controlling heated seats: %s", e)
+            LOGGER.error("Error controlling heated seats for VIN %s: %s", vin, e)
+            raise
 
     async def control_rear_window_heat(self, vin, action):
         """Control the rear window heat."""

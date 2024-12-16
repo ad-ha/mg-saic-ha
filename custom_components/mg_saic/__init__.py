@@ -53,7 +53,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
         # Register Services
-        await async_setup_services(hass, client)
+        await async_setup_services(hass, client, coordinator)
 
         LOGGER.info("MG SAIC integration setup completed successfully.")
         return True

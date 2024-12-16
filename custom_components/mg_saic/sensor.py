@@ -95,6 +95,24 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 1.0,
                 "status",
             ),
+            SAICMGTimestampSensor(
+                coordinator,
+                entry,
+                "Last Powered On",
+                "last_powered_on",
+                SensorDeviceClass.TIMESTAMP,
+                "mdi:power-on",
+                "last_powered_on_time",
+            ),
+            SAICMGTimestampSensor(
+                coordinator,
+                entry,
+                "Last Powered Off",
+                "last_powered_off",
+                SensorDeviceClass.TIMESTAMP,
+                "mdi:power-off",
+                "last_powered_off_time",
+            ),
             SAICMGLastUpdateSensor(
                 coordinator,
                 entry,
@@ -104,6 +122,15 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "mdi:update",
                 None,
                 None,
+            ),
+            SAICMGTimestampSensor(
+                coordinator,
+                entry,
+                "Last Vehicle Activity",
+                "last_vehicle_activity",
+                SensorDeviceClass.TIMESTAMP,
+                "mdi:car-clock",
+                "last_vehicle_activity",
             ),
             SAICMGMileageSensor(
                 coordinator,
@@ -312,19 +339,6 @@ async def async_setup_entry(hass, entry, async_add_entities):
                         "chrgMgmtData",
                         "charging",
                     ),
-                    SAICMGChargingSensor(
-                        coordinator,
-                        entry,
-                        "Battery Heating Status",
-                        "bmsPTCHeatResp",
-                        None,
-                        None,
-                        "mdi:fire",
-                        None,
-                        1.0,
-                        "chrgMgmtData",
-                        "charging",
-                    ),
                     SAICMGChargingCurrentSensor(
                         coordinator,
                         entry,
@@ -335,6 +349,19 @@ async def async_setup_entry(hass, entry, async_add_entities):
                         "mdi:current-ac",
                         "measurement",
                         CHARGING_CURRENT_FACTOR,
+                        "chrgMgmtData",
+                        "charging",
+                    ),
+                    SAICMGChargingCurrentLimitSensor(
+                        coordinator,
+                        entry,
+                        "Charging Current Limit",
+                        "bmsAltngChrgCrntDspCmd",
+                        None,
+                        None,
+                        "mdi:current-ac",
+                        None,
+                        1.0,
                         "chrgMgmtData",
                         "charging",
                     ),
@@ -454,6 +481,55 @@ async def async_setup_entry(hass, entry, async_add_entities):
                         "charging",
                     ),
                 ]
+            )
+
+        if coordinator.has_heated_seats:
+            sensors.extend(
+                [
+                    SAICMGHeatedSeatLevelSensor(
+                        coordinator,
+                        entry,
+                        "Front Left Heated Seat Level",
+                        "frontLeftSeatHeatLevel",
+                        None,
+                        None,
+                        "mdi:car-seat-heater",
+                        None,
+                        None,
+                        "basicVehicleStatus",
+                        "status",
+                    ),
+                    SAICMGHeatedSeatLevelSensor(
+                        coordinator,
+                        entry,
+                        "Front Right Heated Seat Level",
+                        "frontRightSeatHeatLevel",
+                        None,
+                        None,
+                        "mdi:car-seat-heater",
+                        None,
+                        None,
+                        "basicVehicleStatus",
+                        "status",
+                    ),
+                ]
+            )
+
+        if coordinator.has_battery_heating:
+            sensors.append(
+                SAICMGChargingSensor(
+                    coordinator,
+                    entry,
+                    "Battery Heating Status",
+                    "bmsPTCHeatResp",
+                    None,
+                    None,
+                    "mdi:fire",
+                    None,
+                    1.0,
+                    "chrgMgmtData",
+                    "charging",
+                ),
             )
 
         # Add sensors
@@ -708,6 +784,83 @@ class SAICMGVehicleDetailSensor(CoordinatorEntity, SensorEntity):
 
 
 # STATUS SENSORS
+class SAICMGHeatedSeatLevelSensor(CoordinatorEntity, SensorEntity):
+    """Sensor to monitor the current heating level of a heated seat."""
+
+    def __init__(
+        self,
+        coordinator,
+        entry,
+        name,
+        field,
+        device_class,
+        unit,
+        icon,
+        state_class,
+        factor=None,
+        data_source="basicVehicleStatus",
+        data_type="status",
+    ):
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._name = name
+        self._field = field
+        self._attr_device_class = device_class
+        self._attr_native_unit_of_measurement = unit
+        self._attr_icon = icon
+        self._attr_state_class = state_class
+        self._factor = factor
+        self._data_source = data_source
+        self._data_type = data_type
+        vin_info = self.coordinator.data["info"][0]
+        self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}_seat_heat_level"
+
+    @property
+    def unique_id(self):
+        """Return the unique ID of the sensor."""
+        return self._unique_id
+
+    @property
+    def name(self):
+        """Return the name of the sensor."""
+        vin_info = self.coordinator.data["info"][0]
+        return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
+
+    @property
+    def available(self):
+        """Return True if the entity is available."""
+        data = self.coordinator.data.get(self._data_type)
+        return self.coordinator.last_update_success and data is not None
+
+    @property
+    def native_value(self):
+        """Return the mapped heating level value."""
+        try:
+            data = self.coordinator.data.get(self._data_type)
+            if data:
+                vehicle_status = getattr(data, self._data_source, None)
+                if vehicle_status:
+                    raw_value = getattr(vehicle_status, self._field, None)
+                    return {0: "Off", 1: "Low", 2: "Medium", 3: "High"}.get(
+                        raw_value, f"Unknown ({raw_value})"
+                    )
+        except Exception as e:
+            LOGGER.error("Error retrieving heated seat level for %s: %s", self._name, e)
+        return None
+
+    @property
+    def device_info(self):
+        """Return device info for this sensor."""
+        vin_info = self.coordinator.data["info"][0]
+        return {
+            "identifiers": {(DOMAIN, vin_info.vin)},
+            "name": f"{vin_info.brandName} {vin_info.modelName}",
+            "manufacturer": vin_info.brandName,
+            "model": vin_info.modelName,
+            "serial_number": vin_info.vin,
+        }
+
+
 class SAICMGElectricRangeSensor(CoordinatorEntity, SensorEntity):
     """Sensor for Electric Range, uses data from both RvsChargeStatus and VehicleStatusResp."""
 
@@ -1224,6 +1377,93 @@ class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
         }
 
 
+class SAICMGChargingCurrentLimitSensor(CoordinatorEntity, SensorEntity):
+    """Sensor to show the charging current limit."""
+
+    def __init__(
+        self,
+        coordinator,
+        entry,
+        name,
+        field,
+        device_class,
+        unit,
+        icon,
+        state_class,
+        factor=None,
+        data_source="chrgMgmtData",
+        data_type="charging",
+    ):
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._name = name
+        self._field = field
+        self._device_class = device_class
+        self._unit = unit
+        self._icon = icon
+        self._state_class = state_class
+        self._factor = factor
+        self._data_source = data_source
+        self._data_type = data_type
+        self._attr_device_class = device_class
+        self._attr_native_unit_of_measurement = unit
+        self._attr_icon = icon
+        self._attr_state_class = state_class
+        vin_info = self.coordinator.data["info"][0]
+        self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}_current_limit"
+
+    @property
+    def unique_id(self):
+        return self._unique_id
+
+    @property
+    def name(self):
+        vin_info = self.coordinator.data["info"][0]
+        return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
+
+    @property
+    def available(self):
+        """Return True if the entity is available."""
+        required_data = self.coordinator.data.get(self._data_type)
+        return self.coordinator.last_update_success and required_data is not None
+
+    @property
+    def native_value(self):
+        """Return the current charging limit."""
+        try:
+            charging_data = getattr(
+                self.coordinator.data.get("charging"), self._data_source, None
+            )
+            if charging_data:
+                current_limit_code = getattr(charging_data, self._field, None)
+                if current_limit_code is not None:
+                    # Map the charging limit code to human-readable format
+                    return {
+                        0: "0A (Ignore)",
+                        1: "6A",
+                        2: "8A",
+                        3: "16A",
+                        4: "Max",
+                    }.get(current_limit_code, f"Unknown ({current_limit_code})")
+            return None
+        except Exception as e:
+            LOGGER.error(
+                "Error retrieving charging current limit for %s: %s", self._name, e
+            )
+            return None
+
+    @property
+    def device_info(self):
+        vin_info = self.coordinator.data["info"][0]
+        return {
+            "identifiers": {(DOMAIN, vin_info.vin)},
+            "name": f"{vin_info.brandName} {vin_info.modelName}",
+            "manufacturer": vin_info.brandName,
+            "model": vin_info.modelName,
+            "serial_number": vin_info.vin,
+        }
+
+
 # LAST UPDATE TIME DATA SENSOR
 class SAICMGLastUpdateSensor(CoordinatorEntity, SensorEntity):
     """Sensor to display the timestamp of the last successful data update."""
@@ -1369,6 +1609,63 @@ class SAICMGNextUpdateSensor(CoordinatorEntity, SensorEntity):
     @property
     def device_info(self):
         vin_info = self._vin_info
+        return {
+            "identifiers": {(DOMAIN, vin_info.vin)},
+            "name": f"{vin_info.brandName} {vin_info.modelName}",
+            "manufacturer": vin_info.brandName,
+            "model": vin_info.modelName,
+            "serial_number": vin_info.vin,
+        }
+
+
+class SAICMGTimestampSensor(CoordinatorEntity, SensorEntity):
+    """Representation of a timestamp sensor for MG SAIC vehicles."""
+
+    def __init__(self, coordinator, entry, name, field, device_class, icon, attribute):
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._name = name
+        self._field = field
+        self._attr_device_class = device_class
+        self._attr_icon = icon
+        self._attribute = attribute  # Attribute name to fetch from the coordinator
+        vin_info = self.coordinator.data["info"][0]
+        self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}"
+
+    @property
+    def unique_id(self):
+        """Return the unique ID of the sensor."""
+        return self._unique_id
+
+    @property
+    def name(self):
+        """Return the name of the sensor."""
+        vin_info = self.coordinator.data["info"][0]
+        return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
+
+    @property
+    def available(self):
+        """Return True if the entity is available."""
+        return self.coordinator.last_update_success and self.native_value is not None
+
+    @property
+    def native_value(self):
+        """Return the timestamp value from the coordinator."""
+        try:
+            return getattr(self.coordinator, self._attribute, None)
+        except AttributeError as e:
+            LOGGER.error(
+                "Error retrieving attribute '%s' for sensor '%s': %s",
+                self._attribute,
+                self._name,
+                e,
+            )
+            return None
+
+    @property
+    def device_info(self):
+        """Return device info for the sensor."""
+        vin_info = self.coordinator.data["info"][0]
         return {
             "identifiers": {(DOMAIN, vin_info.vin)},
             "name": f"{vin_info.brandName} {vin_info.modelName}",

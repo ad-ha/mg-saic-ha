@@ -1,6 +1,10 @@
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from .const import DOMAIN, LOGGER, CHARGING_STATUS_CODES
+from .const import (
+    DOMAIN,
+    LOGGER,
+    CHARGING_STATUS_CODES,
+)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -33,18 +37,26 @@ async def async_setup_entry(hass, entry, async_add_entities):
     switches.append(SAICMGRearWindowDefrostSwitch(coordinator, client, vin_info, vin))
 
     # Sunroof Switch
-    switches.append(SAICMGSunroofSwitch(coordinator, client, vin_info, vin))
+    if coordinator.has_sunroof:
+        switches.append(SAICMGSunroofSwitch(coordinator, client, vin_info, vin))
+    else:
+        LOGGER.debug(f"Sunroof switch not created for VIN {vin}.")
 
     # Heated Seats Switch (if applicable)
-    has_heated_seats = vehicle_config.get("HeatedSeat") == "1"
-
-    if has_heated_seats:
+    if coordinator.has_heated_seats:
         # Heated Seats Switch
-        switches.append(SAICMGHeatedSeatsSwitch(coordinator, client, vin_info, vin))
-    else:
-        LOGGER.debug(
-            f"Vehicle {vin} does not have heated seats. Skipping Heated Seats Switch."
+        switches.extend(
+            [
+                SAICMGHeatedSeatsSwitch(
+                    coordinator, client, vin_info, vin, "Front Left", "front_left"
+                ),
+                SAICMGHeatedSeatsSwitch(
+                    coordinator, client, vin_info, vin, "Front Right", "front_right"
+                ),
+            ]
         )
+    else:
+        LOGGER.debug(f"Heated seats switch not created for VIN {vin}.")
 
     # Charging Switches (for BEV and PHEV)
     if coordinator.vehicle_type in ["BEV", "PHEV"]:
@@ -54,28 +66,12 @@ async def async_setup_entry(hass, entry, async_add_entities):
         )
 
         # Check if battery heating is supported
-        charging_data = coordinator.data.get("charging")
-        if charging_data:
-            chrgMgmtData = getattr(charging_data, "chrgMgmtData", None)
-            if chrgMgmtData:
-                bmsPTCHeatResp = getattr(chrgMgmtData, "bmsPTCHeatResp", None)
-                if bmsPTCHeatResp is not None:
-                    # Battery Heating Switch
-                    switches.append(
-                        SAICMGBatteryHeatingSwitch(coordinator, client, vin_info, vin)
-                    )
-                else:
-                    LOGGER.debug(
-                        f"Vehicle {vin} does not support battery heating. Skipping Battery Heating Switch."
-                    )
-            else:
-                LOGGER.debug(
-                    f"Charging management data not available for VIN {vin}. Cannot determine battery heating support."
-                )
-        else:
-            LOGGER.debug(
-                f"Charging data not available for VIN {vin}. Cannot determine battery heating support."
+        if coordinator.has_battery_heating:
+            switches.append(
+                SAICMGBatteryHeatingSwitch(coordinator, client, vin_info, vin)
             )
+        else:
+            LOGGER.debug(f"Battery heating switch not created for VIN {vin}.")
 
     async_add_entities(switches)
 
@@ -161,9 +157,16 @@ class SAICMGACSwitch(SAICMGVehicleSwitch):
     async def async_turn_on(self, **kwargs):
         """Start AC Blowing."""
         try:
+            immediate_interval = self.coordinator.after_action_delay
+            long_interval = self.coordinator.ac_long_interval
+
             await self._client.start_ac(self._vin)
             LOGGER.info("AC Blowing started for VIN: %s", self._vin)
-            await self.coordinator.async_request_refresh()
+            await self.coordinator.schedule_action_refresh(
+                self._vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
             LOGGER.error("Error starting AC Blowing for VIN %s: %s", self._vin, e)
 
@@ -212,9 +215,16 @@ class SAICMGBatteryHeatingSwitch(SAICMGVehicleSwitch):
     async def async_turn_on(self, **kwargs):
         """Start battery heating."""
         try:
+            immediate_interval = self.coordinator.after_action_delay
+            long_interval = self.coordinator.battery_heating_long_interval
+
             await self._client.send_vehicle_charging_ptc_heat(self._vin, "start")
             LOGGER.info("Battery heating started for VIN: %s", self._vin)
-            await self.coordinator.async_request_refresh()
+            await self.coordinator.schedule_action_refresh(
+                self._vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
             LOGGER.error("Error starting battery heating for VIN %s: %s", self._vin, e)
 
@@ -250,9 +260,16 @@ class SAICMGChargingPortLockSwitch(SAICMGVehicleSwitch):
     async def async_turn_on(self, **kwargs):
         """Lock the charging port."""
         try:
+            immediate_interval = self.coordinator.after_action_delay
+            long_interval = self.coordinator.charging_port_lock_long_interval
+
             await self._client.control_charging_port_lock(self._vin, unlock=False)
             LOGGER.info("Charging port locked for VIN: %s", self._vin)
-            await self.coordinator.async_request_refresh()
+            await self.coordinator.schedule_action_refresh(
+                self._vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
             LOGGER.error("Error locking charging port for VIN %s: %s", self._vin, e)
 
@@ -296,9 +313,16 @@ class SAICMGChargingSwitch(SAICMGVehicleSwitch):
     async def async_turn_on(self, **kwargs):
         """Start charging."""
         try:
+            immediate_interval = self.coordinator.after_action_delay
+            long_interval = self.coordinator.charging_long_interval
+
             await self._client.send_vehicle_charging_control(self._vin, "start")
             LOGGER.info("Charging started for VIN: %s", self._vin)
-            await self.coordinator.async_request_refresh()
+            await self.coordinator.schedule_action_refresh(
+                self._vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
             LOGGER.error("Error starting charging for VIN %s: %s", self._vin, e)
 
@@ -341,9 +365,16 @@ class SAICMGFrontDefrostSwitch(SAICMGVehicleSwitch):
     async def async_turn_on(self, **kwargs):
         """Start front defrost."""
         try:
+            immediate_interval = self.coordinator.after_action_delay
+            long_interval = self.coordinator.front_defrost_long_interval
+
             await self._client.start_front_defrost(self._vin)
             LOGGER.info("Front defrost started for VIN: %s", self._vin)
-            await self.coordinator.async_request_refresh()
+            await self.coordinator.schedule_action_refresh(
+                self._vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
             LOGGER.error("Error starting front defrost for VIN %s: %s", self._vin, e)
 
@@ -358,12 +389,18 @@ class SAICMGFrontDefrostSwitch(SAICMGVehicleSwitch):
 
 
 class SAICMGHeatedSeatsSwitch(SAICMGVehicleSwitch):
-    """Switch to control the heated seats."""
+    """Switch to control individual heated seats."""
 
-    def __init__(self, coordinator, client, vin_info, vin):
+    def __init__(self, coordinator, client, vin_info, vin, seat_name, seat_side):
         super().__init__(
-            coordinator, client, vin_info, vin, "Heated Seats", "mdi:seat-recline-extra"
+            coordinator,
+            client,
+            vin_info,
+            vin,
+            f"Heated Seat {seat_name}",
+            "mdi:car-seat-heater",
         )
+        self._seat_side = seat_side
 
     @property
     def is_on(self):
@@ -372,10 +409,12 @@ class SAICMGHeatedSeatsSwitch(SAICMGVehicleSwitch):
         if status:
             basic_status = getattr(status, "basicVehicleStatus", None)
             if basic_status:
-                # Update is_on to check frontLeftSeatHeatLevel and frontRightSeatHeatLevel
-                front_left_level = getattr(basic_status, "frontLeftSeatHeatLevel", 0)
-                front_right_level = getattr(basic_status, "frontRightSeatHeatLevel", 0)
-                return front_left_level > 0 or front_right_level > 0
+                seat_level = getattr(
+                    basic_status,
+                    f"{self._seat_side}SeatHeatLevel",
+                    0,
+                )
+                return seat_level > 0
         return False
 
     @property
@@ -387,22 +426,70 @@ class SAICMGHeatedSeatsSwitch(SAICMGVehicleSwitch):
         )
 
     async def async_turn_on(self, **kwargs):
-        """Turn the heated seats on."""
+        """Turn the heated seat on."""
         try:
-            await self._client.control_heated_seats(self._vin, True)
-            LOGGER.info("Heated seats turned on for VIN: %s", self._vin)
-            await self.coordinator.async_request_refresh()
+            immediate_interval = self.coordinator.after_action_delay
+            long_interval = self.coordinator.heated_seats_long_interval
+
+            # Fetch current levels to avoid overriding the opposite seat
+            status = self.coordinator.data.get("status", {})
+            basic_status = getattr(status, "basicVehicleStatus", {})
+            left_level = getattr(basic_status, "frontLeftSeatHeatLevel", 0)
+            right_level = getattr(basic_status, "frontRightSeatHeatLevel", 0)
+
+            if self._seat_side == "left":
+                await self._client.control_heated_seats(self._vin, 2, right_level)
+            elif self._seat_side == "right":
+                await self._client.control_heated_seats(self._vin, left_level, 2)
+
+            LOGGER.info(
+                "Heated seat %s turned on for VIN: %s", self._seat_side, self._vin
+            )
+            await self.coordinator.schedule_action_refresh(
+                self._vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
-            LOGGER.error("Error turning on heated seats for VIN %s: %s", self._vin, e)
+            LOGGER.error(
+                "Error turning on heated seat %s for VIN %s: %s",
+                self._seat_side,
+                self._vin,
+                e,
+            )
 
     async def async_turn_off(self, **kwargs):
-        """Turn the heated seats off."""
+        """Turn the heated seat off."""
         try:
-            await self._client.control_heated_seats(self._vin, False)
-            LOGGER.info("Heated seats turned off for VIN: %s", self._vin)
-            await self.coordinator.async_request_refresh()
+            immediate_interval = self.coordinator.after_action_delay
+            long_interval = self.coordinator.heated_seats_long_interval
+
+            # Fetch current levels to avoid overriding the opposite seat
+            status = self.coordinator.data.get("status", {})
+            basic_status = getattr(status, "basicVehicleStatus", {})
+            left_level = getattr(basic_status, "frontLeftSeatHeatLevel", 0)
+            right_level = getattr(basic_status, "frontRightSeatHeatLevel", 0)
+
+            if self._seat_side == "left":
+                await self._client.control_heated_seats(self._vin, 0, right_level)
+            elif self._seat_side == "right":
+                await self._client.control_heated_seats(self._vin, left_level, 0)
+
+            LOGGER.info(
+                "Heated seat %s turned off for VIN: %s", self._seat_side, self._vin
+            )
+            await self.coordinator.schedule_action_refresh(
+                self._vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
-            LOGGER.error("Error turning off heated seats for VIN %s: %s", self._vin, e)
+            LOGGER.error(
+                "Error turning off heated seat %s for VIN %s: %s",
+                self._seat_side,
+                self._vin,
+                e,
+            )
 
 
 class SAICMGRearWindowDefrostSwitch(SAICMGVehicleSwitch):
@@ -432,9 +519,16 @@ class SAICMGRearWindowDefrostSwitch(SAICMGVehicleSwitch):
     async def async_turn_on(self, **kwargs):
         """Turn the rear window defrost on."""
         try:
+            immediate_interval = self.coordinator.after_action_delay
+            long_interval = self.coordinator.rear_window_heat_long_interval
+
             await self._client.control_rear_window_heat(self._vin, "start")
             LOGGER.info("Rear window defrost turned on for VIN: %s", self._vin)
-            await self.coordinator.async_request_refresh()
+            await self.coordinator.schedule_action_refresh(
+                self._vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
             LOGGER.error(
                 "Error turning on rear window defrost for VIN %s: %s", self._vin, e
@@ -472,9 +566,16 @@ class SAICMGSunroofSwitch(SAICMGVehicleSwitch):
     async def async_turn_on(self, **kwargs):
         """Open the sunroof."""
         try:
+            immediate_interval = self.coordinator.after_action_delay
+            long_interval = self.coordinator.sunroof_long_interval
+
             await self._client.control_sunroof(self._vin, "open")
             LOGGER.info("Sunroof opened for VIN: %s", self._vin)
-            await self.coordinator.async_request_refresh()
+            await self.coordinator.schedule_action_refresh(
+                self._vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
             LOGGER.error("Error opening sunroof for VIN %s: %s", self._vin, e)
 

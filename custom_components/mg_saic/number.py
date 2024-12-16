@@ -1,7 +1,10 @@
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.const import PERCENTAGE
-from .const import DOMAIN, LOGGER
+from .const import (
+    DOMAIN,
+    LOGGER,
+)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -119,9 +122,16 @@ class SAICMGTargetSOCNumber(CoordinatorEntity, NumberEntity):
         """Set the target SOC to the specified value."""
         target_soc = int(value)
         try:
+            immediate_interval = self.coordinator.after_action_delay
+            long_interval = self.coordinator.target_soc_long_interval
+
             await self._client.set_target_soc(self._vin, target_soc)
             LOGGER.info("Set Target SOC to %d%% for VIN: %s", target_soc, self._vin)
             # Schedule data refresh
-            await self.coordinator.async_request_refresh()
+            await self.coordinator.schedule_action_refresh(
+                self._vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
             LOGGER.error("Error setting Target SOC for VIN %s: %s", self._vin, e)

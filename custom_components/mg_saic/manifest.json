@@ -12,5 +12,5 @@
         "pycryptodome",
         "saic-ismart-client-ng==0.5.2"
     ],
-    "version": "0.7.2"
+    "version": "0.7.3"
 }

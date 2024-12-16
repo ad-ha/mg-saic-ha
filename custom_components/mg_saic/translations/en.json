@@ -51,15 +51,19 @@
     },
     "control_heated_seats": {
       "name": "Control Heated Seats",
-      "description": "Control the heated seats of the vehicle.",
+      "description": "Set the heating levels for both front seats.",
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "The vehicle identification number of the car to control heated seats."
+          "description": "The vehicle identification number."
         },
-        "action": {
-          "name": "Action",
-          "description": "Turn on (true) or off (false)."
+        "left_level": {
+          "name": "Left Seat Level",
+          "description": "Heating level for the left seat (Off = 0, Low = 1, Medium = 2, High = 3)."
+        },
+        "right_level": {
+          "name": "Right Seat Level",
+          "description": "Heating level for the right seat (Off = 0, Low = 1, Medium = 2, High = 3)."
         }
       }
     },
@@ -69,11 +73,11 @@
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "The vehicle identification number of the car to control rear window heat."
+          "description": "The vehicle identification number."
         },
         "action": {
           "name": "Action",
-          "description": "Action to perform: 'start' or 'stop'"
+          "description": "Select 'start' to enable or 'stop' to disable."
         }
       }
     },
@@ -111,13 +115,27 @@
         }
       }
     },
+    "set_charging_current_limit": {
+      "name": "Set Charging Current Limit",
+      "description": "Set the charging current limit for the vehicle.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "The vehicle identification number."
+        },
+        "current_limit": {
+          "name": "Charging Current Limit",
+          "description": "Select the desired charging current limit."
+        }
+      }
+    },
     "set_target_soc": {
       "name": "Set Target SOC",
       "description": "Set the target state of charge (SOC) for the vehicle.",
       "fields": {
         "vin": {
           "name": "VIN",
-          "description": "The vehicle identification number of the car."
+          "description": "The vehicle identification number."
         },
         "target_soc": {
           "name": "Target SOC",
@@ -248,9 +266,28 @@
     "step": {
       "init": {
         "data": {
-          "scan_interval": "Update Interval (in seconds)",
-          "charging_scan_interval": "Charging Update Interval (in seconds)",
-          "powered_scan_interval": "Vehicle Powered On Update Interval (in seconds)"
+          "has_sunroof": "Has Sunroof",
+          "has_heated_seats": "Has Heated Seats",
+          "has_battery_heating": "Has Battery Heating",
+          "update_interval": "Update Interval (in minutes)",
+          "charging_update_interval": "Charging Update Interval (in minutes)",
+          "powered_update_interval": "Vehicle Powered On Update Interval (in minutes)",
+          "after_shutdown_update_interval": "After Shutdown Update Interval (in minutes)",
+          "grace_period_update_interval": "Grace Period Update Interval (in minutes)",
+          "after_action_delay": "After Action Delay (in seconds)",
+          "alarm_long_interval": "Alarm Long Interval (in minutes)",
+          "ac_long_interval": "AC Long Interval (in minutes)",
+          "front_defrost_long_interval": "Front Defrost Long Interval (in minutes)",
+          "rear_window_heat_long_interval": "Rear Window Heat Long Interval (in minutes)",
+          "lock_unlock_long_interval": "Lock/Unlock Long Interval (in minutes)",
+          "charging_port_lock_long_interval": "Charging Port Lock Long Interval (in minutes)",
+          "heated_seats_long_interval": "Heated Seats Long Interval (in minutes)",
+          "battery_heating_long_interval": "Battery Heating Long Interval (in minutes)",
+          "charging_long_interval": "Charging Long Interval (in minutes)",
+          "sunroof_long_interval": "Sunroof Long Interval (in minutes)",
+          "tailgate_long_interval": "Tailgate Long Interval (in minutes)",
+          "target_soc_long_interval": "Target SOC Long Interval (in minutes)",
+          "charging_current_long_interval": "Charging Current Long Interval (in minutes)"
         },
         "description": "Define additional settings for MG/SAIC Integration",
         "title": "MG/SAIC Options"

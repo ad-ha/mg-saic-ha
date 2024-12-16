@@ -1,6 +1,9 @@
 from homeassistant.components.lock import LockEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from .const import DOMAIN, LOGGER
+from .const import (
+    DOMAIN,
+    LOGGER,
+)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -67,18 +70,34 @@ class SAICMGLockEntity(CoordinatorEntity, LockEntity):
     async def async_lock(self, **kwargs):
         """Lock the vehicle."""
         try:
+            # Fetch intervals from coordinator (which reflects the options set in config)
+            immediate_interval = self.coordinator.after_action_delay
+            long_interval = self.coordinator.lock_unlock_long_interval
+
             await self._client.lock_vehicle(self._vin)
             LOGGER.info("Vehicle locked for VIN: %s", self._vin)
-            await self.coordinator.async_request_refresh()
+            await self.coordinator.schedule_action_refresh(
+                self._vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
             LOGGER.error("Error locking vehicle for VIN %s: %s", self._vin, e)
 
     async def async_unlock(self, **kwargs):
         """Unlock the vehicle."""
         try:
+            # Fetch intervals from coordinator (which reflects the options set in config)
+            immediate_interval = self.coordinator.after_action_delay
+            long_interval = self.coordinator.lock_unlock_long_interval
+
             await self._client.unlock_vehicle(self._vin)
             LOGGER.info("Vehicle unlocked for VIN: %s", self._vin)
-            await self.coordinator.async_request_refresh()
+            await self.coordinator.schedule_action_refresh(
+                self._vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
             LOGGER.error("Error unlocking vehicle for VIN %s: %s", self._vin, e)
 
@@ -133,8 +152,15 @@ class SAICMGBootLockEntity(CoordinatorEntity, LockEntity):
     async def async_unlock(self, **kwargs):
         """Unlock (open) the boot."""
         try:
+            immediate_interval = self.coordinator.after_action_delay
+            long_interval = self.coordinator.tailgate_long_interval
+
             await self._client.open_tailgate(self._vin)
             LOGGER.info("Boot opened for VIN: %s", self._vin)
-            await self.coordinator.async_request_refresh()
+            await self.coordinator.schedule_action_refresh(
+                self._vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
             LOGGER.error("Error opening boot for VIN %s: %s", self._vin, e)
