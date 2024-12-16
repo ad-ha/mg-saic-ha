@@ -1,6 +1,10 @@
 import asyncio
 from saic_ismart_client_ng import SaicApi
 from saic_ismart_client_ng.model import SaicApiConfiguration
+from saic_ismart_client_ng.api.vehicle_charging.schema import (
+    ChargeCurrentLimitCode,
+    TargetBatteryCode,
+)
 from .const import LOGGER, REGION_BASE_URIS, BatterySoc
 
 
@@ -186,7 +190,37 @@ class SAICMGAPIClient:
             )
             raise
 
-    async def set_target_soc(self, vin, target_soc_percentage):
+    async def set_charge_limit(
+        self, vin, charge_limit: int, target_soc_value: int
+    ) -> None:
+        """Set the charge limit of the vehicle."""
+        try:
+            # Map percentage to BatterySoc enum
+            amps_to_enum = {
+                6: ChargeCurrentLimitCode.C_6A,
+                8: ChargeCurrentLimitCode.C_8A,
+                16: ChargeCurrentLimitCode.C_16A,
+                99: ChargeCurrentLimitCode.C_MAX,
+            }
+            charge_limit = (
+                amps_to_enum.get(charge_limit) or ChargeCurrentLimitCode.C_MAX
+            )
+            # Unfortunately the charge limit cannot be changed without also providing the
+            # target SOC. Identify the correct enum and use this.
+            tbc = getattr(TargetBatteryCode, f"P_{target_soc_value}", None)
+            if tbc is None:
+                tbc = TargetBatteryCode.P_80
+                LOGGER.warn("Could not identify target SOC so using %s", tbc)
+            # Call the method with the enum value
+            await self._make_api_call(
+                self.saic_api.set_target_battery_soc, vin, tbc, charge_limit
+            )
+            LOGGER.info("Set charge limit to %d%% for VIN: %s", charge_limit, vin)
+        except Exception as e:
+            LOGGER.error("Error setting charge limit for VIN %s: %s", vin, e)
+            raise
+
+    async def set_target_soc(self, vin, target_soc_percentage) -> None:
         """Set the target SOC of the vehicle."""
         try:
             # Map percentage to BatterySoc enum

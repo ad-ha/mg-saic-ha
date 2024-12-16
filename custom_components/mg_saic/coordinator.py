@@ -157,6 +157,7 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         else:
             LOGGER.debug("Charging data not available.")
 
+
         # Determine if the vehicle is powered on
         self.is_powered_on = False
         status_data = data.get("status")

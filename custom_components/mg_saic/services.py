@@ -16,6 +16,7 @@ SERVICE_START_AC = "start_ac"
 SERVICE_STOP_AC = "stop_ac"
 SERVICE_OPEN_TAILGATE = "open_tailgate"
 SERVICE_SET_TARGET_SOC = "set_target_soc"
+SERVICE_SET_CHARGE_LIMIT = "set_charge_limit"
 SERVICE_START_AC_WITH_SETTINGS = "start_ac_with_settings"
 SERVICE_START_BATTERY_HEATING = "start_battery_heating"
 SERVICE_START_CHARGING = "start_charging"
@@ -208,6 +209,16 @@ async def async_setup_services(hass: HomeAssistant, client: SAICMGAPIClient) -> 
             await client.set_target_soc(vin, target_soc)
         except Exception as e:
             LOGGER.error("Error setting target SOC for VIN %s: %s", vin, e)
+
+    async def handle_set_charge_limit(call: ServiceCall) -> None:
+        """Handle the set_charge_limit service call."""
+        vin = call.data["vin"]
+        target_soc = call.data["target_soc"]
+        charge_limit = call.data["charge_limit"]
+        try:
+            await client.set_charge_limit(vin, charge_limit, target_soc)
+        except Exception as e:
+            LOGGER.error("Error setting charge limit for VIN %s: %s", vin, e)
 
     async def handle_control_rear_window_heat(call: ServiceCall) -> None:
         """Handle the control_rear_window_heat service call."""
