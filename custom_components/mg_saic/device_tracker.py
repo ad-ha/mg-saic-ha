@@ -32,6 +32,10 @@ class SAICMGDeviceTracker(CoordinatorEntity, TrackerEntity):
         vin_info = self.coordinator.data["info"][0]
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}_gps"
 
+        # Store last known good coordinates
+        self._last_lat = None
+        self._last_lon = None
+
     @property
     def unique_id(self):
         """Return the unique ID of the tracker."""
@@ -46,28 +50,48 @@ class SAICMGDeviceTracker(CoordinatorEntity, TrackerEntity):
     @property
     def latitude(self):
         """Return the latitude of the device."""
-        try:
-            data = self.coordinator.data.get(self._data_type)
-            if data:
-                gps_position = getattr(data, self._field, None)
-                if gps_position and gps_position.wayPoint:
-                    return gps_position.wayPoint.position.latitude / 1e6
-        except Exception as e:
-            LOGGER.error("Error retrieving latitude for %s: %s", self._name, e)
-        return None
+        data = self.coordinator.data.get(self._data_type)
+        if data:
+            gps_position = getattr(data, self._field, None)
+            if gps_position and gps_position.wayPoint:
+                lat = gps_position.wayPoint.position.latitude / 1e6
+                lon = gps_position.wayPoint.position.longitude / 1e6
+
+                # If the API returns 0,0 coordinates, fallback to last known valid data
+                if (lat == 0.0 and lon == 0.0) and (
+                    self._last_lat is not None and self._last_lon is not None
+                ):
+                    return self._last_lat
+                else:
+                    # Update last known good latitude if not zero
+                    if lat != 0.0:
+                        self._last_lat = lat
+                    return lat
+        # Fallback if no new data or data invalid
+        return self._last_lat
 
     @property
     def longitude(self):
         """Return the longitude of the device."""
-        try:
-            data = self.coordinator.data.get(self._data_type)
-            if data:
-                gps_position = getattr(data, self._field, None)
-                if gps_position and gps_position.wayPoint:
-                    return gps_position.wayPoint.position.longitude / 1e6
-        except Exception as e:
-            LOGGER.error("Error retrieving longitude for %s: %s", self._name, e)
-        return None
+        data = self.coordinator.data.get(self._data_type)
+        if data:
+            gps_position = getattr(data, self._field, None)
+            if gps_position and gps_position.wayPoint:
+                lat = gps_position.wayPoint.position.latitude / 1e6
+                lon = gps_position.wayPoint.position.longitude / 1e6
+
+                # If the API returns 0,0 coordinates, fallback to last known valid data
+                if (lat == 0.0 and lon == 0.0) and (
+                    self._last_lat is not None and self._last_lon is not None
+                ):
+                    return self._last_lon
+                else:
+                    # Update last known good longitude if not zero
+                    if lon != 0.0:
+                        self._last_lon = lon
+                    return lon
+        # Fallback if no new data or data invalid
+        return self._last_lon
 
     @property
     def source_type(self):

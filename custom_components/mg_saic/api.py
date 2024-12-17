@@ -1,5 +1,4 @@
 import asyncio
-from enum import Enum
 from saic_ismart_client_ng import SaicApi
 from saic_ismart_client_ng.model import SaicApiConfiguration
 from saic_ismart_client_ng.api.vehicle_charging import (
@@ -173,14 +172,13 @@ class SAICMGAPIClient:
         """Send a battery heating control command to the vehicle."""
         try:
             LOGGER.debug(f"Battery heating control - VIN: {vin}, action: {action}")
-            # Use the control_battery_heating method from the saic-python-client-ng library
             if action == "start":
                 await self._make_api_call(
-                    self.saic_api.control_battery_heating, vin=vin, enable=False
+                    self.saic_api.control_battery_heating, vin=vin, enable=True
                 )
             else:
                 await self._make_api_call(
-                    self.saic_api.control_battery_heating, vin=vin, enable=True
+                    self.saic_api.control_battery_heating, vin=vin, enable=False
                 )
             LOGGER.info(
                 f"Battery heating {action} command sent successfully for VIN: {vin}"
