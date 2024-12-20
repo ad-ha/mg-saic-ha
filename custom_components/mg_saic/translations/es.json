@@ -153,9 +153,9 @@
         }
       }
     },
-    "start_ac_with_settings": {
-      "name": "Encender AC con Configuración",
-      "description": "Encender el sistema de AC del vehículo con temperatura y velocidad de ventilador específicas.",
+    "start_climate": {
+      "name": "Activar climatizador",
+      "description": "Encender el sistema de climatización del vehículo con temperatura y velocidad de ventilador específicas.",
       "fields": {
         "vin": {
           "name": "VIN",
@@ -168,6 +168,10 @@
         "fan_speed": {
           "name": "Velocidad del Ventilador",
           "description": "Nivel de velocidad del ventilador (por ejemplo, 1-7)."
+        },
+        "ac_on": {
+          "name": "AC Encendido",
+          "description": "True para encender el AC, false para apagar."
         }
       }
     },

@@ -27,7 +27,7 @@ SERVICE_STOP_AC = "stop_ac"
 SERVICE_OPEN_TAILGATE = "open_tailgate"
 SERVICE_SET_CHARGING_CURRENT_LIMIT = "set_charging_current_limit"
 SERVICE_SET_TARGET_SOC = "set_target_soc"
-SERVICE_START_AC_WITH_SETTINGS = "start_ac_with_settings"
+SERVICE_START_CLIMATE = "start_climate"
 SERVICE_START_BATTERY_HEATING = "start_battery_heating"
 SERVICE_START_CHARGING = "start_charging"
 SERVICE_START_FRONT_DEFROST = "start_front_defrost"
@@ -66,11 +66,12 @@ SERVICE_REAR_WINDOW_DEFROST_ACTION_SCHEMA = vol.Schema(
     }
 )
 
-SERVICE_START_AC_WITH_SETTINGS_SCHEMA = vol.Schema(
+SERVICE_START_CLIMATE_SCHEMA = vol.Schema(
     {
         vol.Required("vin"): cv.string,
         vol.Required("temperature"): vol.Coerce(float),
         vol.Required("fan_speed"): vol.Coerce(int),
+        vol.Optional("ac_on", default=True): cv.boolean,
     }
 )
 
@@ -167,18 +168,20 @@ async def async_setup_services(
         except Exception as e:
             LOGGER.error("Error stopping AC for VIN %s: %s", vin, e)
 
-    async def handle_start_ac_with_settings(call: ServiceCall) -> None:
-        """Handle the start_ac_with_settings service call."""
+    async def handle_start_climate(call: ServiceCall) -> None:
+        """Handle the start_climate service call."""
         vin = call.data["vin"]
         temperature = call.data["temperature"]
         fan_speed = call.data["fan_speed"]
+        ac_on = call.data["ac_on"]
         try:
             immediate_interval = coordinator.after_action_delay
             long_interval = coordinator.ac_long_interval
 
-            await client.start_climate(vin, temperature, fan_speed)
+            await client.start_climate(vin, temperature, fan_speed, ac_on)
             LOGGER.info(
-                "AC started with temperature %s°C and fan speed %s for VIN: %s",
+                "Climate started with AC ON: %s, temperature %s°C and fan speed %s for VIN: %s",
+                ac_on,
                 temperature,
                 fan_speed,
                 vin,
@@ -529,9 +532,9 @@ async def async_setup_services(
     )
     hass.services.async_register(
         DOMAIN,
-        SERVICE_START_AC_WITH_SETTINGS,
-        handle_start_ac_with_settings,
-        schema=SERVICE_START_AC_WITH_SETTINGS_SCHEMA,
+        SERVICE_START_CLIMATE,
+        handle_start_climate,
+        schema=SERVICE_START_CLIMATE_SCHEMA,
     )
     hass.services.async_register(
         DOMAIN,
@@ -587,7 +590,7 @@ async def async_unload_services(hass: HomeAssistant) -> None:
     hass.services.async_remove(DOMAIN, SERVICE_SET_CHARGING_CURRENT_LIMIT)
     hass.services.async_remove(DOMAIN, SERVICE_SET_TARGET_SOC)
     hass.services.async_remove(DOMAIN, SERVICE_START_AC)
-    hass.services.async_remove(DOMAIN, SERVICE_START_AC_WITH_SETTINGS)
+    hass.services.async_remove(DOMAIN, SERVICE_START_CLIMATE)
     hass.services.async_remove(DOMAIN, SERVICE_START_BATTERY_HEATING)
     hass.services.async_remove(DOMAIN, SERVICE_START_CHARGING)
     hass.services.async_remove(DOMAIN, SERVICE_START_FRONT_DEFROST)

@@ -5,6 +5,7 @@ from .const import (
     DOMAIN,
     LOGGER,
 )
+from .utils import create_device_info
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -20,8 +21,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
     vin = vin_info.vin
 
     buttons = [
-        SAICMGTriggerAlarmButton(coordinator, client, vin_info, vin),
-        SAICMGUpdateDataButton(coordinator, client, vin_info, vin),
+        SAICMGTriggerAlarmButton(coordinator, client, entry, vin_info, vin),
+        SAICMGUpdateDataButton(coordinator, client, entry, vin_info, vin),
     ]
 
     async_add_entities(buttons)
@@ -30,7 +31,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 class SAICMGButton(CoordinatorEntity, ButtonEntity):
     """Base class for MG SAIC buttons."""
 
-    def __init__(self, coordinator, client, vin_info, vin, name, icon):
+    def __init__(self, coordinator, client, entry, vin_info, vin, name, icon):
         """Initialize the button."""
         super().__init__(coordinator)
         self._client = client
@@ -40,16 +41,12 @@ class SAICMGButton(CoordinatorEntity, ButtonEntity):
         self._attr_unique_id = f"{vin}_{name.replace(' ', '_').lower()}_button"
         self._attr_icon = icon
 
+        self._device_info = create_device_info(coordinator, entry.entry_id)
+
     @property
     def device_info(self):
-        """Return device info."""
-        return {
-            "identifiers": {(DOMAIN, self._vin)},
-            "name": f"{self._vin_info.brandName} {self._vin_info.modelName}",
-            "manufacturer": self._vin_info.brandName,
-            "model": self._vin_info.modelName,
-            "serial_number": self._vin,
-        }
+        """Return device info"""
+        return self._device_info
 
     async def schedule_data_refresh(self):
         """Schedule a data refresh for the coordinator associated with the VIN."""
@@ -69,9 +66,15 @@ class SAICMGButton(CoordinatorEntity, ButtonEntity):
 class SAICMGTriggerAlarmButton(SAICMGButton):
     """Button to trigger the vehicle alarm."""
 
-    def __init__(self, coordinator, client, vin_info, vin):
+    def __init__(self, coordinator, client, entry, vin_info, vin):
         super().__init__(
-            coordinator, client, vin_info, vin, "Trigger Alarm", "mdi:alarm-light"
+            coordinator,
+            client,
+            entry,
+            vin_info,
+            vin,
+            "Trigger Alarm",
+            "mdi:alarm-light",
         )
 
     async def async_press(self):
@@ -94,9 +97,15 @@ class SAICMGTriggerAlarmButton(SAICMGButton):
 class SAICMGUpdateDataButton(SAICMGButton):
     """Button to manually update vehicle data."""
 
-    def __init__(self, coordinator, client, vin_info, vin):
+    def __init__(self, coordinator, client, entry, vin_info, vin):
         super().__init__(
-            coordinator, client, vin_info, vin, "Update Vehicle Data", "mdi:update"
+            coordinator,
+            client,
+            entry,
+            vin_info,
+            vin,
+            "Update Vehicle Data",
+            "mdi:update",
         )
 
     async def async_press(self):

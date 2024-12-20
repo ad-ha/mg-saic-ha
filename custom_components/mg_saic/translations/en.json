@@ -153,9 +153,9 @@
         }
       }
     },
-    "start_ac_with_settings": {
-      "name": "Start AC with Settings",
-      "description": "Start the vehicle's AC system with specific temperature and fan speed.",
+    "start_climate": {
+      "name": "Start Climate",
+      "description": "Start the vehicle's Climate system with specific temperature and fan speed.",
       "fields": {
         "vin": {
           "name": "VIN",
@@ -168,6 +168,10 @@
         "fan_speed": {
           "name": "Fan Speed",
           "description": "Fan speed level (e.g., 1-7)."
+        },
+        "ac_on": {
+          "name": "AC On",
+          "description": "True to enable the AC, false to disable."
         }
       }
     },

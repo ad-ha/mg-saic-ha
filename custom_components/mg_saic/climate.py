@@ -17,6 +17,7 @@ from .const import (
     DOMAIN,
     LOGGER,
 )
+from .utils import create_device_info
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -31,14 +32,14 @@ async def async_setup_entry(hass, entry, async_add_entities):
     vin_info = coordinator.data["info"][0]
     vin = vin_info.vin
 
-    climate_entity = SAICMGClimateEntity(coordinator, client, vin_info, vin)
+    climate_entity = SAICMGClimateEntity(coordinator, client, entry, vin_info, vin)
     async_add_entities([climate_entity])
 
 
 class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
     """Representation of the vehicle's climate control."""
 
-    def __init__(self, coordinator, client, vin_info, vin):
+    def __init__(self, coordinator, client, entry, vin_info, vin):
         """Initialize the climate entity."""
         super().__init__(coordinator)
         self._client = client
@@ -54,8 +55,14 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
             | ClimateEntityFeature.TURN_ON
             | ClimateEntityFeature.TURN_OFF
         )
-        self._attr_hvac_modes = [HVACMode.OFF, HVACMode.COOL]
+        self._attr_hvac_modes = [
+            HVACMode.OFF,
+            HVACMode.COOL,
+            HVACMode.FAN_ONLY,
+        ]
         self._attr_fan_modes = [FAN_LOW, FAN_MEDIUM, FAN_HIGH]
+
+        self._device_info = create_device_info(coordinator, entry.entry_id)
 
         # Initialize with default values
         self._attr_current_temperature = None
@@ -64,15 +71,9 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
         self._attr_hvac_mode = HVACMode.OFF
 
     @property
-    def device_info(self):
-        """Return device info."""
-        return {
-            "identifiers": {(DOMAIN, self._vin)},
-            "name": f"{self._vin_info.brandName} {self._vin_info.modelName}",
-            "manufacturer": self._vin_info.brandName,
-            "model": self._vin_info.modelName,
-            "serial_number": self._vin,
-        }
+    def target_temperature_step(self):
+        """Return the step size for target temperature."""
+        return 1.0
 
     @property
     def current_temperature(self):
@@ -94,30 +95,47 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
             ac_status = getattr(status.basicVehicleStatus, "remoteClimateStatus", None)
             if ac_status == 3:
                 return HVACMode.COOL
+            elif ac_status == 2:
+                return HVACMode.FAN_ONLY
         return HVACMode.OFF
 
     async def async_set_hvac_mode(self, hvac_mode):
         """Set the HVAC mode."""
-        if hvac_mode == HVACMode.OFF:
-            await self._client.stop_ac(self._vin)
-            self._attr_hvac_mode = HVACMode.OFF
-        elif hvac_mode == HVACMode.COOL:
-            await self._client.start_climate(
-                self._vin, self._attr_target_temperature, self._fan_speed_to_int()
-            )
-            self._attr_hvac_mode = HVACMode.COOL
-        else:
-            LOGGER.warning("Unsupported HVAC mode: %s", hvac_mode)
-            return
-        # Schedule data refresh
-        immediate_interval = self.coordinator.after_action_delay
-        long_interval = self.coordinator.ac_long_interval
+        try:
+            if hvac_mode == HVACMode.OFF:
+                await self._client.stop_ac(self._vin)
+            elif hvac_mode == HVACMode.COOL:
+                await self._client.start_climate(
+                    self._vin,
+                    self._attr_target_temperature,
+                    self._fan_speed_to_int(),
+                    ac_on=True,
+                )
+            elif hvac_mode == HVACMode.FAN_ONLY:
+                await self._client.start_climate(
+                    self._vin,
+                    self._attr_target_temperature,
+                    self._fan_speed_to_int(),
+                    ac_on=False,
+                )
+            else:
+                LOGGER.warning("Unsupported HVAC mode: %s", hvac_mode)
+                return
 
-        await self.coordinator.schedule_action_refresh(
-            self._vin,
-            immediate_interval,
-            long_interval,
-        )
+            self._attr_hvac_mode = hvac_mode
+
+            # Schedule data refresh
+            immediate_interval = self.coordinator.after_action_delay
+            long_interval = self.coordinator.ac_long_interval
+
+            await self.coordinator.schedule_action_refresh(
+                self._vin,
+                immediate_interval,
+                long_interval,
+            )
+
+        except Exception as e:
+            LOGGER.error("Error setting HVAC mode for VIN %s: %s", self._vin, e)
 
     async def async_turn_on(self):
         """Turn the climate entity on."""
@@ -145,15 +163,22 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
 
     async def async_set_temperature(self, **kwargs):
         """Set new target temperature."""
+        immediate_interval = self.coordinator.after_action_delay
+        long_interval = self.coordinator.ac_long_interval
+
         temperature = kwargs.get(ATTR_TEMPERATURE)
         if temperature is not None:
             self._attr_target_temperature = temperature
             if self.hvac_mode != HVACMode.OFF:
                 await self._client.start_climate(
-                    self._vin, temperature, self._fan_speed_to_int()
+                    self._vin, temperature, self._fan_speed_to_int(), ac_on=True
                 )
                 # Schedule data refresh
-                await self.coordinator.async_request_refresh()
+                await self.coordinator.schedule_action_refresh(
+                    self._vin,
+                    immediate_interval,
+                    long_interval,
+                )
 
     @property
     def fan_mode(self):
@@ -162,14 +187,24 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
 
     async def async_set_fan_mode(self, fan_mode):
         """Set the fan mode."""
+        immediate_interval = self.coordinator.after_action_delay
+        long_interval = self.coordinator.ac_long_interval
+
         if fan_mode in self._attr_fan_modes:
             self._attr_fan_mode = fan_mode
             if self.hvac_mode != HVACMode.OFF:
                 await self._client.start_climate(
-                    self._vin, self._attr_target_temperature, self._fan_speed_to_int()
+                    self._vin,
+                    self._attr_target_temperature,
+                    self._fan_speed_to_int(),
+                    ac_on=True,
                 )
                 # Schedule data refresh
-                await self.coordinator.async_request_refresh()
+                await self.coordinator.schedule_action_refresh(
+                    self._vin,
+                    immediate_interval,
+                    long_interval,
+                )
         else:
             LOGGER.warning("Unsupported fan mode: %s", fan_mode)
 
@@ -202,3 +237,8 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
     def max_temp(self):
         """Return the maximum temperature."""
         return 30.0
+
+    @property
+    def device_info(self):
+        """Return device info"""
+        return self._device_info

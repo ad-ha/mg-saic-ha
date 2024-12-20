@@ -4,6 +4,7 @@ from .const import (
     DOMAIN,
     LOGGER,
 )
+from .utils import create_device_info
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -19,8 +20,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
     vin = vin_info.vin
 
     lock_entities = [
-        SAICMGLockEntity(coordinator, client, vin_info, vin),
-        SAICMGBootLockEntity(coordinator, client, vin_info, vin),
+        SAICMGLockEntity(coordinator, client, entry, vin_info, vin),
+        SAICMGBootLockEntity(coordinator, client, entry, vin_info, vin),
     ]
 
     async_add_entities(lock_entities)
@@ -29,7 +30,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 class SAICMGLockEntity(CoordinatorEntity, LockEntity):
     """Representation of the vehicle's lock."""
 
-    def __init__(self, coordinator, client, vin_info, vin):
+    def __init__(self, coordinator, client, entry, vin_info, vin):
         """Initialize the lock entity."""
         super().__init__(coordinator)
         self._client = client
@@ -38,17 +39,14 @@ class SAICMGLockEntity(CoordinatorEntity, LockEntity):
 
         self._attr_name = f"{vin_info.brandName} {vin_info.modelName} Lock"
         self._attr_unique_id = f"{vin}_lock"
+        self._attr_icon = "mdi:car-door-lock"
+
+        self._device_info = create_device_info(coordinator, entry.entry_id)
 
     @property
     def device_info(self):
-        """Return device info."""
-        return {
-            "identifiers": {(DOMAIN, self._vin)},
-            "name": f"{self._vin_info.brandName} {self._vin_info.modelName}",
-            "manufacturer": self._vin_info.brandName,
-            "model": self._vin_info.modelName,
-            "serial_number": self._vin,
-        }
+        """Return device info"""
+        return self._device_info
 
     @property
     def is_locked(self):
@@ -105,7 +103,7 @@ class SAICMGLockEntity(CoordinatorEntity, LockEntity):
 class SAICMGBootLockEntity(CoordinatorEntity, LockEntity):
     """Representation of the vehicle's boot as a lock."""
 
-    def __init__(self, coordinator, client, vin_info, vin):
+    def __init__(self, coordinator, client, entry, vin_info, vin):
         """Initialize the boot lock entity."""
         super().__init__(coordinator)
         self._client = client
@@ -116,16 +114,12 @@ class SAICMGBootLockEntity(CoordinatorEntity, LockEntity):
         self._attr_unique_id = f"{vin}_boot_lock"
         self._attr_icon = "mdi:car-back"
 
+        self._device_info = create_device_info(coordinator, entry.entry_id)
+
     @property
     def device_info(self):
-        """Return device info."""
-        return {
-            "identifiers": {(DOMAIN, self._vin)},
-            "name": f"{self._vin_info.brandName} {self._vin_info.modelName}",
-            "manufacturer": self._vin_info.brandName,
-            "model": self._vin_info.modelName,
-            "serial_number": self._vin,
-        }
+        """Return device info"""
+        return self._device_info
 
     @property
     def is_locked(self):

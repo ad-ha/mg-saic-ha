@@ -9,6 +9,7 @@ from homeassistant.const import (
     UnitOfEnergy,
     UnitOfTime,
     UnitOfPower,
+    UnitOfSpeed,
 )
 from .const import (
     DOMAIN,
@@ -20,6 +21,7 @@ from .const import (
     CHARGING_VOLTAGE_FACTOR,
     DATA_100_DECIMAL_CORRECTION,
 )
+from .utils import create_device_info
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -181,6 +183,19 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "mdi:power-settings",
                 None,
                 1.0,
+                "status",
+            ),
+            SAICMGVehicleSpeedSensor(
+                coordinator,
+                entry,
+                "Speed",
+                "speed",
+                "gpsPosition",
+                SensorDeviceClass.SPEED,
+                UnitOfSpeed.KILOMETERS_PER_HOUR,
+                "mdi:speedometer",
+                "measurement",
+                DATA_DECIMAL_CORRECTION,
                 "status",
             ),
             SAICMGVehicleSensor(
@@ -428,6 +443,17 @@ async def async_setup_entry(hass, entry, async_add_entities):
                         "chrgMgmtData",
                         "charging",
                     ),
+                    SAICMGInstantPowerSensor(
+                        coordinator,
+                        entry,
+                        "Instant Power",
+                        SensorDeviceClass.POWER,
+                        UnitOfPower.KILO_WATT,
+                        "mdi:lightning-bolt-circle",
+                        "measurement",
+                        "chrgMgmtData",
+                        "charging",
+                    ),
                     SAICMGChargingSensor(
                         coordinator,
                         entry,
@@ -524,7 +550,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                     "bmsPTCHeatResp",
                     None,
                     None,
-                    "mdi:fire",
+                    "mdi:heat-wave",
                     None,
                     1.0,
                     "chrgMgmtData",
@@ -572,6 +598,8 @@ class SAICMGMileageSensor(CoordinatorEntity, SensorEntity):
         self._data_type = data_type
         vin_info = self.coordinator.data["info"][0]
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}"
+
+        self._device_info = create_device_info(coordinator, entry.entry_id)
 
     @property
     def unique_id(self):
@@ -624,14 +652,8 @@ class SAICMGMileageSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def device_info(self):
-        vin_info = self.coordinator.data["info"][0]
-        return {
-            "identifiers": {(DOMAIN, vin_info.vin)},
-            "name": f"{vin_info.brandName} {vin_info.modelName}",
-            "manufacturer": vin_info.brandName,
-            "model": vin_info.modelName,
-            "serial_number": vin_info.vin,
-        }
+        """Return device info."""
+        return self._device_info
 
 
 class SAICMGVehicleSensor(CoordinatorEntity, SensorEntity):
@@ -664,6 +686,8 @@ class SAICMGVehicleSensor(CoordinatorEntity, SensorEntity):
         self._attr_state_class = state_class
         vin_info = self.coordinator.data["info"][0]
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}"
+
+        self._device_info = create_device_info(coordinator, entry.entry_id)
 
     @property
     def unique_id(self):
@@ -708,6 +732,7 @@ class SAICMGVehicleSensor(CoordinatorEntity, SensorEntity):
                                 2: "On",
                                 3: "Start",
                             }.get(raw_value, f"Unknown ({raw_value})")
+
                         return raw_value * self._factor
             elif self._data_type == "charging":
                 charging_data = getattr(data, self._status_type, None)
@@ -724,14 +749,8 @@ class SAICMGVehicleSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def device_info(self):
-        vin_info = self.coordinator.data["info"][0]
-        return {
-            "identifiers": {(DOMAIN, vin_info.vin)},
-            "name": f"{vin_info.brandName} {vin_info.modelName}",
-            "manufacturer": vin_info.brandName,
-            "model": vin_info.modelName,
-            "serial_number": vin_info.vin,
-        }
+        """Return device info."""
+        return self._device_info
 
 
 class SAICMGVehicleDetailSensor(CoordinatorEntity, SensorEntity):
@@ -745,6 +764,8 @@ class SAICMGVehicleDetailSensor(CoordinatorEntity, SensorEntity):
         self._data_type = data_type
         vin_info = self.coordinator.data["info"][0]
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}"
+
+        self._device_info = create_device_info(coordinator, entry.entry_id)
 
     @property
     def unique_id(self):
@@ -773,14 +794,8 @@ class SAICMGVehicleDetailSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def device_info(self):
-        vin_info = self.coordinator.data["info"][0]
-        return {
-            "identifiers": {(DOMAIN, vin_info.vin)},
-            "name": f"{vin_info.brandName} {vin_info.modelName}",
-            "manufacturer": vin_info.brandName,
-            "model": vin_info.modelName,
-            "serial_number": vin_info.vin,
-        }
+        """Return device info."""
+        return self._device_info
 
 
 # STATUS SENSORS
@@ -814,6 +829,8 @@ class SAICMGHeatedSeatLevelSensor(CoordinatorEntity, SensorEntity):
         self._data_type = data_type
         vin_info = self.coordinator.data["info"][0]
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}_seat_heat_level"
+
+        self._device_info = create_device_info(coordinator, entry.entry_id)
 
     @property
     def unique_id(self):
@@ -850,15 +867,8 @@ class SAICMGHeatedSeatLevelSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def device_info(self):
-        """Return device info for this sensor."""
-        vin_info = self.coordinator.data["info"][0]
-        return {
-            "identifiers": {(DOMAIN, vin_info.vin)},
-            "name": f"{vin_info.brandName} {vin_info.modelName}",
-            "manufacturer": vin_info.brandName,
-            "model": vin_info.modelName,
-            "serial_number": vin_info.vin,
-        }
+        """Return device info."""
+        return self._device_info
 
 
 class SAICMGElectricRangeSensor(CoordinatorEntity, SensorEntity):
@@ -893,6 +903,8 @@ class SAICMGElectricRangeSensor(CoordinatorEntity, SensorEntity):
         self._attr_state_class = state_class
         vin_info = self.coordinator.data["info"][0]
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}"
+
+        self._device_info = create_device_info(coordinator, entry.entry_id)
 
     @property
     def unique_id(self):
@@ -942,14 +954,104 @@ class SAICMGElectricRangeSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def device_info(self):
+        """Return device info."""
+        return self._device_info
+
+
+class SAICMGInstantPowerSensor(CoordinatorEntity, SensorEntity):
+    """Sensor for Instant Power when the vehicle is powered on and driving."""
+
+    def __init__(
+        self,
+        coordinator,
+        entry,
+        name,
+        device_class,
+        unit,
+        icon,
+        state_class,
+        data_source="chrgMgmtData",
+        data_type="charging",
+    ):
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._name = name
+        self._device_class = device_class
+        self._unit = unit
+        self._state_class = state_class
+        self._icon = icon
+        self._data_source = data_source
+        self._attr_device_class = device_class
+        self._attr_native_unit_of_measurement = unit
+        self._attr_icon = icon
+        self._attr_state_class = state_class
+        self._data_type = data_type
         vin_info = self.coordinator.data["info"][0]
-        return {
-            "identifiers": {(DOMAIN, vin_info.vin)},
-            "name": f"{vin_info.brandName} {vin_info.modelName}",
-            "manufacturer": vin_info.brandName,
-            "model": vin_info.modelName,
-            "serial_number": vin_info.vin,
-        }
+        self._unique_id = f"{entry.entry_id}_{vin_info.vin}_instant_power"
+
+        self._device_info = create_device_info(coordinator, entry.entry_id)
+
+    @property
+    def unique_id(self):
+        return self._unique_id
+
+    @property
+    def name(self):
+        vin_info = self.coordinator.data["info"][0]
+        return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
+
+    @property
+    def available(self):
+        """Return True if the entity is available."""
+        required_data = self.coordinator.data.get(self._data_type)
+        return self.coordinator.last_update_success and required_data is not None
+
+    @property
+    def native_value(self):
+        """Return the state of the sensor."""
+        try:
+            charging_data = getattr(
+                self.coordinator.data.get("charging"), self._data_source, None
+            )
+            if charging_data:
+                # Check if the vehicle is driving
+                status_data = self.coordinator.data.get("status")
+                power_mode = getattr(status_data.basicVehicleStatus, "powerMode", None)
+                if power_mode in [2, 3]:
+                    # Get raw current and voltage
+                    raw_current = getattr(charging_data, "bmsPackCrnt", None)
+                    raw_voltage = getattr(charging_data, "bmsPackVol", None)
+
+                    if raw_current is not None and raw_voltage is not None:
+                        # Apply decoding to current and voltage
+                        decoded_current = raw_current * CHARGING_CURRENT_FACTOR - 1000
+                        decoded_voltage = raw_voltage * CHARGING_VOLTAGE_FACTOR
+
+                        # Calculate power in kW
+                        power = decoded_current * decoded_voltage / 1000.0
+
+                        return round(power, 2)
+                    else:
+                        LOGGER.warning(
+                            "Instant Power: Current or Voltage not available in charging data."
+                        )
+                        return None
+                else:
+                    return 0
+            else:
+                LOGGER.error("No charging data available for %s", self._name)
+                return None
+
+        except Exception as e:
+            LOGGER.error(
+                "Error retrieving instant power for sensor %s: %s", self._name, e
+            )
+            return None
+
+    @property
+    def device_info(self):
+        """Return device info."""
+        return self._device_info
 
 
 class SAICMGSOCSensor(CoordinatorEntity, SensorEntity):
@@ -982,6 +1084,8 @@ class SAICMGSOCSensor(CoordinatorEntity, SensorEntity):
         self._data_type = data_type
         vin_info = self.coordinator.data["info"][0]
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field_basic}_soc"
+
+        self._device_info = create_device_info(coordinator, entry.entry_id)
 
     @property
     def unique_id(self):
@@ -1027,14 +1131,8 @@ class SAICMGSOCSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def device_info(self):
-        vin_info = self.coordinator.data["info"][0]
-        return {
-            "identifiers": {(DOMAIN, vin_info.vin)},
-            "name": f"{vin_info.brandName} {vin_info.modelName}",
-            "manufacturer": vin_info.brandName,
-            "model": vin_info.modelName,
-            "serial_number": vin_info.vin,
-        }
+        """Return device info."""
+        return self._device_info
 
 
 # CHARGING SENSORS
@@ -1072,6 +1170,8 @@ class SAICMGChargingCurrentSensor(CoordinatorEntity, SensorEntity):
         self._attr_state_class = state_class
         vin_info = self.coordinator.data["info"][0]
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}_charge"
+
+        self._device_info = create_device_info(coordinator, entry.entry_id)
 
     @property
     def unique_id(self):
@@ -1124,14 +1224,8 @@ class SAICMGChargingCurrentSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def device_info(self):
-        vin_info = self.coordinator.data["info"][0]
-        return {
-            "identifiers": {(DOMAIN, vin_info.vin)},
-            "name": f"{vin_info.brandName} {vin_info.modelName}",
-            "manufacturer": vin_info.brandName,
-            "model": vin_info.modelName,
-            "serial_number": vin_info.vin,
-        }
+        """Return device info."""
+        return self._device_info
 
 
 class SAICMGChargingPowerSensor(CoordinatorEntity, SensorEntity):
@@ -1164,6 +1258,8 @@ class SAICMGChargingPowerSensor(CoordinatorEntity, SensorEntity):
         self._data_type = data_type
         vin_info = self.coordinator.data["info"][0]
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_charging_power"
+
+        self._device_info = create_device_info(coordinator, entry.entry_id)
 
     @property
     def unique_id(self):
@@ -1219,14 +1315,8 @@ class SAICMGChargingPowerSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def device_info(self):
-        vin_info = self.coordinator.data["info"][0]
-        return {
-            "identifiers": {(DOMAIN, vin_info.vin)},
-            "name": f"{vin_info.brandName} {vin_info.modelName}",
-            "manufacturer": vin_info.brandName,
-            "model": vin_info.modelName,
-            "serial_number": vin_info.vin,
-        }
+        """Return device info."""
+        return self._device_info
 
 
 class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
@@ -1263,6 +1353,8 @@ class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
         self._attr_state_class = state_class
         vin_info = self.coordinator.data["info"][0]
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}_charge"
+
+        self._device_info = create_device_info(coordinator, entry.entry_id)
 
     @property
     def unique_id(self):
@@ -1367,14 +1459,8 @@ class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def device_info(self):
-        vin_info = self.coordinator.data["info"][0]
-        return {
-            "identifiers": {(DOMAIN, vin_info.vin)},
-            "name": f"{vin_info.brandName} {vin_info.modelName}",
-            "manufacturer": vin_info.brandName,
-            "model": vin_info.modelName,
-            "serial_number": vin_info.vin,
-        }
+        """Return device info."""
+        return self._device_info
 
 
 class SAICMGChargingCurrentLimitSensor(CoordinatorEntity, SensorEntity):
@@ -1411,6 +1497,8 @@ class SAICMGChargingCurrentLimitSensor(CoordinatorEntity, SensorEntity):
         self._attr_state_class = state_class
         vin_info = self.coordinator.data["info"][0]
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}_current_limit"
+
+        self._device_info = create_device_info(coordinator, entry.entry_id)
 
     @property
     def unique_id(self):
@@ -1454,14 +1542,8 @@ class SAICMGChargingCurrentLimitSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def device_info(self):
-        vin_info = self.coordinator.data["info"][0]
-        return {
-            "identifiers": {(DOMAIN, vin_info.vin)},
-            "name": f"{vin_info.brandName} {vin_info.modelName}",
-            "manufacturer": vin_info.brandName,
-            "model": vin_info.modelName,
-            "serial_number": vin_info.vin,
-        }
+        """Return device info."""
+        return self._device_info
 
 
 # LAST UPDATE TIME DATA SENSOR
@@ -1490,6 +1572,8 @@ class SAICMGLastUpdateSensor(CoordinatorEntity, SensorEntity):
         vin_info = self.coordinator.data["info"][0]
         self._vin_info = vin_info
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_last_update_time"
+
+        self._device_info = create_device_info(coordinator, entry.entry_id)
 
     @property
     def unique_id(self):
@@ -1531,14 +1615,8 @@ class SAICMGLastUpdateSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def device_info(self):
-        vin_info = self._vin_info
-        return {
-            "identifiers": {(DOMAIN, vin_info.vin)},
-            "name": f"{vin_info.brandName} {vin_info.modelName}",
-            "manufacturer": vin_info.brandName,
-            "model": vin_info.modelName,
-            "serial_number": vin_info.vin,
-        }
+        """Return device info."""
+        return self._device_info
 
 
 # NEXT UPDATE TIME DATA SENSOR
@@ -1567,6 +1645,8 @@ class SAICMGNextUpdateSensor(CoordinatorEntity, SensorEntity):
         vin_info = self.coordinator.data["info"][0]
         self._vin_info = vin_info
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_next_update_time"
+
+        self._device_info = create_device_info(coordinator, entry.entry_id)
 
     @property
     def unique_id(self):
@@ -1608,14 +1688,8 @@ class SAICMGNextUpdateSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def device_info(self):
-        vin_info = self._vin_info
-        return {
-            "identifiers": {(DOMAIN, vin_info.vin)},
-            "name": f"{vin_info.brandName} {vin_info.modelName}",
-            "manufacturer": vin_info.brandName,
-            "model": vin_info.modelName,
-            "serial_number": vin_info.vin,
-        }
+        """Return device info."""
+        return self._device_info
 
 
 class SAICMGTimestampSensor(CoordinatorEntity, SensorEntity):
@@ -1631,6 +1705,8 @@ class SAICMGTimestampSensor(CoordinatorEntity, SensorEntity):
         self._attribute = attribute  # Attribute name to fetch from the coordinator
         vin_info = self.coordinator.data["info"][0]
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}"
+
+        self._device_info = create_device_info(coordinator, entry.entry_id)
 
     @property
     def unique_id(self):
@@ -1664,12 +1740,74 @@ class SAICMGTimestampSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def device_info(self):
-        """Return device info for the sensor."""
+        """Return device info."""
+        return self._device_info
+
+
+class SAICMGVehicleSpeedSensor(CoordinatorEntity, SensorEntity):
+    """Sensor for Vehicle Speed."""
+
+    def __init__(
+        self,
+        coordinator,
+        entry,
+        name,
+        field,
+        status_type,
+        device_class,
+        unit,
+        icon,
+        state_class,
+        factor,
+        data_type,
+    ):
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._name = name
+        self._field = field
+        self._status_type = status_type
+        self._factor = factor
+        self._data_type = data_type
+        self._attr_device_class = device_class
+        self._attr_native_unit_of_measurement = unit
+        self._attr_icon = icon
+        self._attr_state_class = state_class
         vin_info = self.coordinator.data["info"][0]
-        return {
-            "identifiers": {(DOMAIN, vin_info.vin)},
-            "name": f"{vin_info.brandName} {vin_info.modelName}",
-            "manufacturer": vin_info.brandName,
-            "model": vin_info.modelName,
-            "serial_number": vin_info.vin,
-        }
+        self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}"
+
+        self._device_info = create_device_info(coordinator, entry.entry_id)
+
+    @property
+    def unique_id(self):
+        return self._unique_id
+
+    @property
+    def name(self):
+        """Return the name of the sensor."""
+        vin_info = self.coordinator.data["info"][0]
+        return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
+
+    @property
+    def available(self):
+        """Return True if the entity is available."""
+        required_data = self.coordinator.data.get(self._data_type)
+        return self.coordinator.last_update_success and required_data is not None
+
+    @property
+    def native_value(self):
+        """Return the speed value."""
+        try:
+            data = self.coordinator.data.get(self._data_type)
+            if data:
+                gps = getattr(data, self._status_type, None)
+                if gps and gps.wayPoint:
+                    speed = gps.wayPoint.speed
+                    return speed * self._factor if speed else 0
+        except AttributeError as e:
+            LOGGER.error("Error retrieving speed for sensor '%s': %s", self._name, e)
+        return None
+
+    @property
+    def device_info(self):
+        """Return device info."""
+        return self._device_info

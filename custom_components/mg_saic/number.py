@@ -5,6 +5,7 @@ from .const import (
     DOMAIN,
     LOGGER,
 )
+from .utils import create_device_info
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -25,7 +26,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     vehicle_type = coordinator.vehicle_type
     if vehicle_type in ["BEV", "PHEV"]:
         number_entities.append(
-            SAICMGTargetSOCNumber(coordinator, client, vin_info, vin)
+            SAICMGTargetSOCNumber(coordinator, client, entry, vin_info, vin)
         )
 
     async_add_entities(number_entities)
@@ -34,7 +35,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 class SAICMGTargetSOCNumber(CoordinatorEntity, NumberEntity):
     """Representation of a Target SOC number entity."""
 
-    def __init__(self, coordinator, client, vin_info, vin):
+    def __init__(self, coordinator, client, entry, vin_info, vin):
         """Initialize the Target SOC number entity."""
         super().__init__(coordinator)
         self._client = client
@@ -50,16 +51,12 @@ class SAICMGTargetSOCNumber(CoordinatorEntity, NumberEntity):
         self._attr_native_unit_of_measurement = PERCENTAGE
         self._attr_mode = NumberMode.SLIDER
 
+        self._device_info = create_device_info(coordinator, entry.entry_id)
+
     @property
     def device_info(self):
-        """Return device info."""
-        return {
-            "identifiers": {(DOMAIN, self._vin)},
-            "name": f"{self._vin_info.brandName} {self._vin_info.modelName}",
-            "manufacturer": self._vin_info.brandName,
-            "model": self._vin_info.modelName,
-            "serial_number": self._vin,
-        }
+        """Return device info"""
+        return self._device_info
 
     @property
     def native_value(self):
