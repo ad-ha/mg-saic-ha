@@ -9,6 +9,7 @@ from .const import (
 from saic_ismart_client_ng.api.vehicle_charging import (
     ChargeCurrentLimitCode as ExternalChargeCurrentLimitCode,
 )
+from .utils import create_device_info
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -25,7 +26,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
     select_entities = [
         SAICMGChargingCurrentSelect(
-            coordinator, client, vin_info, vin, "mdi:current-ac"
+            coordinator, client, entry, vin_info, vin, "mdi:current-ac"
         ),
     ]
 
@@ -59,7 +60,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 class SAICMGChargingCurrentSelect(CoordinatorEntity, SelectEntity):
     """Representation of a Charging Current Limit select entity."""
 
-    def __init__(self, coordinator, client, vin_info, vin, icon):
+    def __init__(self, coordinator, client, entry, vin_info, vin, icon):
         """Initialize the Charging Current Limit select entity."""
         super().__init__(coordinator)
         self._client = client
@@ -73,16 +74,12 @@ class SAICMGChargingCurrentSelect(CoordinatorEntity, SelectEntity):
         self._attr_unique_id = f"{vin}_charging_current_limit"
         self._attr_options = [e.limit for e in ChargeCurrentLimitOption]
 
+        self._device_info = create_device_info(coordinator, entry.entry_id)
+
     @property
     def device_info(self):
-        """Return device info."""
-        return {
-            "identifiers": {(DOMAIN, self._vin)},
-            "name": f"{self._vin_info.brandName} {self._vin_info.modelName}",
-            "manufacturer": self._vin_info.brandName,
-            "model": self._vin_info.modelName,
-            "serial_number": self._vin,
-        }
+        """Return device info"""
+        return self._device_info
 
     @property
     def current_option(self):
@@ -191,7 +188,9 @@ class SAICMGChargingCurrentSelect(CoordinatorEntity, SelectEntity):
 class SAICMGHeatedSeatLevelSelect(CoordinatorEntity, SelectEntity):
     """Select entity to control heating levels for heated seats."""
 
-    def __init__(self, coordinator, client, vin_info, vin, seat_name, seat_id, icon):
+    def __init__(
+        self, coordinator, client, entry, vin_info, vin, seat_name, seat_id, icon
+    ):
         super().__init__(coordinator)
         self._client = client
         self._vin = vin
@@ -204,16 +203,12 @@ class SAICMGHeatedSeatLevelSelect(CoordinatorEntity, SelectEntity):
         self._attr_unique_id = f"{vin}_heated_seat_{seat_id}_level"
         self._attr_options = ["Off", "Low", "Medium", "High"]
 
+        self._device_info = create_device_info(coordinator, entry.entry_id)
+
     @property
     def device_info(self):
-        """Return device info."""
-        return {
-            "identifiers": {(DOMAIN, self._vin)},
-            "name": f"{self._vin_info.brandName} {self._vin_info.modelName}",
-            "manufacturer": self._vin_info.brandName,
-            "model": self._vin_info.modelName,
-            "serial_number": self._vin,
-        }
+        """Return device info"""
+        return self._device_info
 
     @property
     def icon(self):

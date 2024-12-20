@@ -12,6 +12,8 @@ from .const import (
     CHARGING_STATUS_CODES,
     GENERIC_RESPONSE_STATUS_THRESHOLD,
     GENERIC_RESPONSE_SOC_THRESHOLD,
+    GENERIC_RESPONSE_TEMPERATURE,
+    GENERIC_RESPONSE_EXTREME_TEMPERATURE,
     UPDATE_INTERVAL,
     UPDATE_INTERVAL_CHARGING,
     UPDATE_INTERVAL_POWERED,
@@ -494,6 +496,9 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             "rearRightDoor",
             "bootStatus",
             "bonnetStatus",
+            "remoteClimateStatus",
+            "rmtHtdRrWndSt",
+            "engineStatus",
         ]
         detected_activity = False
 
@@ -706,6 +711,12 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                 == GENERIC_RESPONSE_STATUS_THRESHOLD
                 and status.basicVehicleStatus.mileage
                 == GENERIC_RESPONSE_STATUS_THRESHOLD
+                or status.basicVehicleStatus.interiorTemperature
+                == GENERIC_RESPONSE_TEMPERATURE
+                or status.basicVehicleStatus.exteriorTemperature
+                == GENERIC_RESPONSE_TEMPERATURE
+                or status.basicVehicleStatus.exteriorTemperature
+                == GENERIC_RESPONSE_EXTREME_TEMPERATURE
             ):
                 LOGGER.debug(
                     "Generic Vehicle Status Data: %s", status.basicVehicleStatus

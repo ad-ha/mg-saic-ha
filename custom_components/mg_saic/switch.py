@@ -5,6 +5,7 @@ from .const import (
     LOGGER,
     CHARGING_STATUS_CODES,
 )
+from .utils import create_device_info
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -28,17 +29,19 @@ async def async_setup_entry(hass, entry, async_add_entities):
     }
 
     # AC Switch
-    switches.append(SAICMGACSwitch(coordinator, client, vin_info, vin))
+    switches.append(SAICMGACSwitch(coordinator, client, entry, vin_info, vin))
 
-    # Front Defrost Switch (New)
-    switches.append(SAICMGFrontDefrostSwitch(coordinator, client, vin_info, vin))
+    # Front Defrost Switch
+    switches.append(SAICMGFrontDefrostSwitch(coordinator, client, entry, vin_info, vin))
 
     # Rear Window Defrost
-    switches.append(SAICMGRearWindowDefrostSwitch(coordinator, client, vin_info, vin))
+    switches.append(
+        SAICMGRearWindowDefrostSwitch(coordinator, client, entry, vin_info, vin)
+    )
 
     # Sunroof Switch
     if coordinator.has_sunroof:
-        switches.append(SAICMGSunroofSwitch(coordinator, client, vin_info, vin))
+        switches.append(SAICMGSunroofSwitch(coordinator, client, entry, vin_info, vin))
     else:
         LOGGER.debug(f"Sunroof switch not created for VIN {vin}.")
 
@@ -48,10 +51,22 @@ async def async_setup_entry(hass, entry, async_add_entities):
         switches.extend(
             [
                 SAICMGHeatedSeatsSwitch(
-                    coordinator, client, vin_info, vin, "Front Left", "front_left"
+                    coordinator,
+                    client,
+                    entry,
+                    vin_info,
+                    vin,
+                    "Front Left",
+                    "front_left",
                 ),
                 SAICMGHeatedSeatsSwitch(
-                    coordinator, client, vin_info, vin, "Front Right", "front_right"
+                    coordinator,
+                    client,
+                    entry,
+                    vin_info,
+                    vin,
+                    "Front Right",
+                    "front_right",
                 ),
             ]
         )
@@ -60,15 +75,15 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
     # Charging Switches (for BEV and PHEV)
     if coordinator.vehicle_type in ["BEV", "PHEV"]:
-        switches.append(SAICMGChargingSwitch(coordinator, client, vin_info, vin))
+        switches.append(SAICMGChargingSwitch(coordinator, client, entry, vin_info, vin))
         switches.append(
-            SAICMGChargingPortLockSwitch(coordinator, client, vin_info, vin)
+            SAICMGChargingPortLockSwitch(coordinator, client, entry, vin_info, vin)
         )
 
         # Check if battery heating is supported
         if coordinator.has_battery_heating:
             switches.append(
-                SAICMGBatteryHeatingSwitch(coordinator, client, vin_info, vin)
+                SAICMGBatteryHeatingSwitch(coordinator, client, entry, vin_info, vin)
             )
         else:
             LOGGER.debug(f"Battery heating switch not created for VIN {vin}.")
@@ -79,7 +94,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 class SAICMGVehicleSwitch(CoordinatorEntity, SwitchEntity):
     """Base class for MG SAIC switches."""
 
-    def __init__(self, coordinator, client, vin_info, vin, name, icon):
+    def __init__(self, coordinator, client, entry, vin_info, vin, name, icon):
         """Initialize the switch."""
         super().__init__(coordinator)
         self._client = client
@@ -89,16 +104,12 @@ class SAICMGVehicleSwitch(CoordinatorEntity, SwitchEntity):
         self._attr_unique_id = f"{vin}_{name.replace(' ', '_').lower()}_switch"
         self._attr_icon = icon
 
+        self._device_info = create_device_info(coordinator, entry.entry_id)
+
     @property
     def device_info(self):
-        """Return device info."""
-        return {
-            "identifiers": {(DOMAIN, self._vin)},
-            "name": f"{self._vin_info.brandName} {self._vin_info.modelName}",
-            "manufacturer": self._vin_info.brandName,
-            "model": self._vin_info.modelName,
-            "serial_number": self._vin,
-        }
+        """Return device info"""
+        return self._device_info
 
     async def async_turn_on(self, **kwargs):
         """Turn the switch on."""
@@ -125,10 +136,11 @@ class SAICMGVehicleSwitch(CoordinatorEntity, SwitchEntity):
 class SAICMGACSwitch(SAICMGVehicleSwitch):
     """Switch to control the vehicle's AC."""
 
-    def __init__(self, coordinator, client, vin_info, vin):
+    def __init__(self, coordinator, client, entry, vin_info, vin):
         super().__init__(
             coordinator,
             client,
+            entry,
             vin_info,
             vin,
             "AC Blowing",
@@ -183,14 +195,15 @@ class SAICMGACSwitch(SAICMGVehicleSwitch):
 class SAICMGBatteryHeatingSwitch(SAICMGVehicleSwitch):
     """Switch to control battery heating."""
 
-    def __init__(self, coordinator, client, vin_info, vin):
+    def __init__(self, coordinator, client, entry, vin_info, vin):
         super().__init__(
             coordinator,
             client,
+            entry,
             vin_info,
             vin,
             "Battery Heating",
-            "mdi:fire",
+            "mdi:heat-wave",
         )
 
     @property
@@ -241,9 +254,9 @@ class SAICMGBatteryHeatingSwitch(SAICMGVehicleSwitch):
 class SAICMGChargingPortLockSwitch(SAICMGVehicleSwitch):
     """Switch to control the charging port lock (lock/unlock)."""
 
-    def __init__(self, coordinator, client, vin_info, vin):
+    def __init__(self, coordinator, client, entry, vin_info, vin):
         super().__init__(
-            coordinator, client, vin_info, vin, "Charging Port Lock", "mdi:lock"
+            coordinator, client, entry, vin_info, vin, "Charging Port Lock", "mdi:lock"
         )
 
     @property
@@ -286,9 +299,9 @@ class SAICMGChargingPortLockSwitch(SAICMGVehicleSwitch):
 class SAICMGChargingSwitch(SAICMGVehicleSwitch):
     """Switch to control vehicle charging."""
 
-    def __init__(self, coordinator, client, vin_info, vin):
+    def __init__(self, coordinator, client, entry, vin_info, vin):
         super().__init__(
-            coordinator, client, vin_info, vin, "Charging", "mdi:ev-station"
+            coordinator, client, entry, vin_info, vin, "Charging", "mdi:ev-station"
         )
 
     @property
@@ -339,10 +352,11 @@ class SAICMGChargingSwitch(SAICMGVehicleSwitch):
 class SAICMGFrontDefrostSwitch(SAICMGVehicleSwitch):
     """Switch to control the front defrost."""
 
-    def __init__(self, coordinator, client, vin_info, vin):
+    def __init__(self, coordinator, client, entry, vin_info, vin):
         super().__init__(
             coordinator,
             client,
+            entry,
             vin_info,
             vin,
             "Front Defrost",
@@ -391,10 +405,11 @@ class SAICMGFrontDefrostSwitch(SAICMGVehicleSwitch):
 class SAICMGHeatedSeatsSwitch(SAICMGVehicleSwitch):
     """Switch to control individual heated seats."""
 
-    def __init__(self, coordinator, client, vin_info, vin, seat_name, seat_side):
+    def __init__(self, coordinator, client, entry, vin_info, vin, seat_name, seat_side):
         super().__init__(
             coordinator,
             client,
+            entry,
             vin_info,
             vin,
             f"Heated Seat {seat_name}",
@@ -495,10 +510,11 @@ class SAICMGHeatedSeatsSwitch(SAICMGVehicleSwitch):
 class SAICMGRearWindowDefrostSwitch(SAICMGVehicleSwitch):
     """Switch to control the rear window defrost."""
 
-    def __init__(self, coordinator, client, vin_info, vin):
+    def __init__(self, coordinator, client, entry, vin_info, vin):
         super().__init__(
             coordinator,
             client,
+            entry,
             vin_info,
             vin,
             "Rear Window Defrost",
@@ -549,9 +565,9 @@ class SAICMGRearWindowDefrostSwitch(SAICMGVehicleSwitch):
 class SAICMGSunroofSwitch(SAICMGVehicleSwitch):
     """Switch to control the sunroof (open/close)."""
 
-    def __init__(self, coordinator, client, vin_info, vin):
+    def __init__(self, coordinator, client, entry, vin_info, vin):
         super().__init__(
-            coordinator, client, vin_info, vin, "Sunroof", "mdi:car-select"
+            coordinator, client, entry, vin_info, vin, "Sunroof", "mdi:car-select"
         )
 
     @property

@@ -323,7 +323,7 @@ class SAICMGAPIClient:
             LOGGER.error("Error starting AC: %s", e)
             raise
 
-    async def start_climate(self, vin, temperature, fan_speed):
+    async def start_climate(self, vin, temperature, fan_speed, ac_on):
         """Start the vehicle AC with temperature and fan speed settings."""
         try:
             # Map temperature in Celsius to temperature_idx expected by the API
@@ -332,11 +332,12 @@ class SAICMGAPIClient:
                 self.saic_api.control_climate,
                 vin,
                 fan_speed=fan_speed,
-                ac_on=True,
+                ac_on=ac_on,
                 temperature_idx=temperature_idx,
             )
             LOGGER.info(
-                "AC started with temperature %s°C and fan speed %s for VIN: %s",
+                "Climate started with AC ON: %s, temperature set to %s°C and fan speed %s for VIN: %s",
+                ac_on,
                 temperature,
                 fan_speed,
                 vin,

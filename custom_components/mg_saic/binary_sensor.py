@@ -4,6 +4,7 @@ from homeassistant.components.binary_sensor import (
 )
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN, LOGGER
+from .utils import create_device_info
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -241,6 +242,8 @@ class SAICMGBinarySensor(CoordinatorEntity, BinarySensorEntity):
         vin_info = self.coordinator.data["info"][0]
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}_binary_sensor"
 
+        self._device_info = create_device_info(coordinator, entry.entry_id)
+
     @property
     def unique_id(self):
         """Return the unique ID of the binary sensor."""
@@ -289,14 +292,8 @@ class SAICMGBinarySensor(CoordinatorEntity, BinarySensorEntity):
 
     @property
     def device_info(self):
-        vin_info = self.coordinator.data["info"][0]
-        return {
-            "identifiers": {(DOMAIN, vin_info.vin)},
-            "name": f"{vin_info.brandName} {vin_info.modelName}",
-            "manufacturer": vin_info.brandName,
-            "model": vin_info.modelName,
-            "serial_number": vin_info.vin,
-        }
+        """Return device info"""
+        return self._device_info
 
 
 # CHARGING SENSORS
@@ -324,6 +321,8 @@ class SAICMGChargingBinarySensor(CoordinatorEntity, BinarySensorEntity):
         self._data_type = data_type
         vin_info = self.coordinator.data["info"][0]
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}_binary_sensor"
+
+        self._device_info = create_device_info(coordinator, entry.entry_id)
 
     @property
     def unique_id(self):
@@ -366,12 +365,5 @@ class SAICMGChargingBinarySensor(CoordinatorEntity, BinarySensorEntity):
 
     @property
     def device_info(self):
-        """Return device information about this sensor."""
-        vin_info = self.coordinator.data["info"][0]
-        return {
-            "identifiers": {(DOMAIN, vin_info.vin)},
-            "name": f"{vin_info.brandName} {vin_info.modelName}",
-            "manufacturer": vin_info.brandName,
-            "model": vin_info.modelName,
-            "serial_number": vin_info.vin,
-        }
+        """Return device info"""
+        return self._device_info
