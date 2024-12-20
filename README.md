@@ -71,6 +71,8 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - HVAC Status
 - Interior Temperature
 - Exterior Temperature
+- Instant Power
+- Speed
 - Last Update TIme
 - Next Update Time
 - Front Left Heated Seat Level
@@ -126,6 +128,7 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 ### ACTIONS
 - Lock Vehicle
 - Unlock Vehicle
+- Start Climate
 - Start AC
 - Stop AC
 - Set Target SOC
@@ -139,7 +142,17 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - Control Heated Seats
 - Control Battery Heating
 - Update Vehicle Data
- 
+
+### DEVICE TRACKER
+- Latitude
+- Longitude
+- Elevation (Altitude)
+- HDOP
+- Satellites
+- Heading
+- Raw Heading
+
+
 ### SWITCHES
 - AC Blowing
 - Front Defrost
@@ -163,6 +176,7 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - AC Control Climate entity
   * Temperature
   * Fan Speed
+  * Fan only mode
 
 ### SLIDERS
 - Target SOC
