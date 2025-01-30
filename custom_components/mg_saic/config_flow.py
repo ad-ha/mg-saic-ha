@@ -129,10 +129,6 @@ class SAICMGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             selected_vin = user_input["vin"]
             self.vehicle_type = user_input["vehicle_type"]  # Store vehicle type
 
-            # Set unique_id to VIN and abort if it already exists
-            await self.async_set_unique_id(selected_vin)
-            self._abort_if_unique_id_configured(reason="vin")
-
             self.vin = selected_vin
             return await self.async_step_vehicle_capabilities()
 
@@ -258,24 +254,24 @@ class SAICMGOptionsFlowHandler(config_entries.OptionsFlow):
             {
                 # Vehicle Capabilities
                 vol.Optional(
-                    CONF_HAS_SUNROOF,
+                    "has_sunroof",
                     default=self.options.get(
-                        CONF_HAS_SUNROOF,
-                        self.config_entry.data.get(CONF_HAS_SUNROOF, False),
+                        "has_sunroof",
+                        self.config_entry.data.get("has_sunroof", False),
                     ),
                 ): bool,
                 vol.Optional(
-                    CONF_HAS_HEATED_SEATS,
+                    "has_heated_seats",
                     default=self.options.get(
-                        CONF_HAS_HEATED_SEATS,
-                        self.config_entry.data.get(CONF_HAS_HEATED_SEATS, False),
+                        "has_heated_seats",
+                        self.config_entry.data.get("has_heated_seats", False),
                     ),
                 ): bool,
                 vol.Optional(
-                    CONF_HAS_BATTERY_HEATING,
+                    "has_battery_heating",
                     default=self.options.get(
-                        CONF_HAS_BATTERY_HEATING,
-                        self.config_entry.data.get(CONF_HAS_BATTERY_HEATING, False),
+                        "has_battery_heating",
+                        self.config_entry.data.get("has_battery_heating", False),
                     ),
                 ): bool,
                 # Update Intervals in minutes
