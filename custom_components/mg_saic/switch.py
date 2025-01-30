@@ -1,3 +1,5 @@
+# File: switch.py
+
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (
@@ -27,9 +29,6 @@ async def async_setup_entry(hass, entry, async_add_entities):
         config.itemCode: config.itemValue
         for config in vin_info.vehicleModelConfiguration
     }
-
-    # AC Switch
-    switches.append(SAICMGACSwitch(coordinator, client, entry, vin_info, vin))
 
     # Front Defrost Switch
     switches.append(SAICMGFrontDefrostSwitch(coordinator, client, entry, vin_info, vin))
@@ -101,7 +100,9 @@ class SAICMGVehicleSwitch(CoordinatorEntity, SwitchEntity):
         self._vin = vin
         self._vin_info = vin_info
         self._attr_name = f"{vin_info.brandName} {vin_info.modelName} {name}"
-        self._attr_unique_id = f"{vin}_{name.replace(' ', '_').lower()}_switch"
+        self._attr_unique_id = (
+            f"{entry.entry_id}_{vin}_{name.replace(' ', '_').lower()}_switch"
+        )
         self._attr_icon = icon
 
         self._device_info = create_device_info(coordinator, entry.entry_id)
@@ -133,78 +134,24 @@ class SAICMGVehicleSwitch(CoordinatorEntity, SwitchEntity):
         )
 
 
-class SAICMGACSwitch(SAICMGVehicleSwitch):
-    """Switch to control the vehicle's AC."""
-
-    def __init__(self, coordinator, client, entry, vin_info, vin):
-        super().__init__(
-            coordinator,
-            client,
-            entry,
-            vin_info,
-            vin,
-            "AC Blowing",
-            "mdi:air-conditioner",
-        )
-
-    @property
-    def is_on(self):
-        """Return true if AC is on."""
-        status = self.coordinator.data.get("status")
-        if status:
-            basic_status = getattr(status, "basicVehicleStatus", None)
-            if basic_status:
-                ac_status = getattr(basic_status, "remoteClimateStatus", None)
-                return ac_status in (2, 3)
-        return False
-
-    @property
-    def available(self):
-        """Return True if the switch entity is available."""
-        return (
-            self.coordinator.last_update_success
-            and self.coordinator.data.get("status") is not None
-        )
-
-    async def async_turn_on(self, **kwargs):
-        """Start AC Blowing."""
-        try:
-            immediate_interval = self.coordinator.after_action_delay
-            long_interval = self.coordinator.ac_long_interval
-
-            await self._client.start_ac(self._vin)
-            LOGGER.info("AC Blowing started for VIN: %s", self._vin)
-            await self.coordinator.schedule_action_refresh(
-                self._vin,
-                immediate_interval,
-                long_interval,
-            )
-        except Exception as e:
-            LOGGER.error("Error starting AC Blowing for VIN %s: %s", self._vin, e)
-
-    async def async_turn_off(self, **kwargs):
-        """Stop AC Blowing."""
-        try:
-            await self._client.stop_ac(self._vin)
-            LOGGER.info("AC Blowing stopped for VIN: %s", self._vin)
-            await self.coordinator.async_request_refresh()
-        except Exception as e:
-            LOGGER.error("Error stopping AC Blowing for VIN %s: %s", self._vin, e)
-
-
-class SAICMGBatteryHeatingSwitch(SAICMGVehicleSwitch):
+class SAICMGBatteryHeatingSwitch(CoordinatorEntity, SwitchEntity):
     """Switch to control battery heating."""
 
     def __init__(self, coordinator, client, entry, vin_info, vin):
-        super().__init__(
-            coordinator,
-            client,
-            entry,
-            vin_info,
-            vin,
-            "Battery Heating",
-            "mdi:heat-wave",
-        )
+        """Initialize the Battery Heating switch entity."""
+        super().__init__(coordinator)
+        self._client = client
+        self._vin = vin
+        self._vin_info = vin_info
+        self._attr_name = f"{vin_info.brandName} {vin_info.modelName} Battery Heating"
+        self._attr_unique_id = f"{entry.entry_id}_{vin}_battery_heating_switch"
+        self._attr_icon = "mdi:heat-wave"
+        self._device_info = create_device_info(coordinator, entry.entry_id)
+
+    @property
+    def device_info(self):
+        """Return device info"""
+        return self._device_info
 
     @property
     def is_on(self):
@@ -251,13 +198,26 @@ class SAICMGBatteryHeatingSwitch(SAICMGVehicleSwitch):
             LOGGER.error("Error stopping battery heating for VIN %s: %s", self._vin, e)
 
 
-class SAICMGChargingPortLockSwitch(SAICMGVehicleSwitch):
+class SAICMGChargingPortLockSwitch(CoordinatorEntity, SwitchEntity):
     """Switch to control the charging port lock (lock/unlock)."""
 
     def __init__(self, coordinator, client, entry, vin_info, vin):
-        super().__init__(
-            coordinator, client, entry, vin_info, vin, "Charging Port Lock", "mdi:lock"
+        """Initialize the Charging Port Lock switch entity."""
+        super().__init__(coordinator)
+        self._client = client
+        self._vin = vin
+        self._vin_info = vin_info
+        self._attr_name = (
+            f"{vin_info.brandName} {vin_info.modelName} Charging Port Lock"
         )
+        self._attr_unique_id = f"{entry.entry_id}_{vin}_charging_port_lock_switch"
+        self._attr_icon = "mdi:lock"
+        self._device_info = create_device_info(coordinator, entry.entry_id)
+
+    @property
+    def device_info(self):
+        """Return device info"""
+        return self._device_info
 
     @property
     def is_on(self):
@@ -296,13 +256,24 @@ class SAICMGChargingPortLockSwitch(SAICMGVehicleSwitch):
             LOGGER.error("Error unlocking charging port for VIN %s: %s", self._vin, e)
 
 
-class SAICMGChargingSwitch(SAICMGVehicleSwitch):
+class SAICMGChargingSwitch(CoordinatorEntity, SwitchEntity):
     """Switch to control vehicle charging."""
 
     def __init__(self, coordinator, client, entry, vin_info, vin):
-        super().__init__(
-            coordinator, client, entry, vin_info, vin, "Charging", "mdi:ev-station"
-        )
+        """Initialize the Charging switch entity."""
+        super().__init__(coordinator)
+        self._client = client
+        self._vin = vin
+        self._vin_info = vin_info
+        self._attr_name = f"{vin_info.brandName} {vin_info.modelName} Charging"
+        self._attr_unique_id = f"{entry.entry_id}_{vin}_charging_switch"
+        self._attr_icon = "mdi:ev-station"
+        self._device_info = create_device_info(coordinator, entry.entry_id)
+
+    @property
+    def device_info(self):
+        """Return device info"""
+        return self._device_info
 
     @property
     def is_on(self):
@@ -349,19 +320,24 @@ class SAICMGChargingSwitch(SAICMGVehicleSwitch):
             LOGGER.error("Error stopping charging for VIN %s: %s", self._vin, e)
 
 
-class SAICMGFrontDefrostSwitch(SAICMGVehicleSwitch):
+class SAICMGFrontDefrostSwitch(CoordinatorEntity, SwitchEntity):
     """Switch to control the front defrost."""
 
     def __init__(self, coordinator, client, entry, vin_info, vin):
-        super().__init__(
-            coordinator,
-            client,
-            entry,
-            vin_info,
-            vin,
-            "Front Defrost",
-            "mdi:car-defrost-front",
-        )
+        """Initialize the Front Defrost switch entity."""
+        super().__init__(coordinator)
+        self._client = client
+        self._vin = vin
+        self._vin_info = vin_info
+        self._attr_name = f"{vin_info.brandName} {vin_info.modelName} Front Defrost"
+        self._attr_unique_id = f"{entry.entry_id}_{vin}_front_defrost_switch"
+        self._attr_icon = "mdi:car-defrost-front"
+        self._device_info = create_device_info(coordinator, entry.entry_id)
+
+    @property
+    def device_info(self):
+        """Return device info"""
+        return self._device_info
 
     @property
     def is_on(self):
@@ -406,16 +382,23 @@ class SAICMGHeatedSeatsSwitch(SAICMGVehicleSwitch):
     """Switch to control individual heated seats."""
 
     def __init__(self, coordinator, client, entry, vin_info, vin, seat_name, seat_side):
-        super().__init__(
-            coordinator,
-            client,
-            entry,
-            vin_info,
-            vin,
-            f"Heated Seat {seat_name}",
-            "mdi:car-seat-heater",
-        )
+        """Initialize the Heated Seat switch."""
+        super().__init__(coordinator)
+        self._client = client
+        self._vin = vin
+        self._vin_info = vin_info
         self._seat_side = seat_side
+        self._attr_name = (
+            f"{vin_info.brandName} {vin_info.modelName} Heated Seat {seat_name}"
+        )
+        self._attr_unique_id = f"{entry.entry_id}_{vin}_heated_seat_{seat_side}"
+        self._attr_icon = "mdi:car-seat-heater"
+        self._device_info = create_device_info(coordinator, entry.entry_id)
+
+    @property
+    def device_info(self):
+        """Return device info"""
+        return self._device_info
 
     @property
     def is_on(self):
@@ -507,19 +490,26 @@ class SAICMGHeatedSeatsSwitch(SAICMGVehicleSwitch):
             )
 
 
-class SAICMGRearWindowDefrostSwitch(SAICMGVehicleSwitch):
+class SAICMGRearWindowDefrostSwitch(CoordinatorEntity, SwitchEntity):
     """Switch to control the rear window defrost."""
 
     def __init__(self, coordinator, client, entry, vin_info, vin):
-        super().__init__(
-            coordinator,
-            client,
-            entry,
-            vin_info,
-            vin,
-            "Rear Window Defrost",
-            "mdi:car-defrost-rear",
+        """Initialize the Rear Window Defrost switch entity."""
+        super().__init__(coordinator)
+        self._client = client
+        self._vin = vin
+        self._vin_info = vin_info
+        self._attr_name = (
+            f"{vin_info.brandName} {vin_info.modelName} Rear Window Defrost"
         )
+        self._attr_unique_id = f"{entry.entry_id}_{vin}_rear_window_defrost_switch"
+        self._attr_icon = "mdi:car-defrost-rear"
+        self._device_info = create_device_info(coordinator, entry.entry_id)
+
+    @property
+    def device_info(self):
+        """Return device info"""
+        return self._device_info
 
     @property
     def is_on(self):
@@ -562,13 +552,24 @@ class SAICMGRearWindowDefrostSwitch(SAICMGVehicleSwitch):
             )
 
 
-class SAICMGSunroofSwitch(SAICMGVehicleSwitch):
+class SAICMGSunroofSwitch(CoordinatorEntity, SwitchEntity):
     """Switch to control the sunroof (open/close)."""
 
     def __init__(self, coordinator, client, entry, vin_info, vin):
-        super().__init__(
-            coordinator, client, entry, vin_info, vin, "Sunroof", "mdi:car-select"
-        )
+        """Initialize the Sunroof switch entity."""
+        super().__init__(coordinator)
+        self._client = client
+        self._vin = vin
+        self._vin_info = vin_info
+        self._attr_name = f"{vin_info.brandName} {vin_info.modelName} Sunroof"
+        self._attr_unique_id = f"{entry.entry_id}_{vin}_sunroof_switch"
+        self._attr_icon = "mdi:car-select"
+        self._device_info = create_device_info(coordinator, entry.entry_id)
+
+    @property
+    def device_info(self):
+        """Return device info"""
+        return self._device_info
 
     @property
     def is_on(self):

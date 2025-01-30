@@ -1,3 +1,5 @@
+# File: sensor.py
+
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.const import (
@@ -600,6 +602,7 @@ class SAICMGMileageSensor(CoordinatorEntity, SensorEntity):
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}"
 
         self._device_info = create_device_info(coordinator, entry.entry_id)
+        self._vehicle_type = coordinator.vehicle_type
 
     @property
     def unique_id(self):
@@ -614,11 +617,20 @@ class SAICMGMileageSensor(CoordinatorEntity, SensorEntity):
     def available(self):
         """Return True if the entity is available."""
         # This sensor depends on both 'status' and 'charging' data
-        return (
-            self.coordinator.last_update_success
-            and self.coordinator.data.get("status") is not None
-            and self.coordinator.data.get("charging") is not None
-        )
+        # Since ICE vehicles only have 'status' data, check vehicle type
+        if self._vehicle_type == "ICE":
+            return (
+                self.coordinator.last_update_success
+                and self.coordinator.data.get("status") is not None
+            )
+        elif self._vehicle_type in ["PHEV", "HEV", "BEV"]:
+            return (
+                self.coordinator.last_update_success
+                and self.coordinator.data.get("status") is not None
+                and self.coordinator.data.get("charging") is not None
+            )
+        else:
+            return False
 
     @property
     def native_value(self):
@@ -1395,7 +1407,7 @@ class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
                     "chrgngAddedElecRng",
                 ]:
                     if charging_status in [0, 5]:
-                        return 0  # Display 0 for these sensors when not charging
+                        return 0
                     else:
                         raw_value = getattr(charging_data, self._field, None)
                         return (
@@ -1424,7 +1436,7 @@ class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
                         2: "Charging Finished",
                         3: "Charging",
                         4: "Fault Charging",
-                        5: "Charging Finished",
+                        5: "Idle",
                         6: "Unrecognized Connection",
                         7: "Plugged In",
                         8: "Charging Stopped",

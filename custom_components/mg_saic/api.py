@@ -1,3 +1,5 @@
+# File: api.py
+
 import asyncio
 from saic_ismart_client_ng import SaicApi
 from saic_ismart_client_ng.model import SaicApiConfiguration
@@ -112,9 +114,7 @@ class SAICMGAPIClient:
         """Retrieve vehicle information."""
         try:
             vehicle_list_resp = await self._make_api_call(self.saic_api.vehicle_list)
-            vehicles = vehicle_list_resp.vinList
-            self.vin = vehicles[0].vin if vehicles else None
-            return vehicles
+            return vehicle_list_resp.vinList
         except Exception as e:
             LOGGER.error("Error retrieving vehicle info: %s", e)
             return None
@@ -314,31 +314,54 @@ class SAICMGAPIClient:
             LOGGER.error("Error controlling rear window heat: %s", e)
             raise
 
-    async def start_ac(self, vin):
-        """Start the vehicle AC."""
+    async def start_ac(self, vin, temperature_idx=None):
+        """Start the vehicle AC with an optional temperature index."""
         try:
-            await self._make_api_call(self.saic_api.start_ac, vin)
-            LOGGER.info("AC started successfully.")
+            if temperature_idx is not None:
+                if not isinstance(temperature_idx, int):
+                    raise TypeError(
+                        f"temperature_idx must be int, got {type(temperature_idx)}"
+                    )
+                await self._make_api_call(
+                    self.saic_api.start_ac,
+                    vin,
+                    temperature_idx=temperature_idx,
+                )
+                LOGGER.info(
+                    f"AC started with temperature index {temperature_idx} for VIN: {vin}."
+                )
+            else:
+                await self._make_api_call(self.saic_api.start_ac, vin)
+                LOGGER.info(f"AC started without temperature index for VIN: {vin}.")
         except Exception as e:
-            LOGGER.error("Error starting AC: %s", e)
+            LOGGER.error(f"Error starting AC for VIN {vin}: {e}")
             raise
 
-    async def start_climate(self, vin, temperature, fan_speed, ac_on):
+    async def start_climate(
+        self,
+        vin: str,
+        temperature_idx: int,
+        fan_speed: int,
+        ac_on: bool,
+    ):
         """Start the vehicle AC with temperature and fan speed settings."""
         try:
-            # Map temperature in Celsius to temperature_idx expected by the API
-            temperature_idx = self._map_temperature_to_idx(temperature)
+            # Log the mapping for debugging
+            LOGGER.debug(
+                f"Climate params - Idx: {temperature_idx}, Fan speed: {fan_speed}, AC On: {ac_on}"
+            )
+
             await self._make_api_call(
                 self.saic_api.control_climate,
-                vin,
+                vin=vin,
                 fan_speed=fan_speed,
                 ac_on=ac_on,
                 temperature_idx=temperature_idx,
             )
             LOGGER.info(
-                "Climate started with AC ON: %s, temperature set to %s°C and fan speed %s for VIN: %s",
+                "Climate started with AC ON: %s, Temperature index set to %s and fan speed %s for VIN: %s",
                 ac_on,
-                temperature,
+                temperature_idx,
                 fan_speed,
                 vin,
             )
@@ -363,30 +386,6 @@ class SAICMGAPIClient:
         except Exception as e:
             LOGGER.error("Error stopping AC: %s", e)
             raise
-
-    def _map_temperature_to_idx(self, temperature):
-        """Map temperature in Celsius to temperature_idx expected by the API."""
-        temperature_to_idx = {
-            16: 0,
-            17: 1,
-            18: 2,
-            19: 3,
-            20: 4,
-            21: 5,
-            22: 6,
-            23: 7,
-            24: 8,
-            25: 9,
-            26: 10,
-            27: 11,
-            28: 12,
-            29: 13,
-            30: 14,
-        }
-        idx = temperature_to_idx.get(int(temperature))
-        if idx is None:
-            raise ValueError("Invalid temperature value. Must be between 16 and 30°C.")
-        return idx
 
     # LOCKS CONTROL
     async def control_charging_port_lock(self, vin: str, unlock: bool):

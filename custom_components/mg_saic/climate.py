@@ -1,3 +1,5 @@
+# File: climate.py
+
 from homeassistant.components.climate import (
     ClimateEntity,
     ClimateEntityFeature,
@@ -46,8 +48,10 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
         self._vin = vin
         self._vin_info = vin_info
 
+        self._series = vin_info.series
+
         self._attr_name = f"{vin_info.brandName} {vin_info.modelName} Climate"
-        self._attr_unique_id = f"{vin}_climate"
+        self._attr_unique_id = f"{entry.entry_id}_{vin}_climate"
         self._attr_temperature_unit = UnitOfTemperature.CELSIUS
         self._attr_supported_features = (
             ClimateEntityFeature.TARGET_TEMPERATURE
@@ -65,15 +69,35 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
         self._device_info = create_device_info(coordinator, entry.entry_id)
 
         # Initialize with default values
-        self._attr_current_temperature = None
+        self._attr_min_temp = self.min_temp
+        self._attr_max_temp = self.max_temp
         self._attr_target_temperature = 22.0
         self._attr_fan_mode = FAN_MEDIUM
         self._attr_hvac_mode = HVACMode.OFF
 
     @property
-    def target_temperature_step(self):
-        """Return the step size for target temperature."""
+    def temperature_unit(self) -> str:
+        """Return the unit of measurement."""
+        return UnitOfTemperature.CELSIUS
+
+    @property
+    def target_temperature_step(self) -> float:
+        """Return the supported step of target temperature."""
         return 1.0
+
+    @property
+    def min_temp(self) -> float:
+        """Return the minimum temperature."""
+        return self.coordinator.min_temp
+
+    @property
+    def max_temp(self) -> float:
+        """Return the maximum temperature."""
+        return self.coordinator.max_temp
+
+    def get_temp_offset(self):
+        """Return the temperature offset."""
+        return self.coordinator.temp_offset
 
     @property
     def current_temperature(self):
@@ -91,12 +115,16 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
     def hvac_mode(self):
         """Return the current HVAC mode."""
         status = self.coordinator.data.get("status")
-        if status:
-            ac_status = getattr(status.basicVehicleStatus, "remoteClimateStatus", None)
-            if ac_status == 3:
-                return HVACMode.COOL
-            elif ac_status == 2:
-                return HVACMode.FAN_ONLY
+        if not status or not status.basicVehicleStatus:
+            return HVACMode.OFF
+
+        climate_status = getattr(status.basicVehicleStatus, "remoteClimateStatus", 0)
+
+        if climate_status == 3:
+            return HVACMode.COOL
+        elif climate_status == 2:
+            return HVACMode.FAN_ONLY
+
         return HVACMode.OFF
 
     async def async_set_hvac_mode(self, hvac_mode):
@@ -104,20 +132,35 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
         try:
             if hvac_mode == HVACMode.OFF:
                 await self._client.stop_ac(self._vin)
-            elif hvac_mode == HVACMode.COOL:
+                self._attr_hvac_mode = HVACMode.OFF
+                return
+
+            # Common parameters for climate modes
+            min_temp = self.min_temp
+            max_temp = self.max_temp
+            temp_clamped = int(
+                max(min_temp, min(max_temp, round(self._attr_target_temperature)))
+            )
+
+            # Get temperature index from coordinator
+            temperature_idx = self.coordinator.get_ac_temperature_idx(temp_clamped)
+
+            if hvac_mode == HVACMode.COOL:
+                # Cooling mode
                 await self._client.start_climate(
                     self._vin,
-                    self._attr_target_temperature,
-                    self._fan_speed_to_int(),
+                    temperature_idx=temperature_idx,
+                    fan_speed=self._fan_speed_to_int(),
                     ac_on=True,
                 )
+
             elif hvac_mode == HVACMode.FAN_ONLY:
-                await self._client.start_climate(
-                    self._vin,
-                    self._attr_target_temperature,
-                    self._fan_speed_to_int(),
-                    ac_on=False,
+                # Fan-only mode
+                await self._client.start_ac(
+                    vin=self._vin,
+                    temperature_idx=temperature_idx,
                 )
+
             else:
                 LOGGER.warning("Unsupported HVAC mode: %s", hvac_mode)
                 return
@@ -167,13 +210,23 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
         long_interval = self.coordinator.ac_long_interval
 
         temperature = kwargs.get(ATTR_TEMPERATURE)
-        if temperature is not None:
-            self._attr_target_temperature = temperature
+        if temperature is None:
+            return
+
+        # Clamp temperature within allowed range
+        min_temp = self.min_temp
+        max_temp = self.max_temp
+
+        temp_clamped = int(max(min_temp, min(max_temp, round(temperature))))
+
+        if temp_clamped != self._attr_target_temperature:
+            LOGGER.debug(
+                f"Updating target temperature from {self._attr_target_temperature} to {temp_clamped}"
+            )
+            self._attr_target_temperature = temp_clamped
+
             if self.hvac_mode != HVACMode.OFF:
-                await self._client.start_climate(
-                    self._vin, temperature, self._fan_speed_to_int(), ac_on=True
-                )
-                # Schedule data refresh
+                await self.async_set_hvac_mode(self.hvac_mode)
                 await self.coordinator.schedule_action_refresh(
                     self._vin,
                     immediate_interval,
@@ -192,13 +245,11 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
 
         if fan_mode in self._attr_fan_modes:
             self._attr_fan_mode = fan_mode
+            LOGGER.debug(f"Set fan mode to {fan_mode}")
+
             if self.hvac_mode != HVACMode.OFF:
-                await self._client.start_climate(
-                    self._vin,
-                    self._attr_target_temperature,
-                    self._fan_speed_to_int(),
-                    ac_on=True,
-                )
+                await self.async_set_hvac_mode(self.hvac_mode)
+
                 # Schedule data refresh
                 await self.coordinator.schedule_action_refresh(
                     self._vin,
@@ -218,25 +269,7 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
 
     def _fan_speed_to_int(self):
         """Convert fan mode to integer value expected by the API."""
-        mapping = {
-            FAN_LOW: 1,
-            FAN_MEDIUM: 3,
-            FAN_HIGH: 5,
-        }
-        fan_speed = mapping.get(self._attr_fan_mode)
-        if fan_speed is None:
-            raise ValueError("Invalid fan mode.")
-        return fan_speed
-
-    @property
-    def min_temp(self):
-        """Return the minimum temperature."""
-        return 16.0
-
-    @property
-    def max_temp(self):
-        """Return the maximum temperature."""
-        return 30.0
+        return {FAN_LOW: 1, FAN_MEDIUM: 3, FAN_HIGH: 5}.get(self._attr_fan_mode, 3)
 
     @property
     def device_info(self):

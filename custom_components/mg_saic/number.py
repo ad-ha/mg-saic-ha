@@ -1,3 +1,5 @@
+# File: number.py
+
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.const import PERCENTAGE
@@ -42,9 +44,8 @@ class SAICMGTargetSOCNumber(CoordinatorEntity, NumberEntity):
         self._vin = vin
         self._vin_info = vin_info
         self._last_valid_value = None
-
         self._attr_name = f"{vin_info.brandName} {vin_info.modelName} Target SOC"
-        self._attr_unique_id = f"{vin}_target_soc"
+        self._attr_unique_id = f"{entry.entry_id}_{vin}_target_soc"
         self._attr_native_min_value = 40
         self._attr_native_max_value = 100
         self._attr_native_step = 10

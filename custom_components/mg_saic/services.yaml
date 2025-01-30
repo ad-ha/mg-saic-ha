@@ -136,6 +136,14 @@ start_ac:
       example: "1HGCM82633A123456"
       selector:
         text: {}
+    temperature:
+      description: "Desired temperature in degrees Celsius."
+      example: 22.0
+      selector:
+        number:
+          min: 16
+          max: 30
+          step: 1
 
 start_climate:
   description: "Start the vehicle's Climate system with temperature and fan settings."
@@ -147,19 +155,19 @@ start_climate:
         text: {}
     temperature:
       description: "Desired temperature in degrees Celsius."
-      example: 22.5
+      example: 22.0
       selector:
         number:
           min: 16
           max: 30
           step: 1
     fan_speed:
-      description: "Fan speed level (e.g., 1-7)."
+      description: "Fan speed level (e.g., 1-5)."
       example: 3
       selector:
         number:
           min: 1
-          max: 7
+          max: 5
           step: 1
     ac_on:
       description: "Turn AC on or off (true = AC ON, false = AC OFF)."

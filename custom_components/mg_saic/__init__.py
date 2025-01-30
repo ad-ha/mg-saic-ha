@@ -1,3 +1,5 @@
+# File: __init__.py
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from .api import SAICMGAPIClient
@@ -29,11 +31,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         await client.login()
 
         # Fetch vehicle info to get the VIN
+        if not vin:
+            LOGGER.error("No VIN specified in Config Entry")
+            return False
+
+        # Verify the VIN belongs to the account
         vehicles = await client.get_vehicle_info()
-        if vehicles:
-            vin = vehicles[0].vin
-        else:
-            LOGGER.error("No vehicles found for this account.")
+        if not any(v.vin == vin for v in vehicles):
+            LOGGER.error("VIN %s not found in account vehicles", vin)
             return False
 
         hass.data[DOMAIN][entry.entry_id] = client

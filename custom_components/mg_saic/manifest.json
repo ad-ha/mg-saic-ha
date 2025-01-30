@@ -1,16 +1,12 @@
 {
-    "domain": "mg_saic",
-    "name": "MG SAIC",
-    "codeowners": ["@ad-ha"],
-    "config_flow": true,
-    "dependencies": [],
-    "documentation": "https://github.com/ad-ha/mg-saic-ha",
-    "iot_class": "cloud_polling",
-    "issue_tracker": "https://github.com/ad-ha/mg-saic-ha/issues",
-    "requirements": [
-        "requests",
-        "pycryptodome",
-        "saic-ismart-client-ng==0.5.2"
-    ],
-    "version": "0.8.2"
+  "domain": "mg_saic",
+  "name": "MG SAIC",
+  "codeowners": ["@ad-ha"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/ad-ha/mg-saic-ha",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/ad-ha/mg-saic-ha/issues",
+  "requirements": ["requests", "pycryptodome", "saic-ismart-client-ng==0.6.0"],
+  "version": "0.9.0"
 }

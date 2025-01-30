@@ -1,3 +1,5 @@
+# File: lock.py
+
 from homeassistant.components.lock import LockEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (
@@ -38,7 +40,7 @@ class SAICMGLockEntity(CoordinatorEntity, LockEntity):
         self._vin_info = vin_info
 
         self._attr_name = f"{vin_info.brandName} {vin_info.modelName} Lock"
-        self._attr_unique_id = f"{vin}_lock"
+        self._attr_unique_id = f"{entry.entry_id}_{vin}_lock"
         self._attr_icon = "mdi:car-door-lock"
 
         self._device_info = create_device_info(coordinator, entry.entry_id)
@@ -111,7 +113,7 @@ class SAICMGBootLockEntity(CoordinatorEntity, LockEntity):
         self._vin_info = vin_info
 
         self._attr_name = f"{vin_info.brandName} {vin_info.modelName} Boot"
-        self._attr_unique_id = f"{vin}_boot_lock"
+        self._attr_unique_id = f"{entry.entry_id}_{vin}_boot_lock"
         self._attr_icon = "mdi:car-back"
 
         self._device_info = create_device_info(coordinator, entry.entry_id)

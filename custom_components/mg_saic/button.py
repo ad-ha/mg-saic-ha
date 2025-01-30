@@ -1,3 +1,5 @@
+# File: button.py
+
 import asyncio
 from homeassistant.components.button import ButtonEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -38,7 +40,9 @@ class SAICMGButton(CoordinatorEntity, ButtonEntity):
         self._vin = vin
         self._vin_info = vin_info
         self._attr_name = f"{vin_info.brandName} {vin_info.modelName} {name}"
-        self._attr_unique_id = f"{vin}_{name.replace(' ', '_').lower()}_button"
+        self._attr_unique_id = (
+            f"{entry.entry_id}_{vin}_{name.replace(' ', '_').lower()}_button"
+        )
         self._attr_icon = icon
 
         self._device_info = create_device_info(coordinator, entry.entry_id)
@@ -63,19 +67,19 @@ class SAICMGButton(CoordinatorEntity, ButtonEntity):
             LOGGER.warning("Coordinator not found for VIN %s", self._vin)
 
 
-class SAICMGTriggerAlarmButton(SAICMGButton):
+class SAICMGTriggerAlarmButton(CoordinatorEntity, ButtonEntity):
     """Button to trigger the vehicle alarm."""
 
     def __init__(self, coordinator, client, entry, vin_info, vin):
-        super().__init__(
-            coordinator,
-            client,
-            entry,
-            vin_info,
-            vin,
-            "Trigger Alarm",
-            "mdi:alarm-light",
-        )
+        """Initialize the alarm trigger button."""
+        super().__init__(coordinator)
+        self._client = client
+        self._vin = vin
+        self._vin_info = vin_info
+        self._attr_name = f"{vin_info.brandName} {vin_info.modelName} Trigger Alarm"
+        self._attr_unique_id = f"{entry.entry_id}_{vin}_trigger_alarm_button"
+        self._attr_icon = "mdi:alarm-light"
+        self._device_info = create_device_info(coordinator, entry.entry_id)
 
     async def async_press(self):
         """Handle the button press."""
@@ -93,20 +97,27 @@ class SAICMGTriggerAlarmButton(SAICMGButton):
         except Exception as e:
             LOGGER.error("Error triggering alarm for VIN %s: %s", self._vin, e)
 
+    @property
+    def device_info(self):
+        """Return device info"""
+        return self._device_info
 
-class SAICMGUpdateDataButton(SAICMGButton):
+
+class SAICMGUpdateDataButton(CoordinatorEntity, ButtonEntity):
     """Button to manually update vehicle data."""
 
     def __init__(self, coordinator, client, entry, vin_info, vin):
-        super().__init__(
-            coordinator,
-            client,
-            entry,
-            vin_info,
-            vin,
-            "Update Vehicle Data",
-            "mdi:update",
+        """Initialize the update data button."""
+        super().__init__(coordinator)
+        self._client = client
+        self._vin = vin
+        self._vin_info = vin_info
+        self._attr_name = (
+            f"{vin_info.brandName} {vin_info.modelName} Update Vehicle Data"
         )
+        self._attr_unique_id = f"{entry.entry_id}_{vin}_update_vehicle_data_button"
+        self._attr_icon = "mdi:update"
+        self._device_info = create_device_info(coordinator, entry.entry_id)
 
     async def async_press(self):
         """Handle the button press."""
@@ -115,3 +126,8 @@ class SAICMGUpdateDataButton(SAICMGButton):
             LOGGER.info("Data update triggered for VIN: %s", self._vin)
         except Exception as e:
             LOGGER.error("Error triggering data update for VIN %s: %s", self._vin, e)
+
+    @property
+    def device_info(self):
+        """Return device info"""
+        return self._device_info
