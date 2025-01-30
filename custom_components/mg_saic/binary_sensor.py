@@ -1,3 +1,5 @@
+# File: binary_sensor.py
+
 from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
     BinarySensorDeviceClass,

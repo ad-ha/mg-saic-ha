@@ -28,10 +28,22 @@
           "vin": "Vehicle Identification Number (VIN)",
           "vehicle_type": "Vehicle Type"
         }
+      },
+      "vehicle_capabilities": {
+        "title": "Vehicle Capabilities",
+        "description": "Select any additional capabilities your vehicle supports. You can change them later in the Options menu if needed.",
+        "data": {
+          "has_sunroof": "Has Sunroof",
+          "has_heated_seats": "Has Heated Seats",
+          "has_battery_heating": "Has Battery Heating"
+        }
       }
     },
     "error": {
       "auth": "Failed to authenticate, please check your credentials."
+    },
+    "abort": {
+      "vin": "Vehicle with VIN {vin} already configured."
     }
   },
   "services": {
@@ -150,6 +162,10 @@
         "vin": {
           "name": "VIN",
           "description": "The vehicle identification number of the car to start AC."
+        },
+        "temperature": {
+          "name": "Temperature",
+          "description": "Desired temperature in degrees Celsius."
         }
       }
     },

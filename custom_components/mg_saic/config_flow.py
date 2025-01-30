@@ -1,46 +1,47 @@
+# File: config_flow.py
+
 import logging
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 from .const import (
-    DOMAIN,
-    LOGGER,
-    COUNTRY_CODES,
-    REGION_CHOICES,
-    REGION_BASE_URIS,
-    UPDATE_INTERVAL,
-    UPDATE_INTERVAL_CHARGING,
-    UPDATE_INTERVAL_POWERED,
-    UPDATE_INTERVAL_AFTER_SHUTDOWN,
-    UPDATE_INTERVAL_GRACE_PERIOD,
     AFTER_ACTION_UPDATE_INTERVAL_DELAY,
-    DEFAULT_ALARM_LONG_INTERVAL,
+    CONF_HAS_BATTERY_HEATING,
+    CONF_HAS_HEATED_SEATS,
+    CONF_HAS_SUNROOF,
+    COUNTRY_CODES,
     DEFAULT_AC_LONG_INTERVAL,
-    DEFAULT_FRONT_DEFROST_LONG_INTERVAL,
-    DEFAULT_REAR_WINDOW_HEAT_LONG_INTERVAL,
-    DEFAULT_LOCK_UNLOCK_LONG_INTERVAL,
-    DEFAULT_CHARGING_PORT_LOCK_LONG_INTERVAL,
-    DEFAULT_HEATED_SEATS_LONG_INTERVAL,
+    DEFAULT_ALARM_LONG_INTERVAL,
     DEFAULT_BATTERY_HEATING_LONG_INTERVAL,
+    DEFAULT_CHARGING_CURRENT_LONG_INTERVAL,
     DEFAULT_CHARGING_LONG_INTERVAL,
+    DEFAULT_CHARGING_PORT_LOCK_LONG_INTERVAL,
+    DEFAULT_FRONT_DEFROST_LONG_INTERVAL,
+    DEFAULT_HEATED_SEATS_LONG_INTERVAL,
+    DEFAULT_LOCK_UNLOCK_LONG_INTERVAL,
+    DEFAULT_REAR_WINDOW_HEAT_LONG_INTERVAL,
     DEFAULT_SUNROOF_LONG_INTERVAL,
     DEFAULT_TAILGATE_LONG_INTERVAL,
     DEFAULT_TARGET_SOC_LONG_INTERVAL,
-    DEFAULT_CHARGING_CURRENT_LONG_INTERVAL,
-    CONF_HAS_SUNROOF,
-    CONF_HAS_HEATED_SEATS,
-    CONF_HAS_BATTERY_HEATING,
+    DOMAIN,
+    LOGGER,
+    REGION_BASE_URIS,
+    REGION_CHOICES,
+    UPDATE_INTERVAL,
+    UPDATE_INTERVAL_AFTER_SHUTDOWN,
+    UPDATE_INTERVAL_CHARGING,
+    UPDATE_INTERVAL_GRACE_PERIOD,
+    UPDATE_INTERVAL_POWERED,
 )
 from saic_ismart_client_ng import SaicApi
 from saic_ismart_client_ng.model import SaicApiConfiguration
 
 
 @callback
-def configured_instances(hass):
-    """Return a set of configured MG SAIC instances."""
+def configured_vins(hass):
+    """Return a set of configured MG SAIC VINs."""
     return set(
-        entry.data.get("username")
-        for entry in hass.config_entries.async_entries(DOMAIN)
+        entry.data.get("vin") for entry in hass.config_entries.async_entries(DOMAIN)
     )
 
 
@@ -58,6 +59,10 @@ class SAICMGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self.vin = None
         self.vehicles = []
         self.vehicle_type = None
+
+        self.has_sunroof = False
+        self.has_heated_seats = False
+        self.has_battery_heating = False
 
     async def async_step_user(self, user_input=None):
         errors = {}
@@ -121,20 +126,15 @@ class SAICMGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_select_vehicle(self, user_input=None):
         errors = {}
         if user_input is not None:
-            self.vin = user_input["vin"]
+            selected_vin = user_input["vin"]
             self.vehicle_type = user_input["vehicle_type"]  # Store vehicle type
-            return self.async_create_entry(
-                title=f"MG SAIC - {self.vin}",
-                data={
-                    "username": self.username,
-                    "password": self.password,
-                    "country_code": self.country_code,
-                    "region": self.region,
-                    "vin": self.vin,
-                    "login_type": self.login_type,
-                    "vehicle_type": self.vehicle_type,  # Include vehicle type in the entry
-                },
-            )
+
+            # Set unique_id to VIN and abort if it already exists
+            await self.async_set_unique_id(selected_vin)
+            self._abort_if_unique_id_configured(reason="vin")
+
+            self.vin = selected_vin
+            return await self.async_step_vehicle_capabilities()
 
         # Add vehicle_type selection with fallback for user confirmation
         data_schema = vol.Schema(
@@ -152,6 +152,10 @@ class SAICMGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Step for configuring vehicle capabilities."""
         errors = {}
         if user_input is not None:
+            self.has_sunroof = user_input["has_sunroof"]
+            self.has_heated_seats = user_input["has_heated_seats"]
+            self.has_battery_heating = user_input["has_battery_heating"]
+
             return self.async_create_entry(
                 title=f"MG SAIC - {self.vin}",
                 data={
@@ -161,17 +165,20 @@ class SAICMGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     "region": self.region,
                     "vin": self.vin,
                     "login_type": self.login_type,
-                    "has_sunroof": user_input["has_sunroof"],
-                    "has_heated_seats": user_input["has_heated_seats"],
-                    "has_battery_heating": user_input["has_battery_heating"],
+                    "vehicle_type": self.vehicle_type,
+                    "has_sunroof": self.has_sunroof,
+                    "has_heated_seats": self.has_heated_seats,
+                    "has_battery_heating": self.has_battery_heating,
                 },
             )
 
         data_schema = vol.Schema(
             {
-                vol.Required("has_sunroof", default=False): bool,
-                vol.Required("has_heated_seats", default=False): bool,
-                vol.Required("has_battery_heating", default=False): bool,
+                vol.Required("has_sunroof", default=self.has_sunroof): bool,
+                vol.Required("has_heated_seats", default=self.has_heated_seats): bool,
+                vol.Required(
+                    "has_battery_heating", default=self.has_battery_heating
+                ): bool,
             }
         )
 
@@ -212,7 +219,6 @@ class SAICMGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             vehicle_list_resp = await saic_api.vehicle_list()
             LOGGER.debug("Vehicle list response: %s", vehicle_list_resp)
 
-            # Use hasattr instead of `in` for checking object attributes
             if (
                 not hasattr(vehicle_list_resp, "vinList")
                 or not vehicle_list_resp.vinList
@@ -252,16 +258,25 @@ class SAICMGOptionsFlowHandler(config_entries.OptionsFlow):
             {
                 # Vehicle Capabilities
                 vol.Optional(
-                    "has_sunroof",
-                    default=self.options.get("has_sunroof", False),
+                    CONF_HAS_SUNROOF,
+                    default=self.options.get(
+                        CONF_HAS_SUNROOF,
+                        self.config_entry.data.get(CONF_HAS_SUNROOF, False),
+                    ),
                 ): bool,
                 vol.Optional(
-                    "has_heated_seats",
-                    default=self.options.get("has_heated_seats", False),
+                    CONF_HAS_HEATED_SEATS,
+                    default=self.options.get(
+                        CONF_HAS_HEATED_SEATS,
+                        self.config_entry.data.get(CONF_HAS_HEATED_SEATS, False),
+                    ),
                 ): bool,
                 vol.Optional(
-                    "has_battery_heating",
-                    default=self.options.get("has_battery_heating", False),
+                    CONF_HAS_BATTERY_HEATING,
+                    default=self.options.get(
+                        CONF_HAS_BATTERY_HEATING,
+                        self.config_entry.data.get(CONF_HAS_BATTERY_HEATING, False),
+                    ),
                 ): bool,
                 # Update Intervals in minutes
                 vol.Optional(

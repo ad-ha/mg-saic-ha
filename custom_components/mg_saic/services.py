@@ -1,3 +1,5 @@
+# File: services.py
+
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 import voluptuous as vol
@@ -66,14 +68,14 @@ SERVICE_REAR_WINDOW_DEFROST_ACTION_SCHEMA = vol.Schema(
     }
 )
 
-SERVICE_START_CLIMATE_SCHEMA = vol.Schema(
+SERVICE_START_AC_SCHEMA = vol.Schema(
     {
         vol.Required("vin"): cv.string,
         vol.Required("temperature"): vol.Coerce(float),
-        vol.Required("fan_speed"): vol.Coerce(int),
-        vol.Optional("ac_on", default=True): cv.boolean,
     }
 )
+
+SERVICE_START_CLIMATE_SCHEMA = None
 
 SERVICE_SET_CHARGING_CURRENT_LIMIT_SCHEMA = vol.Schema(
     {
@@ -108,6 +110,17 @@ async def async_setup_services(
 ) -> None:
     """Set up services for the MG SAIC integration."""
 
+    # Dynamically define SERVICE_START_CLIMATE_SCHEMA based on vehicle's temperature limits
+    global SERVICE_START_CLIMATE_SCHEMA
+    SERVICE_START_CLIMATE_SCHEMA = vol.Schema(
+        {
+            vol.Required("vin"): cv.string,
+            vol.Required("temperature"): vol.Coerce(float),
+            vol.Required("fan_speed"): vol.Coerce(int),
+            vol.Optional("ac_on", default=True): cv.boolean,
+        }
+    )
+
     async def handle_lock_vehicle(call: ServiceCall) -> None:
         """Handle the lock_vehicle service call."""
         vin = call.data["vin"]
@@ -141,8 +154,31 @@ async def async_setup_services(
             immediate_interval = coordinator.after_action_delay
             long_interval = coordinator.ac_long_interval
 
-            await client.start_ac(vin)
-            LOGGER.info("AC started successfully for VIN: %s", vin)
+            # Retrieve desired temperature from service call
+            temperature = call.data.get("temperature")
+            if temperature is None:
+                LOGGER.error("No temperature provided for start_ac service.")
+                return
+
+            # Clamp the temperature within allowable range
+            clamped_temp = max(
+                coordinator.min_temp, min(coordinator.max_temp, temperature)
+            )
+
+            # Calculate temperature_idx using coordinator's method
+            temperature_idx = coordinator.get_ac_temperature_idx(clamped_temp)
+
+            # Call the start_ac method from api.py
+            await client.start_ac(
+                vin=vin,
+                temperature_idx=temperature_idx,
+            )
+            LOGGER.info(
+                "AC started successfully for VIN: %s with temperature index %d",
+                vin,
+                temperature_idx,
+            )
+
             await coordinator.schedule_action_refresh(
                 vin,
                 immediate_interval,
@@ -175,10 +211,28 @@ async def async_setup_services(
         fan_speed = call.data["fan_speed"]
         ac_on = call.data["ac_on"]
         try:
+            min_temp = coordinator.min_temp
+            max_temp = coordinator.max_temp
+
+            # Clamp temperature within allowable range
+            clamped_temp = max(min_temp, min(max_temp, round(temperature)))
+
+            # Calculate temperature_idx using coordinator's method
+            temperature_idx = coordinator.get_ac_temperature_idx(clamped_temp)
+
+            # Clamp fan speed within allowable range
+            fan_speed = max(1, min(5, fan_speed))
+
             immediate_interval = coordinator.after_action_delay
             long_interval = coordinator.ac_long_interval
 
-            await client.start_climate(vin, temperature, fan_speed, ac_on)
+            await client.start_climate(
+                vin=vin,
+                temperature_idx=temperature_idx,
+                fan_speed=fan_speed,
+                ac_on=ac_on,
+            )
+
             LOGGER.info(
                 "Climate started with AC ON: %s, temperature %s°C and fan speed %s for VIN: %s",
                 ac_on,
@@ -528,7 +582,10 @@ async def async_setup_services(
         schema=SERVICE_SET_TARGET_SOC_SCHEMA,
     )
     hass.services.async_register(
-        DOMAIN, SERVICE_START_AC, handle_start_ac, schema=SERVICE_VIN_SCHEMA
+        DOMAIN,
+        SERVICE_START_AC,
+        handle_start_ac,
+        schema=SERVICE_START_AC_SCHEMA,
     )
     hass.services.async_register(
         DOMAIN,

@@ -1,3 +1,5 @@
+# File: coordinator.py
+
 from datetime import datetime, timedelta, timezone
 import asyncio
 from homeassistant.helpers.event import async_track_point_in_utc_time
@@ -5,34 +7,36 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util.dt import utcnow
 from .api import SAICMGAPIClient
 from .const import (
-    DOMAIN,
-    LOGGER,
-    RETRY_LIMIT,
-    RETRY_BACKOFF_FACTOR,
-    CHARGING_STATUS_CODES,
-    GENERIC_RESPONSE_STATUS_THRESHOLD,
-    GENERIC_RESPONSE_SOC_THRESHOLD,
-    GENERIC_RESPONSE_TEMPERATURE,
-    GENERIC_RESPONSE_EXTREME_TEMPERATURE,
-    UPDATE_INTERVAL,
-    UPDATE_INTERVAL_CHARGING,
-    UPDATE_INTERVAL_POWERED,
-    UPDATE_INTERVAL_AFTER_SHUTDOWN,
-    UPDATE_INTERVAL_GRACE_PERIOD,
     AFTER_ACTION_UPDATE_INTERVAL_DELAY,
-    DEFAULT_ALARM_LONG_INTERVAL,
+    CHARGING_STATUS_CODES,
+    CONF_HAS_BATTERY_HEATING,
+    CONF_HAS_HEATED_SEATS,
+    CONF_HAS_SUNROOF,
     DEFAULT_AC_LONG_INTERVAL,
-    DEFAULT_FRONT_DEFROST_LONG_INTERVAL,
-    DEFAULT_REAR_WINDOW_HEAT_LONG_INTERVAL,
-    DEFAULT_LOCK_UNLOCK_LONG_INTERVAL,
-    DEFAULT_CHARGING_PORT_LOCK_LONG_INTERVAL,
-    DEFAULT_HEATED_SEATS_LONG_INTERVAL,
+    DEFAULT_ALARM_LONG_INTERVAL,
     DEFAULT_BATTERY_HEATING_LONG_INTERVAL,
+    DEFAULT_CHARGING_CURRENT_LONG_INTERVAL,
     DEFAULT_CHARGING_LONG_INTERVAL,
+    DEFAULT_CHARGING_PORT_LOCK_LONG_INTERVAL,
+    DEFAULT_FRONT_DEFROST_LONG_INTERVAL,
+    DEFAULT_HEATED_SEATS_LONG_INTERVAL,
+    DEFAULT_LOCK_UNLOCK_LONG_INTERVAL,
+    DEFAULT_REAR_WINDOW_HEAT_LONG_INTERVAL,
     DEFAULT_SUNROOF_LONG_INTERVAL,
     DEFAULT_TAILGATE_LONG_INTERVAL,
     DEFAULT_TARGET_SOC_LONG_INTERVAL,
-    DEFAULT_CHARGING_CURRENT_LONG_INTERVAL,
+    DOMAIN,
+    GENERIC_RESPONSE_SOC_THRESHOLD,
+    GENERIC_RESPONSE_STATUS_THRESHOLD,
+    GENERIC_RESPONSE_TEMPERATURE,
+    LOGGER,
+    RETRY_BACKOFF_FACTOR,
+    RETRY_LIMIT,
+    UPDATE_INTERVAL,
+    UPDATE_INTERVAL_AFTER_SHUTDOWN,
+    UPDATE_INTERVAL_CHARGING,
+    UPDATE_INTERVAL_GRACE_PERIOD,
+    UPDATE_INTERVAL_POWERED,
 )
 
 
@@ -50,6 +54,7 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
 
         self.client = client
         self.config_entry = config_entry
+        self.vin = config_entry.data.get("vin")
 
         # State Variables
         self.is_charging = False
@@ -65,6 +70,12 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
 
         # Next Update Time
         self.next_update_time = None
+
+        # Initialize with default values
+        self.vehicle_series = None
+        self.min_temp = 16  # Default fallback
+        self.max_temp = 28  # Default fallback
+        self.temp_offset = 2  # Default fallback
 
         # Initialize update intervals from config_entry options, falling back to defaults if not set
         options = config_entry.options
@@ -295,11 +306,12 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
     async def async_setup(self):
         """Set up the coordinator."""
         self.is_initial_setup = True
+        vin = self.vin
 
         # Restore last known values for activity and power-off times
-        entity_id_last_activity = f"sensor.{DOMAIN}_last_vehicle_activity"
-        entity_id_last_power_off = f"sensor.{DOMAIN}_last_powered_off"
-        entity_id_last_power_on = f"sensor.{DOMAIN}_last_powered_on"
+        entity_id_last_activity = f"sensor.{DOMAIN}_{self.vin}_last_vehicle_activity"
+        entity_id_last_power_off = f"sensor.{DOMAIN}_{self.vin}_last_powered_off"
+        entity_id_last_power_on = f"sensor.{DOMAIN}_{self.vin}_last_powered_on"
 
         last_activity_state = self.hass.states.get(entity_id_last_activity)
         last_power_off_state = self.hass.states.get(entity_id_last_power_off)
@@ -360,8 +372,52 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             LOGGER.error("First data update failed: %s", e)
             # Proceed anyway, set data to empty dict
             self.data = {}
-        finally:
-            self.is_initial_setup = False
+
+        if "info" in self.data and self.data["info"]:
+            # Find the vehicle info matching the current VIN
+            vin_info = next(
+                (v for v in self.data.get("info", []) if v.vin == vin), None
+            )
+
+            if not vin_info:
+                LOGGER.error(f"No vehicle data found for VIN: {vin}")
+                raise UpdateFailed("No matching vehicle data found.")
+
+            # Get vehicle series from API response
+            self.vehicle_series = getattr(vin_info, "series", "").upper()
+
+            # Set temperature range based on vehicle series
+            if "EH32" in self.vehicle_series:
+                self.min_temp = 17
+                self.max_temp = 33
+                self.temp_offset = 3
+            else:  # For other models like MG5, ZS EV, etc.
+                self.min_temp = 16
+                self.max_temp = 28
+                self.temp_offset = 2
+
+            LOGGER.debug(
+                f"Vehicle series detected: {self.vehicle_series}. "
+                f"Temperature range: {self.min_temp}-{self.max_temp}°C, "
+                f"Offset: {self.temp_offset}"
+            )
+        else:
+            LOGGER.error(f"No 'info' data found for VIN: {vin}")
+            raise UpdateFailed("No 'info' data found for VIN.")
+
+        # Update capabilities from options
+        self.has_sunroof = self.config_entry.options.get(
+            "has_sunroof", self.has_sunroof
+        )
+        self.has_heated_seats = self.config_entry.options.get(
+            "has_heated_seats", self.has_heated_seats
+        )
+        self.has_battery_heating = self.config_entry.options.get(
+            "has_battery_heating", self.has_battery_heating
+        )
+
+        self.is_initial_setup = False
+
         return True
 
     async def _async_update_data(self):
@@ -369,15 +425,23 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         data = {}
 
         # Fetch vehicle info with retries
-        data["info"] = await self._fetch_with_retries(
-            self.client.get_vehicle_info,
-            self._is_generic_response_vehicle_info,
-            "vehicle info",
+        data["info"] = (
+            await self._fetch_with_retries(
+                self.client.get_vehicle_info,
+                self._is_generic_response_vehicle_info,
+                "vehicle info",
+            )
+            or []
         )
 
-        if data["info"] is None:
-            # Cannot proceed without vehicle info
+        if not data["info"]:
             raise UpdateFailed("Cannot proceed without vehicle info.")
+
+        vin = self.config_entry.data.get("vin")
+        vehicle_info = next((v for v in data["info"] if v.vin == vin), None)
+
+        if not vehicle_info:
+            raise UpdateFailed(f"No data found for VIN: {vin}")
 
         # Fetch vehicle status with retries
         data["status"] = await self._fetch_with_retries(
@@ -715,8 +779,8 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                 == GENERIC_RESPONSE_TEMPERATURE
                 or status.basicVehicleStatus.exteriorTemperature
                 == GENERIC_RESPONSE_TEMPERATURE
-                or status.basicVehicleStatus.exteriorTemperature
-                == GENERIC_RESPONSE_EXTREME_TEMPERATURE
+                # or status.basicVehicleStatus.exteriorTemperature
+                # == GENERIC_RESPONSE_EXTREME_TEMPERATURE
             ):
                 LOGGER.debug(
                     "Generic Vehicle Status Data: %s", status.basicVehicleStatus
@@ -745,10 +809,14 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
 
     def _determine_vehicle_type(self, vehicle_info):
         """Determine the type of vehicle based on its information."""
-        vin_info = vehicle_info[0]
+        vin_info = next((v for v in vehicle_info if v.vin == self.vin), None)
         is_electric = False
         is_combustion = False
         is_hybrid = False
+
+        if not vin_info:
+            LOGGER.error(f"No vehicle info found for VIN: {self.vin}")
+            return "ICE"  # Default to ICE if unknown
 
         try:
             for config in vin_info.vehicleModelConfiguration:
@@ -800,6 +868,27 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         elif sensor_name == "last_vehicle_activity":
             return self.last_vehicle_activity
         return None
+
+    # ---- AC Temperature Handling ----
+    def get_ac_temperature_idx(self, desired_temp: int) -> int:
+        """Calculate the temperature index based on the desired temperature.
+
+        Args:
+            desired_temp (int): The desired target temperature in Celsius.
+
+        Returns:
+            int: The calculated temperature index.
+
+        """
+
+        # Ensure desired_temp is within bounds
+        desired_temp = int(max(self.min_temp, min(self.max_temp, desired_temp)))
+
+        temperature_idx = self.temp_offset + (desired_temp - self.min_temp)
+        LOGGER.debug(
+            f"Calculated temperature index: {temperature_idx} for desired_temp: {desired_temp}°C"
+        )
+        return temperature_idx
 
 
 class GenericResponseException(Exception):

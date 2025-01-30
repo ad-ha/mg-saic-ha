@@ -1,3 +1,5 @@
+# File: select.py
+
 from homeassistant.components.select import SelectEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (
@@ -36,6 +38,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 SAICMGHeatedSeatLevelSelect(
                     coordinator,
                     client,
+                    entry,
                     vin_info,
                     vin,
                     "Front Left",
@@ -45,6 +48,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 SAICMGHeatedSeatLevelSelect(
                     coordinator,
                     client,
+                    entry,
                     vin_info,
                     vin,
                     "Front Right",
@@ -71,7 +75,7 @@ class SAICMGChargingCurrentSelect(CoordinatorEntity, SelectEntity):
         self._attr_name = (
             f"{vin_info.brandName} {vin_info.modelName} Charging Current Limit"
         )
-        self._attr_unique_id = f"{vin}_charging_current_limit"
+        self._attr_unique_id = f"{entry.entry_id}_{vin}_charging_current_limit"
         self._attr_options = [e.limit for e in ChargeCurrentLimitOption]
 
         self._device_info = create_device_info(coordinator, entry.entry_id)
@@ -200,7 +204,7 @@ class SAICMGHeatedSeatLevelSelect(CoordinatorEntity, SelectEntity):
         self._attr_name = (
             f"{vin_info.brandName} {vin_info.modelName} Heated Seat {seat_name} Level"
         )
-        self._attr_unique_id = f"{vin}_heated_seat_{seat_id}_level"
+        self._attr_unique_id = f"{entry.entry_id}_{vin}_heated_seat_{seat_id}_level"
         self._attr_options = ["Off", "Low", "Medium", "High"]
 
         self._device_info = create_device_info(coordinator, entry.entry_id)

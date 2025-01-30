@@ -28,6 +28,15 @@
           "vin": "VIN del Vehículo",
           "vehicle_type": "Tipo de Vehículo"
         }
+      },
+      "vehicle_capabilities": {
+        "title": "Capacidades del Vehículo",
+        "description": "Seleccione las capacidades adicionales que soporta su vehículo. Podrá modificarlas más tarde en las Opciones, si es necesario.",
+        "data": {
+          "has_sunroof": "Tiene Techo Solar",
+          "has_heated_seats": "Tiene Asientos Calefactables",
+          "has_battery_heating": "Tiene Calefacción de Batería"
+        }
       }
     },
     "error": {
@@ -150,6 +159,10 @@
         "vin": {
           "name": "VIN",
           "description": "El número de identificación del vehículo para encender el AC."
+        },
+        "temperature": {
+          "name": "Temperatura",
+          "description": "Temperatura deseada en grados Celsius."
         }
       }
     },
