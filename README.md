@@ -1,4 +1,4 @@
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
+[![hacs_badge](https://img.shields.io/badge/HACS-Default-green.svg)](https://github.com/hacs/default)
 ![GitHub Release (latest SemVer including pre-releases)](https://img.shields.io/github/v/release/ad-ha/mg-saic-ha?include_prereleases)
 ![GitHub Downloads (all assets, latest release)](https://img.shields.io/github/downloads/ad-ha/mg-saic-ha/latest/total)
 
@@ -21,16 +21,8 @@
 
 1. Ensure that HACS is installed.
 2. Go to HACS
-3. On the top right menu select "Custom repositories"
-
-  ![image](https://github.com/user-attachments/assets/c89651bc-76c2-4c62-b7e2-f9dd11592f84)
-
-4. On the "Repository" field put the URL https://github.com/ad-ha/mg-saic-ha. On the "Category" select "Integration" and click "ADD"
-
-  ![image](https://github.com/user-attachments/assets/7b6ed323-58f3-489f-9d32-c0d41fd5afeb)
-
-6. Search for "MG SAIC" and download the repository.
-7. Restart Home Assistant.
+3. Search for "MG SAIC" and download the repository.
+4. Restart Home Assistant.
 
 ### Manual Installation
 
@@ -154,7 +146,6 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 
 
 ### SWITCHES
-- AC Blowing
 - Front Defrost
 - Rear Window Defrost
 - Heated Seats
