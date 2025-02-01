@@ -167,9 +167,15 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         self.vehicle_type = self.config_entry.data.get("vehicle_type")
 
         # Vehicle capabilities
-        self.has_sunroof = options.get("has_sunroof")
-        self.has_heated_seats = options.get("has_heated_seats")
-        self.has_battery_heating = options.get("has_battery_heating")
+        self.has_sunroof = config_entry.options.get(
+            "has_sunroof", config_entry.data.get("has_sunroof", False)
+        )
+        self.has_heated_seats = config_entry.options.get(
+            "has_heated_seats", config_entry.data.get("has_heated_seats", False)
+        )
+        self.has_battery_heating = config_entry.options.get(
+            "has_battery_heating", config_entry.data.get("has_battery_heating", False)
+        )
 
     # Update Options
     async def async_update_options(self, options):

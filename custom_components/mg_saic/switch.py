@@ -383,10 +383,15 @@ class SAICMGHeatedSeatsSwitch(SAICMGVehicleSwitch):
 
     def __init__(self, coordinator, client, entry, vin_info, vin, seat_name, seat_side):
         """Initialize the Heated Seat switch."""
-        super().__init__(coordinator)
-        self._client = client
-        self._vin = vin
-        self._vin_info = vin_info
+        super().__init__(
+            coordinator,
+            client,
+            entry,
+            vin_info,
+            vin,
+            f"Heated Seat {seat_name}",
+            "mdi:car-seat-heater",
+        )
         self._seat_side = seat_side
         self._attr_name = (
             f"{vin_info.brandName} {vin_info.modelName} Heated Seat {seat_name}"
