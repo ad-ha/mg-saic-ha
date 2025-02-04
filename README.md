@@ -12,8 +12,8 @@
 <a href="https://buymeacoffee.com/varetas3d" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="41" width="174"></a>
 
 **Important Notes:** 
-- **Using this integration causes the MG/SAIC mobile app to shut down, as per API requirements, since only one device can be connected at a time. Logging into the mobile app causes this integration to disconnect and fail to set up.**
-- Please provide feedback on sensors and information for other vehicles.
+- **Using this integration causes the MG/SAIC mobile app to shut down if the same account is used, as per API requirements.**
+- **To avoid issues, make sure to setup a Secondary Account on iSmart App.**
 
 ## INSTALLATION
 
