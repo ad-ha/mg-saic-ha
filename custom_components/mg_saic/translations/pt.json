@@ -211,6 +211,107 @@
         }
       }
     },
-    "start_front_defrost": {
-      "name": "Iniciar Descongelamento Frontal",
-      "
+   "start_front_defrost": {
+      "name": "Ligar Desembaciador Frontal",
+      "description": "Ligar o sistema de desembaciamento frontal do veículo.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "O número de identificação do veículo para ligar o desembaciador frontal."
+        }
+      }
+    },
+    "stop_ac": {
+      "name": "Parar AC",
+      "description": "Parar o sistema AC do veículo.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "O número de identificação do veículo para parar o AC."
+        }
+      }
+    },
+    "stop_battery_heating": {
+      "name": "Parar Aquecimento da Bateria",
+      "description": "Parar o processo de aquecimento da bateria do veículo.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "O número de identificação do veículo para parar o aquecimento da bateria."
+        }
+      }
+    },
+    "stop_charging": {
+      "name": "Parar Carregamento",
+      "description": "Parar o processo de carregamento do veículo.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "O número de identificação do veículo para parar o carregamento."
+        }
+      }
+    },
+    "trigger_alarm": {
+      "name": "Disparar Alarme",
+      "description": "Disparar o alarme do veículo.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "O número de identificação do veículo para disparar o alarme."
+        }
+      }
+    },
+    "unlock_vehicle": {
+      "name": "Destrancar Veículo",
+      "description": "Destrancar o veículo.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "O número de identificação do veículo para destrancar."
+        }
+      }
+    },
+    "update_vehicle_data": {
+      "name": "Atualizar Dados do Veículo",
+      "description": "Acionar manualmente uma atualização de dados do veículo.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "O número de identificação do veículo para atualizar os dados."
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "has_sunroof": "Tem Teto de Abrir",
+          "has_heated_seats": "Tem Bancos Aquecidos",
+          "has_battery_heating": "Tem Aquecimento de Bateria",
+          "update_interval": "Intervalo de Atualização (em minutos)",
+          "charging_update_interval": "Intervalo de Atualização de Carregamento (em minutos)",
+          "powered_update_interval": "Intervalo de Atualização com Veículo Ligado (em minutos)",
+          "after_shutdown_update_interval": "Intervalo de Atualização Após Desligar (em minutos)",
+          "grace_period_update_interval": "Intervalo de Atualização do Período de Graça (em minutos)",
+          "after_action_delay": "Atraso Após Ação (em segundos)",
+          "alarm_long_interval": "Intervalo Longo Alarme (em minutos)",
+          "ac_long_interval": "Intervalo Longo AC (em minutos)",
+          "front_defrost_long_interval": "Intervalo Longo Desembaciador Frontal (em minutos)",
+          "rear_window_heat_long_interval": "Intervalo Longo Aquecimento Vidro Traseiro (em minutos)",
+          "lock_unlock_long_interval": "Intervalo Longo Trancar/Destrancar (em minutos)",
+          "charging_port_lock_long_interval": "Intervalo Longo Trancar Porta de Carregamento (em minutos)",
+          "heated_seats_long_interval": "Intervalo Longo Bancos Aquecidos (em minutos)",
+          "battery_heating_long_interval": "Intervalo Longo Aquecimento Bateria (em minutos)",
+          "charging_long_interval": "Intervalo Longo Carregamento (em minutos)",
+          "sunroof_long_interval": "Intervalo Longo Teto de Abrir (em minutos)",
+          "tailgate_long_interval": "Intervalo Longo Porta da Bagageira (em minutos)",
+          "target_soc_long_interval": "Intervalo Longo SOC Alvo (em minutos)",
+          "charging_current_long_interval": "Intervalo Longo Corrente de Carregamento (em minutos)"
+        },
+        "description": "Definir configurações adicionais para Integração MG/SAIC",
+        "title": "Opções MG/SAIC"
+      }
+    }
+  }
+}
