@@ -6,7 +6,7 @@ from .const import DOMAIN
 def create_device_info(coordinator, entry_id):
     """Generate device info the integration."""
     try:
-        vin_info = coordinator.data["info"][0]
+        vin_info = coordinator.vin_info
         return {
             "identifiers": {(DOMAIN, vin_info.vin)},
             "name": f"{vin_info.brandName} {vin_info.modelName}",

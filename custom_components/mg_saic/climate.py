@@ -31,7 +31,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         LOGGER.error("Vehicle info is not available. Climate cannot be set up.")
         return
 
-    vin_info = coordinator.data["info"][0]
+    vin_info = coordinator.vin_info
     vin = vin_info.vin
 
     climate_entity = SAICMGClimateEntity(coordinator, client, entry, vin_info, vin)

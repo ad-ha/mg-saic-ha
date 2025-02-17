@@ -18,7 +18,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
             LOGGER.error("Failed to retrieve vehicle info.")
             return
 
-        vin_info = coordinator.data["info"][0]
+        vin_info = coordinator.vin_info
 
         # Determine if vehicle is RHD
         lrd_value = None
@@ -241,7 +241,7 @@ class SAICMGBinarySensor(CoordinatorEntity, BinarySensorEntity):
         self._device_class = device_class
         self._icon = icon
         self._data_type = data_type
-        vin_info = self.coordinator.data["info"][0]
+        vin_info = self.coordinator.vin_info
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}_binary_sensor"
 
         self._device_info = create_device_info(coordinator, entry.entry_id)
@@ -253,7 +253,7 @@ class SAICMGBinarySensor(CoordinatorEntity, BinarySensorEntity):
 
     @property
     def name(self):
-        vin_info = self.coordinator.data["info"][0]
+        vin_info = self.coordinator.vin_info
         return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
 
     @property
@@ -321,7 +321,7 @@ class SAICMGChargingBinarySensor(CoordinatorEntity, BinarySensorEntity):
         self._icon = icon
         self._data_source = data_source
         self._data_type = data_type
-        vin_info = self.coordinator.data["info"][0]
+        vin_info = self.coordinator.vin_info
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}_binary_sensor"
 
         self._device_info = create_device_info(coordinator, entry.entry_id)
@@ -334,7 +334,7 @@ class SAICMGChargingBinarySensor(CoordinatorEntity, BinarySensorEntity):
     @property
     def name(self):
         """Return the name of the binary sensor."""
-        vin_info = self.coordinator.data["info"][0]
+        vin_info = self.coordinator.vin_info
         return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
 
     @property

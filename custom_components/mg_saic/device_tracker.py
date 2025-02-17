@@ -32,7 +32,7 @@ class SAICMGDeviceTracker(CoordinatorEntity, TrackerEntity):
         self._field = field
         self._name = name
         self._data_type = data_type
-        vin_info = self.coordinator.data["info"][0]
+        vin_info = self.coordinator.vin_info
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}_gps"
 
         self._device_info = create_device_info(coordinator, entry.entry_id)
@@ -50,7 +50,7 @@ class SAICMGDeviceTracker(CoordinatorEntity, TrackerEntity):
     @property
     def name(self):
         """Return the name of the tracker."""
-        vin_info = self.coordinator.data["info"][0]
+        vin_info = self.coordinator.vin_info
         return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
 
     @property
