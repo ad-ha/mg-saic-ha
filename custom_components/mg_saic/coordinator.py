@@ -386,6 +386,9 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                 LOGGER.error(f"No vehicle data found for VIN: {vin}")
                 raise UpdateFailed("No matching vehicle data found.")
 
+            # Store the matching vehicle info
+            self.vin_info = vin_info
+
             # Get vehicle series from API response
             self.vehicle_series = getattr(vin_info, "series", "").upper()
 
@@ -441,9 +444,15 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             raise UpdateFailed("Cannot proceed without vehicle info.")
 
         vin = self.config_entry.data.get("vin")
-        vehicle_info = next((v for v in data["info"] if v.vin == vin), None)
+        filtered_info = [v for v in data["info"] if v.vin == vin]
+        if not filtered_info:
+            raise UpdateFailed(f"No data found for VIN: {vin}")
 
-        if not vehicle_info:
+        # Overwrite info with the filtered result and store it in an attribute
+        data["info"] = filtered_info
+        self.vin_info = filtered_info[0]
+
+        if not filtered_info:
             raise UpdateFailed(f"No data found for VIN: {vin}")
 
         # Fetch vehicle status with retries
