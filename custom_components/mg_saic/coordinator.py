@@ -787,6 +787,8 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                 == GENERIC_RESPONSE_STATUS_THRESHOLD
                 and status.basicVehicleStatus.mileage
                 == GENERIC_RESPONSE_STATUS_THRESHOLD
+                or status.basicVehicleStatus.mileage
+                <= GENERIC_RESPONSE_STATUS_THRESHOLD
                 or status.basicVehicleStatus.interiorTemperature
                 == GENERIC_RESPONSE_TEMPERATURE
                 or status.basicVehicleStatus.exteriorTemperature
