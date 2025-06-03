@@ -7,6 +7,10 @@
 
 ![image](https://brands.home-assistant.io/brands/_/mg_saic/logo.png)
 
+<h3>IMPORTANT NOTE: THIS INTEGRATION IS CURRENTLY NOT BEING ACTIVELY MAINTAINED. </br>
+CONTACT THE DEVELOPER IN CASE YOU WISH TO TAKE OVER THIS PROJECT OR SUBMIT YOUR PR WITH CHANGES</h3>
+
+</br></br>
 # MG/SAIC CUSTOM INTEGRATION
 
 <a href="https://buymeacoffee.com/varetas3d" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="41" width="174"></a>
