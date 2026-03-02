@@ -220,6 +220,14 @@ class SAICMGChargingPortLockSwitch(CoordinatorEntity, SwitchEntity):
         return self._device_info
 
     @property
+    def available(self):
+        """Return True if the switch entity is available."""
+        return (
+            self.coordinator.last_update_success
+            and self.coordinator.data.get("charging") is not None
+        )
+
+    @property
     def is_on(self):
         """Return true if the charging port is locked."""
         charging_data = self.coordinator.data.get("charging")
