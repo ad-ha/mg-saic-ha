@@ -616,21 +616,10 @@ class SAICMGMileageSensor(CoordinatorEntity, SensorEntity):
     @property
     def available(self):
         """Return True if the entity is available."""
-        # This sensor depends on both 'status' and 'charging' data
-        # Since ICE vehicles only have 'status' data, check vehicle type
-        if self._vehicle_type == "ICE":
-            return (
-                self.coordinator.last_update_success
-                and self.coordinator.data.get("status") is not None
-            )
-        elif self._vehicle_type in ["PHEV", "HEV", "BEV"]:
-            return (
-                self.coordinator.last_update_success
-                and self.coordinator.data.get("status") is not None
-                and self.coordinator.data.get("charging") is not None
-            )
-        else:
-            return False
+        return self.coordinator.last_update_success and (
+            self.coordinator.data.get("status") is not None
+            or self.coordinator.data.get("charging") is not None
+        )
 
     @property
     def native_value(self):
@@ -1028,7 +1017,9 @@ class SAICMGInstantPowerSensor(CoordinatorEntity, SensorEntity):
             if charging_data:
                 # Check if the vehicle is driving
                 status_data = self.coordinator.data.get("status")
-                power_mode = getattr(status_data.basicVehicleStatus, "powerMode", None)
+                power_mode = getattr(
+                    getattr(status_data, "basicVehicleStatus", None), "powerMode", None
+                )
                 if power_mode in [2, 3]:
                     # Get raw current and voltage
                     raw_current = getattr(charging_data, "bmsPackCrnt", None)
@@ -1111,8 +1102,10 @@ class SAICMGSOCSensor(CoordinatorEntity, SensorEntity):
     @property
     def available(self):
         """Return True if the entity is available."""
-        required_data = self.coordinator.data.get(self._data_type)
-        return self.coordinator.last_update_success and required_data is not None
+        return self.coordinator.last_update_success and (
+            self.coordinator.data.get("charging") is not None
+            or self.coordinator.data.get("status") is not None
+        )
 
     @property
     def native_value(self):
@@ -1448,6 +1441,7 @@ class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
 
                 elif self._field == "bmsPTCHeatResp":
                     # Map bmsPTCHeatResp values to status strings
+                    raw_value = getattr(charging_data, self._field, None)
                     return {
                         0: "Off",
                         1: "On",
