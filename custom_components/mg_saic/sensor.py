@@ -1444,6 +1444,7 @@ class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
                         10: "Charging (DC)",
                         11: "Super Offboard Charging",
                         12: "Charging",
+                        13: "V2X Discharging",
                     }.get(raw_value, f"Unknown ({raw_value})")
 
                 elif self._field == "bmsPTCHeatResp":
