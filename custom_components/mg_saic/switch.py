@@ -24,12 +24,6 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
     switches = []
 
-    # Extract vehicle configuration
-    vehicle_config = {
-        config.itemCode: config.itemValue
-        for config in vin_info.vehicleModelConfiguration
-    }
-
     # Front Defrost Switch
     switches.append(SAICMGFrontDefrostSwitch(coordinator, client, entry, vin_info, vin))
 
@@ -56,7 +50,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
                     vin_info,
                     vin,
                     "Front Left",
-                    "front_left",
+                    "left",
+                    "frontLeftSeatHeatLevel",
                 ),
                 SAICMGHeatedSeatsSwitch(
                     coordinator,
@@ -65,7 +60,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
                     vin_info,
                     vin,
                     "Front Right",
-                    "front_right",
+                    "right",
+                    "frontRightSeatHeatLevel",
                 ),
             ]
         )
@@ -381,7 +377,17 @@ class SAICMGFrontDefrostSwitch(CoordinatorEntity, SwitchEntity):
 class SAICMGHeatedSeatsSwitch(SAICMGVehicleSwitch):
     """Switch to control individual heated seats."""
 
-    def __init__(self, coordinator, client, entry, vin_info, vin, seat_name, seat_side):
+    def __init__(
+        self,
+        coordinator,
+        client,
+        entry,
+        vin_info,
+        vin,
+        seat_name,
+        seat_side,
+        status_attr,
+    ):
         """Initialize the Heated Seat switch."""
         super().__init__(
             coordinator,
@@ -393,6 +399,7 @@ class SAICMGHeatedSeatsSwitch(SAICMGVehicleSwitch):
             "mdi:car-seat-heater",
         )
         self._seat_side = seat_side
+        self._status_attr = status_attr
         self._attr_name = (
             f"{vin_info.brandName} {vin_info.modelName} Heated Seat {seat_name}"
         )
@@ -414,7 +421,7 @@ class SAICMGHeatedSeatsSwitch(SAICMGVehicleSwitch):
             if basic_status:
                 seat_level = getattr(
                     basic_status,
-                    f"{self._seat_side}SeatHeatLevel",
+                    self._status_attr,
                     0,
                 )
                 return seat_level > 0

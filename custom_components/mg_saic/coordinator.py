@@ -2,10 +2,12 @@
 
 from datetime import datetime, timedelta, timezone
 import asyncio
+from contextlib import suppress
 from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util.dt import utcnow
 from .api import SAICMGAPIClient
+from .logic import select_update_interval
 from .const import (
     AFTER_ACTION_UPDATE_INTERVAL_DELAY,
     CHARGING_STATUS_CODES,
@@ -67,6 +69,8 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
 
         # Next Update Time
         self.next_update_time = None
+        self._action_refresh_task = None
+        self._action_refresh_generation = 0
 
         # Initialize with default values
         self.vehicle_series = None
@@ -91,7 +95,8 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             )
 
         # Base update intervals
-        self.update_interval = get_interval("update_interval", UPDATE_INTERVAL)
+        self.default_update_interval = get_interval("update_interval", UPDATE_INTERVAL)
+        self.update_interval = self.default_update_interval
         self.charging_update_interval = get_interval(
             "charging_update_interval", UPDATE_INTERVAL_CHARGING
         )
@@ -155,7 +160,7 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
 
         LOGGER.debug(
             f"Update intervals initialized: "
-            f"Default: {self.update_interval}, "
+            f"Default: {self.default_update_interval}, "
             f"Charging: {self.charging_update_interval}, "
             f"Powered: {self.powered_update_interval}, "
             f"After Shutdown: {self.after_shutdown_update_interval}, "
@@ -197,7 +202,8 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             )
 
         # Update all update intervals
-        self.update_interval = get_interval("update_interval", UPDATE_INTERVAL)
+        self.default_update_interval = get_interval("update_interval", UPDATE_INTERVAL)
+        self.update_interval = self.default_update_interval
         self.charging_update_interval = get_interval(
             "charging_update_interval", UPDATE_INTERVAL_CHARGING
         )
@@ -266,7 +272,7 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
 
         LOGGER.debug(
             f"Update intervals updated via options: "
-            f"Default: {self.update_interval}, "
+            f"Default: {self.default_update_interval}, "
             f"Charging: {self.charging_update_interval}, "
             f"Powered: {self.powered_update_interval}, "
             f"After Shutdown: {self.after_shutdown_update_interval}, "
@@ -287,24 +293,11 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             f"Charging Current: {self.charging_current_long_interval}"
         )
 
-        # Reschedule the refresh with the new update interval
-        if not self.is_charging and not self.is_powered_on:
-            new_interval = self.update_interval
-            if self.update_interval != new_interval:
-                LOGGER.debug(
-                    f"Update interval reset to default: {self.update_interval}"
-                )
-                if self._unsub_refresh:
-                    self._unsub_refresh()
-                self._schedule_refresh()
-
-        # Reschedule the refresh immediately with the new update interval
-        if self._unsub_refresh:
-            self._unsub_refresh()
-
-        # Force recalculation of the next update time based on the new interval
-        self.next_update_time = utcnow() + self.update_interval
-        self._schedule_refresh()
+        if not getattr(self, "_action_interval_active", False):
+            self._adjust_update_interval()
+        else:
+            self.next_update_time = utcnow() + self.update_interval
+            self.async_update_listeners()
 
     async def async_setup(self):
         """Set up the coordinator."""
@@ -657,23 +650,27 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         )
 
         # Determine update interval based on state and recent activity
-        if self.is_powered_on:
-            self.update_interval = self.powered_update_interval
+        self.update_interval = select_update_interval(
+            is_powered_on=self.is_powered_on,
+            is_charging=self.is_charging,
+            idle_duration=idle_duration,
+            activity_duration=activity_duration,
+            default_update_interval=self.default_update_interval,
+            powered_update_interval=self.powered_update_interval,
+            charging_update_interval=self.charging_update_interval,
+            grace_period_update_interval=self.grace_period_update_interval,
+            after_shutdown_update_interval=self.after_shutdown_update_interval,
+        )
+
+        if self.update_interval == self.powered_update_interval:
             LOGGER.debug("Vehicle is powered on. Using powered update interval.")
-        elif self.is_charging:
-            self.update_interval = self.charging_update_interval
+        elif self.update_interval == self.charging_update_interval:
             LOGGER.debug("Vehicle is charging. Using charging update interval.")
-        elif (
-            activity_duration <= self.grace_period_update_interval
-            or idle_duration <= self.grace_period_update_interval
-        ):
-            self.update_interval = self.grace_period_update_interval
+        elif self.update_interval == self.grace_period_update_interval:
             LOGGER.debug("Within grace period. Using grace period interval.")
-        elif idle_duration <= self.after_shutdown_update_interval:
-            self.update_interval = self.after_shutdown_update_interval
+        elif self.update_interval == self.after_shutdown_update_interval:
             LOGGER.debug("Within shutdown window. Using shutdown interval.")
         else:
-            self.update_interval = UPDATE_INTERVAL  # Use the default update interval
             LOGGER.debug("No recent activity. Using default update interval.")
 
         # Log and schedule the next refresh
@@ -682,12 +679,33 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
 
     # Additional Update Intervals for Actions and Confirmation
     async def schedule_action_refresh(self, vin, immediate_interval, long_interval):
-        """Schedule immediate and long-interval updates after an action."""
-        # Prevent state-driven adjustments during action sequence
+        """Schedule non-blocking follow-up refreshes after an action."""
+        self._action_refresh_generation += 1
+        generation = self._action_refresh_generation
+
+        if self._action_refresh_task and not self._action_refresh_task.done():
+            self._action_refresh_task.cancel()
+
+        self._action_refresh_task = self.hass.async_create_task(
+            self._run_action_refresh_sequence(
+                vin,
+                immediate_interval,
+                long_interval,
+                generation,
+            )
+        )
+
+    async def _run_action_refresh_sequence(
+        self,
+        vin,
+        immediate_interval,
+        long_interval,
+        generation,
+    ):
+        """Run action follow-up refreshes in the background."""
         self._action_interval_active = True
 
         try:
-            # Apply the immediate interval
             self.update_interval = immediate_interval
             self.next_update_time = utcnow() + self.update_interval
             self.async_update_listeners()
@@ -698,10 +716,8 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             )
             await self.async_request_refresh()
 
-            # Wait for the immediate interval
             await asyncio.sleep(immediate_interval.total_seconds())
 
-            # Apply the long interval
             self.update_interval = long_interval
             self.next_update_time = utcnow() + self.update_interval
             self.async_update_listeners()
@@ -712,13 +728,29 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             )
             await self.async_request_refresh()
 
-            # Wait for the long interval
             await asyncio.sleep(long_interval.total_seconds())
-
+        except asyncio.CancelledError:
+            LOGGER.debug("Cancelled action refresh sequence for VIN: %s.", vin)
+            raise
         finally:
-            # Allow state-based adjustments again
-            self._action_interval_active = False
-            self._adjust_update_interval()
+            if generation == self._action_refresh_generation:
+                self._action_interval_active = False
+                self._action_refresh_task = None
+                self._adjust_update_interval()
+
+    async def async_shutdown(self):
+        """Release coordinator resources when the entry is unloaded."""
+        self._action_refresh_generation += 1
+
+        if self._action_refresh_task and not self._action_refresh_task.done():
+            self._action_refresh_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._action_refresh_task
+        self._action_refresh_task = None
+
+        if self._unsub_refresh:
+            self._unsub_refresh()
+            self._unsub_refresh = None
 
     def _schedule_refresh(self):
         """Schedule the next refresh and update listeners."""

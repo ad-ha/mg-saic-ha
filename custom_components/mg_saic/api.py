@@ -8,6 +8,7 @@ from saic_ismart_client_ng.api.vehicle_charging import (
     ChargeCurrentLimitCode as ExternalChargeCurrentLimitCode,
 )
 from .const import LOGGER, REGION_BASE_URIS, BatterySoc, ChargeCurrentLimitOption
+from .logic import normalize_sunroof_action
 
 
 class SAICMGAPIClient:
@@ -410,6 +411,7 @@ class SAICMGAPIClient:
             LOGGER.info("Vehicle locked successfully.")
         except Exception as e:
             LOGGER.error("Error locking vehicle: %s", e)
+            raise
 
     async def open_tailgate(self, vin):
         """Open the vehicle tailgate."""
@@ -418,6 +420,7 @@ class SAICMGAPIClient:
             LOGGER.info("Tailgate opened successfully.")
         except Exception as e:
             LOGGER.error("Error opening tailgate: %s", e)
+            raise
 
     async def unlock_vehicle(self, vin):
         """Unlock the vehicle."""
@@ -426,17 +429,22 @@ class SAICMGAPIClient:
             LOGGER.info("Vehicle unlocked successfully.")
         except Exception as e:
             LOGGER.error("Error unlocking vehicle: %s", e)
+            raise
 
     # WINDOWS CONTROL
     async def control_sunroof(self, vin, action):
         """Control the sunroof (open/close)."""
         try:
             LOGGER.debug(f"Sunroof control - VIN: {vin}, action: {action}")
-            should_open = action == "open"
+            should_open, action_name = normalize_sunroof_action(action)
             await self._make_api_call(
                 self.saic_api.control_sunroof, vin=vin, should_open=should_open
             )
-            LOGGER.info(f"Sunroof {action} command sent successfully for VIN: {vin}")
+            LOGGER.info(
+                "Sunroof %s command sent successfully for VIN: %s",
+                action_name,
+                vin,
+            )
         except Exception as e:
             LOGGER.error("Error controlling sunroof for VIN %s: %s", vin, e)
             raise
@@ -444,6 +452,9 @@ class SAICMGAPIClient:
     # SESSION MANAGEMENT
     async def close(self):
         """Close the client session."""
+        if self.saic_api is None:
+            return
+
         try:
             await self.saic_api.close()
             LOGGER.info("Closed MG SAIC API session.")

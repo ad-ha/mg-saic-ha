@@ -3,19 +3,12 @@
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 import voluptuous as vol
-import asyncio
 
-from .api import SAICMGAPIClient
-from .coordinator import SAICMGDataUpdateCoordinator
 from .const import (
     DOMAIN,
     LOGGER,
     ChargeCurrentLimitOption,
     BatterySoc,
-)
-from saic_ismart_client_ng.api.vehicle_charging import (
-    TargetBatteryCode,
-    ChargeCurrentLimitCode as ExternalChargeCurrentLimitCode,
 )
 
 SERVICE_CONTROL_CHARGING_PORT_LOCK = "control_charging_port_lock"
@@ -49,8 +42,8 @@ SERVICE_ACTION_SCHEMA = vol.Schema(
 SERVICE_CONTROL_HEATED_SEAT_SCHEMA = vol.Schema(
     {
         vol.Required("vin"): cv.string,
-        vol.Required("seat"): vol.In(["front_left", "front_right"]),
-        vol.Required("level"): vol.All(vol.Coerce(int), vol.Range(min=0, max=3)),
+        vol.Required("left_level"): vol.All(vol.Coerce(int), vol.Range(min=0, max=3)),
+        vol.Required("right_level"): vol.All(vol.Coerce(int), vol.Range(min=0, max=3)),
     }
 )
 
@@ -103,11 +96,19 @@ SERVICE_SUNROOF_SCHEMA = vol.Schema(
 SERVICE_VIN_SCHEMA = vol.Schema({vol.Required("vin"): cv.string})
 
 
-async def async_setup_services(
-    hass: HomeAssistant,
-    client: SAICMGAPIClient,
-    coordinator: SAICMGDataUpdateCoordinator,
-) -> None:
+def _get_vehicle_resources(hass: HomeAssistant, vin: str):
+    """Resolve the client and coordinator for a VIN."""
+    domain_data = hass.data.get(DOMAIN, {})
+    client = domain_data.get("clients_by_vin", {}).get(vin)
+    coordinator = domain_data.get("coordinators_by_vin", {}).get(vin)
+
+    if client is None or coordinator is None:
+        raise ValueError(f"No integration resources found for VIN {vin}")
+
+    return client, coordinator
+
+
+async def async_setup_services(hass: HomeAssistant) -> None:
     """Set up services for the MG SAIC integration."""
 
     # Dynamically define SERVICE_START_CLIMATE_SCHEMA based on vehicle's temperature limits
@@ -125,8 +126,9 @@ async def async_setup_services(
         """Handle the lock_vehicle service call."""
         vin = call.data["vin"]
         try:
+            client, coordinator = _get_vehicle_resources(hass, vin)
             immediate_interval = coordinator.after_action_delay
-            long_interval = coordinator.ac_long_interval
+            long_interval = coordinator.lock_unlock_long_interval
 
             await client.lock_vehicle(vin)
             LOGGER.info("Vehicle locked successfully for VIN: %s", vin)
@@ -142,8 +144,17 @@ async def async_setup_services(
         """Handle the unlock_vehicle service call."""
         vin = call.data["vin"]
         try:
+            client, coordinator = _get_vehicle_resources(hass, vin)
+            immediate_interval = coordinator.after_action_delay
+            long_interval = coordinator.lock_unlock_long_interval
+
             await client.unlock_vehicle(vin)
             LOGGER.info("Vehicle unlocked successfully for VIN: %s", vin)
+            await coordinator.schedule_action_refresh(
+                vin,
+                immediate_interval,
+                long_interval,
+            )
         except Exception as e:
             LOGGER.error("Error unlocking vehicle for VIN %s: %s", vin, e)
 
@@ -151,6 +162,7 @@ async def async_setup_services(
         """Handle the start_ac service call."""
         vin = call.data["vin"]
         try:
+            client, coordinator = _get_vehicle_resources(hass, vin)
             immediate_interval = coordinator.after_action_delay
             long_interval = coordinator.ac_long_interval
 
@@ -191,6 +203,7 @@ async def async_setup_services(
         """Handle the stop_ac service call."""
         vin = call.data["vin"]
         try:
+            client, coordinator = _get_vehicle_resources(hass, vin)
             immediate_interval = coordinator.after_action_delay
             long_interval = coordinator.ac_long_interval
 
@@ -211,6 +224,7 @@ async def async_setup_services(
         fan_speed = call.data["fan_speed"]
         ac_on = call.data["ac_on"]
         try:
+            client, coordinator = _get_vehicle_resources(hass, vin)
             min_temp = coordinator.min_temp
             max_temp = coordinator.max_temp
 
@@ -252,6 +266,7 @@ async def async_setup_services(
         """Handle the open_tailgate service call."""
         vin = call.data["vin"]
         try:
+            client, coordinator = _get_vehicle_resources(hass, vin)
             immediate_interval = coordinator.after_action_delay
             long_interval = coordinator.tailgate_long_interval
 
@@ -269,6 +284,7 @@ async def async_setup_services(
         """Handle the trigger_alarm service call."""
         vin = call.data["vin"]
         try:
+            client, coordinator = _get_vehicle_resources(hass, vin)
             immediate_interval = coordinator.after_action_delay
             long_interval = coordinator.alarm_long_interval
             await client.trigger_alarm(vin)
@@ -285,6 +301,7 @@ async def async_setup_services(
         """Handle the start_charging service call."""
         vin = call.data["vin"]
         try:
+            client, coordinator = _get_vehicle_resources(hass, vin)
             immediate_interval = coordinator.after_action_delay
             long_interval = coordinator.charging_long_interval
 
@@ -303,6 +320,7 @@ async def async_setup_services(
         """Handle the stop_charging service call."""
         vin = call.data["vin"]
         try:
+            client, coordinator = _get_vehicle_resources(hass, vin)
             immediate_interval = coordinator.after_action_delay
             long_interval = coordinator.charging_long_interval
 
@@ -321,6 +339,7 @@ async def async_setup_services(
         """Handle the start_battery_heating service call."""
         vin = call.data["vin"]
         try:
+            client, coordinator = _get_vehicle_resources(hass, vin)
             immediate_interval = coordinator.after_action_delay
             long_interval = coordinator.battery_heating_long_interval
 
@@ -339,6 +358,7 @@ async def async_setup_services(
         """Handle the stop_battery_heating service call."""
         vin = call.data["vin"]
         try:
+            client, coordinator = _get_vehicle_resources(hass, vin)
             immediate_interval = coordinator.after_action_delay
             long_interval = coordinator.battery_heating_long_interval
 
@@ -358,6 +378,7 @@ async def async_setup_services(
         vin = call.data["vin"]
         current_limit = call.data["current_limit"]
         try:
+            client, coordinator = _get_vehicle_resources(hass, vin)
             immediate_interval = coordinator.after_action_delay
             long_interval = coordinator.charging_current_long_interval
 
@@ -421,6 +442,7 @@ async def async_setup_services(
         vin = call.data["vin"]
         target_soc = call.data["target_soc"]
         try:
+            client, coordinator = _get_vehicle_resources(hass, vin)
             immediate_interval = coordinator.after_action_delay
             long_interval = coordinator.target_soc_long_interval
 
@@ -439,6 +461,7 @@ async def async_setup_services(
         vin = call.data["vin"]
         action = call.data["action"]
         try:
+            client, coordinator = _get_vehicle_resources(hass, vin)
             immediate_interval = coordinator.after_action_delay
             long_interval = coordinator.rear_window_heat_long_interval
 
@@ -455,9 +478,10 @@ async def async_setup_services(
     async def handle_control_heated_seats(call: ServiceCall) -> None:
         """Handle the control_heated_seats service call."""
         vin = call.data["vin"]
-        left_level = call.data.get("left_level", 0)
-        right_level = call.data.get("right_level", 0)
+        left_level = call.data["left_level"]
+        right_level = call.data["right_level"]
         try:
+            client, coordinator = _get_vehicle_resources(hass, vin)
             immediate_interval = coordinator.after_action_delay
             long_interval = coordinator.heated_seats_long_interval
 
@@ -480,6 +504,7 @@ async def async_setup_services(
         """Handle the start_front_defrost service call."""
         vin = call.data["vin"]
         try:
+            client, coordinator = _get_vehicle_resources(hass, vin)
             immediate_interval = coordinator.after_action_delay
             long_interval = coordinator.front_defrost_long_interval
 
@@ -496,18 +521,18 @@ async def async_setup_services(
     async def handle_update_vehicle_data(call: ServiceCall) -> None:
         """Handle the update_vehicle_data service call."""
         vin = call.data["vin"]
-        coordinators_by_vin = hass.data[DOMAIN].get("coordinators_by_vin", {})
-        coordinator = coordinators_by_vin.get(vin)
-        if coordinator:
+        try:
+            _, coordinator = _get_vehicle_resources(hass, vin)
             await coordinator.async_request_refresh()
             LOGGER.info("Data update triggered for VIN: %s", vin)
-        else:
-            LOGGER.warning("Coordinator not found for VIN %s", vin)
+        except Exception as e:
+            LOGGER.warning("Coordinator not found for VIN %s: %s", vin, e)
 
     async def handle_control_sunroof(call: ServiceCall) -> None:
         vin = call.data["vin"]
         should_open = call.data["should_open"]
         try:
+            client, coordinator = _get_vehicle_resources(hass, vin)
             immediate_interval = coordinator.after_action_delay
             long_interval = coordinator.sunroof_long_interval
 
@@ -525,6 +550,7 @@ async def async_setup_services(
         vin = call.data["vin"]
         unlock = call.data["unlock"]
         try:
+            client, coordinator = _get_vehicle_resources(hass, vin)
             immediate_interval = coordinator.after_action_delay
             long_interval = coordinator.charging_port_lock_long_interval
 
