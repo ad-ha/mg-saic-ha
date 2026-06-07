@@ -11,6 +11,9 @@ from .services import async_setup_services, async_unload_services
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Set up MG SAIC from a config entry."""
     hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN].setdefault("clients_by_vin", {})
+    hass.data[DOMAIN].setdefault("coordinators_by_vin", {})
+    hass.data[DOMAIN].setdefault("services_registered", False)
 
     username = entry.data["username"]
     password = entry.data["password"]
@@ -48,8 +51,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
         hass.data[DOMAIN][f"{entry.entry_id}_coordinator"] = coordinator
 
-        # Store coordinator by VIN for data refresh after service calls
-        hass.data[DOMAIN].setdefault("coordinators_by_vin", {})
+        # Store resources by VIN so global services can resolve the correct entry.
+        hass.data[DOMAIN]["clients_by_vin"][vin] = client
         hass.data[DOMAIN]["coordinators_by_vin"][vin] = coordinator
 
         # Register an update listener to handle options updates
@@ -57,8 +60,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-        # Register Services
-        await async_setup_services(hass, client, coordinator)
+        # Register services only once; each service resolves the target VIN at runtime.
+        if not hass.data[DOMAIN]["services_registered"]:
+            await async_setup_services(hass)
+            hass.data[DOMAIN]["services_registered"] = True
 
         LOGGER.info("MG SAIC integration setup completed successfully.")
         return True
@@ -77,10 +82,30 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id)
+        domain_data = hass.data[DOMAIN]
+        vin = entry.data.get("vin")
 
-        # If there are no more entries, unload services
-        if not hass.data[DOMAIN]:
+        coordinator = domain_data.pop(f"{entry.entry_id}_coordinator", None)
+        client = domain_data.pop(entry.entry_id, None)
+
+        if vin:
+            domain_data.get("clients_by_vin", {}).pop(vin, None)
+            domain_data.get("coordinators_by_vin", {}).pop(vin, None)
+
+        if coordinator is not None:
+            await coordinator.async_shutdown()
+
+        if client is not None:
+            await client.close()
+
+        # If there are no more entries, unload services and clean the domain data.
+        if not domain_data.get("clients_by_vin"):
             await async_unload_services(hass)
+            domain_data.pop("clients_by_vin", None)
+            domain_data.pop("coordinators_by_vin", None)
+            domain_data.pop("services_registered", None)
+
+        if not domain_data:
+            hass.data.pop(DOMAIN, None)
 
     return unload_ok
