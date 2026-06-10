@@ -150,6 +150,54 @@ class SAICMGAPIClient:
             LOGGER.error(f"Error triggering alarm for VIN {vin}: {e}")
             raise
 
+    # MESSAGE QUEUE / EVENT POLLING
+
+    async def get_alarm_messages(self, page_num: int = 1, page_size: int = 10):
+        """Retrieve alarm messages from the SAIC message queue.
+
+        Used to detect vehicle events (engine start, shutdown, charging)
+        without polling the full vehicle status endpoint on a fixed interval.
+        Returns a MessageResp object with a .messages list of MessageEntity.
+        """
+        try:
+            result = await self._make_api_call(
+                self.saic_api.get_alarm_list,
+                page_num=page_num,
+                page_size=page_size,
+            )
+            return result
+        except Exception as e:
+            LOGGER.warning("Error retrieving alarm messages: %s", e)
+            return None
+
+    async def set_alarm_switches(self, vin: str) -> None:
+        """Register alarm switch subscriptions with the SAIC API.
+
+        Tells the SAIC server to queue alarm messages for this account/VIN
+        when key vehicle events occur. Uses all alarm types supported by the
+        saic-python-client-ng AlarmType enum. Call once during coordinator setup.
+        """
+        try:
+            from saic_ismart_client_ng.api.vehicle.alarm import AlarmType
+            alarm_switches = list(AlarmType)
+            await self._make_api_call(
+                self.saic_api.set_alarm_switches,
+                alarm_switches=alarm_switches,
+                vin=vin,
+            )
+            LOGGER.debug(
+                "Registered alarm switches for VIN %s: %s",
+                vin,
+                [a.name for a in alarm_switches],
+            )
+        except Exception as e:
+            LOGGER.warning(
+                "Could not register alarm switches for VIN %s: %s — "
+                "message-driven updates may not function.",
+                vin,
+                e,
+            )
+
     # CHARGING CONTROL
     async def send_vehicle_charging_control(self, vin, action):
         """Send a charging control command to the vehicle."""
