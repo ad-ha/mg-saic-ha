@@ -113,6 +113,10 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         # Post-shutdown rapid refresh state
         self._shutdown_refresh_task: asyncio.Task | None = None
 
+        # Track previous powered-on state so we detect the transition even
+        # when status_data is None (generic response during power-down)
+        self._prev_is_powered_on: bool = False
+
         # Initialize with default values
         self.vehicle_series = None
         self.min_temp = 16  # Default fallback
@@ -568,6 +572,9 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             power_mode = getattr(basic_status, "powerMode", None)
 
             # Detect Power State
+            # Track previous state so we catch the transition even if a prior
+            # poll returned None (generic response during power-down window)
+            self._prev_is_powered_on = self.is_powered_on
             if power_mode in [2, 3]:
                 if not self.is_powered_on:
                     self.last_powered_on_time = datetime.now(timezone.utc)
@@ -594,6 +601,25 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                 self.is_charging = (
                     getattr(chrg_mgmt_data, "bmsChrgSts", None) in CHARGING_STATUS_CODES
                 )
+
+        # Missed-transition guard: if vehicle status was unavailable (None) but
+        # charging data confirms the car is now charging, we know the car must
+        # have powered off. Fire the shutdown sequence if we haven't already.
+        if (
+            not status_data
+            and self.is_charging
+            and self._prev_is_powered_on
+            and self.is_powered_on  # still True because status block was skipped
+        ):
+            if self._shutdown_refresh_task is None or self._shutdown_refresh_task.done():
+                LOGGER.info(
+                    "Charging detected after status unavailable for VIN %s — "
+                    "inferring shutdown, starting post-shutdown refresh sequence",
+                    self.vin,
+                )
+                self.last_powered_off_time = datetime.now(timezone.utc)
+                self.is_powered_on = False
+                self._start_shutdown_refresh_sequence()
 
         # Update activity timestamp
         if recent_activity:
