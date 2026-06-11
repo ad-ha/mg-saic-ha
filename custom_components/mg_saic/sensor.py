@@ -604,10 +604,6 @@ class SAICMGMileageSensor(CoordinatorEntity, SensorEntity):
         self._device_info = create_device_info(coordinator, entry.entry_id)
         self._vehicle_type = coordinator.vehicle_type
 
-        # Retain last valid temperature readings so the sensor does not drop
-        # to unknown when the API returns -128 (deep sleep / unavailable).
-        self._last_valid_temperature: dict[str, float] = {}
-
     @property
     def unique_id(self):
         return self._unique_id
@@ -704,6 +700,10 @@ class SAICMGVehicleSensor(CoordinatorEntity, SensorEntity):
         self._unique_id = f"{entry.entry_id}_{vin_info.vin}_{field}"
 
         self._device_info = create_device_info(coordinator, entry.entry_id)
+
+        # Retain last valid temperature readings so the sensor does not drop
+        # to unknown when the API returns -128 (deep sleep / unavailable).
+        self._last_valid_temperature: dict[str, float] = {}
 
     @property
     def unique_id(self):
