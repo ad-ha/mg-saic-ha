@@ -701,6 +701,10 @@ class SAICMGVehicleSensor(CoordinatorEntity, SensorEntity):
 
         self._device_info = create_device_info(coordinator, entry.entry_id)
 
+        # Retain last valid temperature readings so the sensor does not drop
+        # to unknown when the API returns -128 (deep sleep / unavailable).
+        self._last_valid_temperature: dict[str, float] = {}
+
     @property
     def unique_id(self):
         return self._unique_id
@@ -732,10 +736,18 @@ class SAICMGVehicleSensor(CoordinatorEntity, SensorEntity):
                             and raw_value == -128
                         ):
                             LOGGER.debug(
-                                "Sensor %s has invalid temperature value -128",
+                                "Sensor %s has invalid temperature value -128, "
+                                "retaining last valid value",
                                 self._name,
                             )
-                            return None
+                            return self._last_valid_temperature.get(self._field)
+                        # Store valid temperature readings for retention
+                        if self._field in [
+                            "interiorTemperature", "exteriorTemperature"
+                        ]:
+                            self._last_valid_temperature[self._field] = (
+                                raw_value * self._factor
+                            )
                         # Add mapping for powerMode
                         if self._field == "powerMode":
                             return {
