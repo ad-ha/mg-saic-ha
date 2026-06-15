@@ -17,6 +17,7 @@ REGION_BASE_URIS = {
     "China": "https://tap-cn.soimt.com/api.app/v1/",
     "Australia": "https://gateway-mg-au.soimt.com/api.app/v1/",
     "Israel": "https://gateway-mg-il.soimt.com/api.app/v1/",
+    "Turkey": "https://gateway-mg-tr.soimt.com/api.app/v1/",
     "Rest of World": "https://gateway-mg-eu.soimt.com/api.app/v1/",
 }
 
