@@ -11,7 +11,7 @@
 </br></br>
 # MG/SAIC CUSTOM INTEGRATION
 
-<a href="https://buymeacoffee.com/varetas3d" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="41" width="174"></a>
+<a href="https://buymeacoffee.com/Townsmcp" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="41" width="174"></a>
 
 **Important Notes:** 
 - **Using this integration causes the MG/SAIC mobile app to shut down if the same account is used, as per API requirements.**
