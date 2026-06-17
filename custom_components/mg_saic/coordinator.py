@@ -462,8 +462,27 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
 
         self.is_initial_setup = False
 
-        # Register alarm switches so SAIC server queues event messages for us
-        await self.client.set_alarm_switches(vin=self.vin)
+        # Register alarm switches so SAIC server queues event messages for us.
+        # Wrapped in a timeout so a slow or unreachable SAIC API during setup
+        # does not block entity loading and cause a CancelledError in HA.
+        try:
+            await asyncio.wait_for(
+                self.client.set_alarm_switches(vin=self.vin),
+                timeout=30,
+            )
+        except asyncio.TimeoutError:
+            LOGGER.warning(
+                "set_alarm_switches timed out for VIN %s — "
+                "message-driven updates may not function until next restart",
+                self.vin,
+            )
+        except Exception as e:
+            LOGGER.warning(
+                "set_alarm_switches failed for VIN %s: %s — "
+                "message-driven updates may not function until next restart",
+                self.vin,
+                e,
+            )
 
         # Start the background message-queue polling loop
         await self._start_message_polling()
@@ -500,19 +519,48 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             raise UpdateFailed(f"No data found for VIN: {vin}")
 
         # Fetch vehicle status with retries
-        data["status"] = await self._fetch_with_retries(
-            self.client.get_vehicle_status,
-            self._is_generic_response_vehicle_status,
-            "vehicle status",
-        )
+        try:
+            data["status"] = await self._fetch_with_retries(
+                self.client.get_vehicle_status,
+                self._is_generic_response_vehicle_status,
+                "vehicle status",
+            )
+        except Exception as e:
+            # During first setup, a vehicle status failure must not prevent
+            # the integration from loading.
+            if self.is_initial_setup:
+                LOGGER.warning(
+                    "Vehicle status unavailable during setup for VIN %s: %s — "
+                    "will retry on next scheduled update",
+                    self.vin,
+                    e,
+                )
+                data["status"] = None
+            else:
+                raise
 
         # Fetch charging info with retries
         if self.vehicle_type in ["BEV", "PHEV"]:
-            data["charging"] = await self._fetch_with_retries(
-                self.client.get_charging_info,
-                self._is_generic_response_charging,
-                "charging info",
-            )
+            try:
+                data["charging"] = await self._fetch_with_retries(
+                    self.client.get_charging_info,
+                    self._is_generic_response_charging,
+                    "charging info",
+                )
+            except Exception as e:
+                # During first setup, a charging info failure must not prevent
+                # the integration from loading — entities will show unavailable
+                # until the next successful poll.
+                if self.is_initial_setup:
+                    LOGGER.warning(
+                        "Charging info unavailable during setup for VIN %s: %s — "
+                        "will retry on next scheduled update",
+                        self.vin,
+                        e,
+                    )
+                    data["charging"] = None
+                else:
+                    raise
 
         # Determine charging status
         self.is_charging = False
@@ -1135,27 +1183,36 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         return False  # Vehicle info doesn't have known generic responses
 
     def _is_generic_response_vehicle_status(self, status):
-        """Check if the vehicle status response is generic."""
+        """Check if the vehicle status response is generic.
+
+        A response is considered generic (placeholder/incomplete) when:
+        - All three of fuelRange, fuelRangeElec, and mileage are zero, OR
+        - Temperature fields return the sentinel value (-40)
+
+        Previously this method had an operator precedence bug where
+        `or mileage <= 0` was evaluated independently of the `and` chain,
+        causing any response with mileage=0 (legitimate during charging) to
+        be incorrectly flagged as generic. Fixed by wrapping the all-zero
+        condition in explicit parentheses.
+        """
         try:
-            if (
-                hasattr(status, "basicVehicleStatus")
-                and status.basicVehicleStatus.fuelRange
-                == GENERIC_RESPONSE_STATUS_THRESHOLD
-                and status.basicVehicleStatus.fuelRangeElec
-                == GENERIC_RESPONSE_STATUS_THRESHOLD
-                and status.basicVehicleStatus.mileage
-                == GENERIC_RESPONSE_STATUS_THRESHOLD
-                or status.basicVehicleStatus.mileage
-                <= GENERIC_RESPONSE_STATUS_THRESHOLD
-                or status.basicVehicleStatus.interiorTemperature
-                == GENERIC_RESPONSE_TEMPERATURE
-                or status.basicVehicleStatus.exteriorTemperature
-                == GENERIC_RESPONSE_TEMPERATURE
-                # or status.basicVehicleStatus.exteriorTemperature
-                # == GENERIC_RESPONSE_EXTREME_TEMPERATURE
-            ):
+            if not hasattr(status, "basicVehicleStatus"):
+                return False
+            basic = status.basicVehicleStatus
+            # All three placeholder fields are zero — classic deep-sleep response
+            all_zero = (
+                basic.fuelRange == GENERIC_RESPONSE_STATUS_THRESHOLD
+                and basic.fuelRangeElec == GENERIC_RESPONSE_STATUS_THRESHOLD
+                and basic.mileage == GENERIC_RESPONSE_STATUS_THRESHOLD
+            )
+            # Temperature sentinel values
+            bad_temp = (
+                basic.interiorTemperature == GENERIC_RESPONSE_TEMPERATURE
+                or basic.exteriorTemperature == GENERIC_RESPONSE_TEMPERATURE
+            )
+            if all_zero or bad_temp:
                 LOGGER.debug(
-                    "Generic Vehicle Status Data: %s", status.basicVehicleStatus
+                    "Generic Vehicle Status Data: %s", basic
                 )
                 return True
             return False
