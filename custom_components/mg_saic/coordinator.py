@@ -1183,27 +1183,36 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         return False  # Vehicle info doesn't have known generic responses
 
     def _is_generic_response_vehicle_status(self, status):
-        """Check if the vehicle status response is generic."""
+        """Check if the vehicle status response is generic.
+
+        A response is considered generic (placeholder/incomplete) when:
+        - All three of fuelRange, fuelRangeElec, and mileage are zero, OR
+        - Temperature fields return the sentinel value (-40)
+
+        Previously this method had an operator precedence bug where
+        `or mileage <= 0` was evaluated independently of the `and` chain,
+        causing any response with mileage=0 (legitimate during charging) to
+        be incorrectly flagged as generic. Fixed by wrapping the all-zero
+        condition in explicit parentheses.
+        """
         try:
-            if (
-                hasattr(status, "basicVehicleStatus")
-                and status.basicVehicleStatus.fuelRange
-                == GENERIC_RESPONSE_STATUS_THRESHOLD
-                and status.basicVehicleStatus.fuelRangeElec
-                == GENERIC_RESPONSE_STATUS_THRESHOLD
-                and status.basicVehicleStatus.mileage
-                == GENERIC_RESPONSE_STATUS_THRESHOLD
-                or status.basicVehicleStatus.mileage
-                <= GENERIC_RESPONSE_STATUS_THRESHOLD
-                or status.basicVehicleStatus.interiorTemperature
-                == GENERIC_RESPONSE_TEMPERATURE
-                or status.basicVehicleStatus.exteriorTemperature
-                == GENERIC_RESPONSE_TEMPERATURE
-                # or status.basicVehicleStatus.exteriorTemperature
-                # == GENERIC_RESPONSE_EXTREME_TEMPERATURE
-            ):
+            if not hasattr(status, "basicVehicleStatus"):
+                return False
+            basic = status.basicVehicleStatus
+            # All three placeholder fields are zero — classic deep-sleep response
+            all_zero = (
+                basic.fuelRange == GENERIC_RESPONSE_STATUS_THRESHOLD
+                and basic.fuelRangeElec == GENERIC_RESPONSE_STATUS_THRESHOLD
+                and basic.mileage == GENERIC_RESPONSE_STATUS_THRESHOLD
+            )
+            # Temperature sentinel values
+            bad_temp = (
+                basic.interiorTemperature == GENERIC_RESPONSE_TEMPERATURE
+                or basic.exteriorTemperature == GENERIC_RESPONSE_TEMPERATURE
+            )
+            if all_zero or bad_temp:
                 LOGGER.debug(
-                    "Generic Vehicle Status Data: %s", status.basicVehicleStatus
+                    "Generic Vehicle Status Data: %s", basic
                 )
                 return True
             return False
