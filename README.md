@@ -1,9 +1,13 @@
-[![hacs_badge](https://img.shields.io/badge/HACS-Default-green.svg)](https://github.com/hacs/default)
+[![GitHub license](https://img.shields.io/github/license/ad-ha/mg-saic-ha)](https://github.com/ad-ha/mg-saic-ha/blob/main/LICENSE)
 ![GitHub Release (latest SemVer including pre-releases)](https://img.shields.io/github/v/release/ad-ha/mg-saic-ha?include_prereleases)
 ![GitHub Downloads (all assets, latest release)](https://img.shields.io/github/downloads/ad-ha/mg-saic-ha/latest/total)
+[![GitHub stars](https://img.shields.io/github/stars/ad-ha/mg-saic-ha?style=flat)](https://github.com/ad-ha/mg-saic-ha/stargazers)
 
+[![hacs_badge](https://img.shields.io/badge/HACS-Default-green.svg)](https://github.com/hacs/default)
 [![HACS Action](https://github.com/ad-ha/mg-saic-ha/actions/workflows/validate.yaml/badge.svg)](https://github.com/ad-ha/mg-saic-ha/actions/workflows/validate.yaml)
 [![Hassfest](https://github.com/ad-ha/mg-saic-ha/actions/workflows/hassfest.yaml/badge.svg)](https://github.com/ad-ha/mg-saic-ha/actions/workflows/hassfest.yaml)
+[![Integration Usage](https://img.shields.io/badge/dynamic/json?color=41BDF5&logo=home-assistant&label=integration%20usage&suffix=%20installs&cacheSeconds=15600&url=https://analytics.home-assistant.io/custom_integrations.json&query=$.mg_saic.total)](https://analytics.home-assistant.io/)
+
 
 ![image](https://brands.home-assistant.io/brands/_/mg_saic/logo.png)
 
@@ -17,6 +21,7 @@
 - **Using this integration causes the MG/SAIC mobile app to shut down if the same account is used, as per API requirements.**
 - **To avoid issues, make sure to setup a Secondary Account on iSmart App.**
 
+
 ## INSTALLATION
 
 ### HACS (Home Assistant Community Store)
@@ -28,11 +33,17 @@
 
 ### Manual Installation
 
-1. Download the latest release from the [MG SAIC Custom Integration GitHub repository](#).
+1. Download the latest release from the [MG SAIC Custom Integration GitHub repository](https://github.com/ad-ha/mg-saic-ha/releases).
 2. Unzip the release and copy the `mg_saic` directory to `custom_components` in your Home Assistant configuration directory.
 3. Restart Home Assistant.
 
 ## CONFIGURATION
+
+Click here:
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=ad-ha&repository=mg-saic-ha&category=integration)
+
+Or alternativly:
 
 [<img src="https://github.com/user-attachments/assets/36459daa-a780-448a-82a5-19ee07ccd3f6">](https://my.home-assistant.io/redirect/config_flow_start?domain=mg_saic)
 
@@ -42,6 +53,7 @@
 3. Search for "MG SAIC" and follow the instructions to set up the integration.
 4. Select your type of account (email or phone), enter the details and select your region (EU, China, Australia, Rest of World)
 5. Once connected to the API, a list of available VINs associated with your account will be shown. Select the vehicle that you want to integrate and finish the process.
+
 
 You may add additional vehicles by following the same steps as above.
 
@@ -128,7 +140,7 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - Set Target SOC
 - Set Charging Current Limit
 - Open Tailgate
-- Tigger Find My Car Alarm
+- Trigger Find My Car Alarm
 - Start Charging (sometimes this service fails)
 - Stop Charging
 - Defrost Rear Window
@@ -158,7 +170,7 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - Individual Heated Seats
 
 ### BUTTONS
-- Tigger Alarm
+- Trigger Alarm
 - Update Vehicle Data
 
 ### LOCK
@@ -180,6 +192,12 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 
 **Note: Actions (Services) can be accessed and activated from the Actions menu under Developer Tools.**
 ![image](https://github.com/user-attachments/assets/14be0d41-ae65-4738-8bc0-5b0f743c290f)
+
+## 💡 Troubleshooting & FAQ
+
+* **"Invalid Credentials" or Connection Timeouts:** Ensure you are choosing the correct region (EU, China, Australia, Rest of World) matching your mobile app setup.
+* **Entities showing as 'Unavailable':** The integration respects API rate limits to prevent account lockouts. If an entity is temporarily unavailable, wait for the next scheduled update or use the `button.update_vehicle_data` entity to force a refresh.
+* **My App keeps logging me out:** As noted above, ensure your Home Assistant integration uses a **Secondary Account** credentials, not your primary mobile application credentials.
 
 
 ## Contributing
