@@ -604,6 +604,11 @@ class SAICMGMileageSensor(CoordinatorEntity, SensorEntity):
         self._device_info = create_device_info(coordinator, entry.entry_id)
         self._vehicle_type = coordinator.vehicle_type
 
+        # Retain last valid mileage so the sensor never drops to Unknown or 0
+        # when the API is unavailable or returns an invalid response. Mileage is
+        # monotonically increasing — it should never go backwards or to zero.
+        self._last_valid_mileage: float | None = None
+
     @property
     def unique_id(self):
         return self._unique_id
@@ -615,9 +620,15 @@ class SAICMGMileageSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def available(self):
-        """Return True if the entity is available."""
-        # This sensor depends on both 'status' and 'charging' data
-        # Since ICE vehicles only have 'status' data, check vehicle type
+        """Return True if the entity is available.
+
+        The sensor remains available as long as we have a last known value,
+        even if the current API poll failed — this prevents utility meters and
+        other helpers that depend on this sensor from resetting to 0.
+        """
+        if self._last_valid_mileage is not None:
+            return True
+        # No retained value yet — fall back to standard availability check
         if self._vehicle_type == "ICE":
             return (
                 self.coordinator.last_update_success
@@ -660,7 +671,27 @@ class SAICMGMileageSensor(CoordinatorEntity, SensorEntity):
                     else:
                         mileage = mileage * self._factor
 
-        return mileage
+        if mileage is not None:
+            # Only update retained value if the new reading is >= the last known
+            # value — prevents a bad API response from moving mileage backwards.
+            if (
+                self._last_valid_mileage is None
+                or mileage >= self._last_valid_mileage
+            ):
+                self._last_valid_mileage = mileage
+            return self._last_valid_mileage
+
+        # API gave nothing valid — return last known value to hold steady
+        if self._last_valid_mileage is not None:
+            LOGGER.debug(
+                "Mileage sensor %s: API returned no valid data, "
+                "retaining last known value %.1f",
+                self._name,
+                self._last_valid_mileage,
+            )
+            return self._last_valid_mileage
+
+        return None
 
     @property
     def device_info(self):
@@ -930,6 +961,11 @@ class SAICMGElectricRangeSensor(CoordinatorEntity, SensorEntity):
 
         self._device_info = create_device_info(coordinator, entry.entry_id)
 
+        # Retain last valid range so the sensor does not drop to Unknown when
+        # the API is temporarily unavailable. A range of 0 from the API is
+        # treated as invalid (the car is not actually dead) and ignored.
+        self._last_valid_range: float | None = None
+
     @property
     def unique_id(self):
         return self._unique_id
@@ -942,7 +978,8 @@ class SAICMGElectricRangeSensor(CoordinatorEntity, SensorEntity):
     @property
     def available(self):
         """Return True if the entity is available."""
-        # This sensor depends on 'charging' and may fall back to 'status' data
+        if self._last_valid_range is not None:
+            return True
         return self.coordinator.last_update_success and (
             self.coordinator.data.get("charging") is not None
             or self.coordinator.data.get("status") is not None
@@ -974,7 +1011,21 @@ class SAICMGElectricRangeSensor(CoordinatorEntity, SensorEntity):
                     if raw_value not in (None, 0):
                         electric_range = raw_value * self._factor
 
-        return electric_range
+        if electric_range is not None:
+            self._last_valid_range = electric_range
+            return electric_range
+
+        # API gave nothing valid — return last known value to hold steady
+        if self._last_valid_range is not None:
+            LOGGER.debug(
+                "Electric range sensor %s: API returned no valid data, "
+                "retaining last known value %.1f",
+                self._name,
+                self._last_valid_range,
+            )
+            return self._last_valid_range
+
+        return None
 
     @property
     def device_info(self):
@@ -1111,6 +1162,11 @@ class SAICMGSOCSensor(CoordinatorEntity, SensorEntity):
 
         self._device_info = create_device_info(coordinator, entry.entry_id)
 
+        # Retain last valid SOC so the sensor does not drop to Unknown when the
+        # API is temporarily unavailable. SOC of 0 from the basic status field
+        # is treated as invalid and ignored (same as -1 sentinel).
+        self._last_valid_soc: float | None = None
+
     @property
     def unique_id(self):
         return self._unique_id
@@ -1123,6 +1179,8 @@ class SAICMGSOCSensor(CoordinatorEntity, SensorEntity):
     @property
     def available(self):
         """Return True if the entity is available."""
+        if self._last_valid_soc is not None:
+            return True
         required_data = self.coordinator.data.get(self._data_type)
         return self.coordinator.last_update_success and required_data is not None
 
@@ -1149,9 +1207,20 @@ class SAICMGSOCSensor(CoordinatorEntity, SensorEntity):
                         soc = None
 
         if soc is not None:
+            self._last_valid_soc = soc
             return soc
-        else:
-            return None
+
+        # API gave nothing valid — return last known value to hold steady
+        if self._last_valid_soc is not None:
+            LOGGER.debug(
+                "SOC sensor %s: API returned no valid data, "
+                "retaining last known value %.1f",
+                self._name,
+                self._last_valid_soc,
+            )
+            return self._last_valid_soc
+
+        return None
 
     @property
     def device_info(self):
