@@ -6,7 +6,7 @@ from contextlib import suppress
 from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util.dt import utcnow
-from .api import SAICMGAPIClient
+from .api import SAICMGAPIClient, CommandsLimitReachedException
 from .logic import select_update_interval
 
 # ── Message-driven update constants ─────────────────────────────────────────
@@ -1104,6 +1104,32 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                 refresh_reason,
             )
             await self.async_request_refresh()
+
+    async def notify_command_limit_reached(self, vin: str) -> None:
+        """Fire a persistent notification when the remote command limit is reached.
+
+        The SAIC API returns return code 8 when the vehicle has received too many
+        remote commands without a physical key start to reset the counter. This
+        notification surfaces that clearly in the HA UI rather than silently
+        failing or only logging to the error log.
+        """
+        await self.hass.services.async_call(
+            "persistent_notification",
+            "create",
+            {
+                "title": "MG SAIC: Remote Command Limit Reached",
+                "message": (
+                    f"The vehicle (VIN: {vin}) has reached the maximum number of "
+                    "remote commands allowed without a physical key start.\n\n"
+                    "**To reset:** Start the vehicle with the physical key, then "
+                    "remote commands will work again."
+                ),
+                "notification_id": f"mg_saic_command_limit_{vin}",
+            },
+        )
+        LOGGER.warning(
+            "Persistent notification fired: remote command limit reached for VIN %s", vin
+        )
 
     async def async_shutdown(self):
         """Release coordinator resources when the entry is unloaded."""
