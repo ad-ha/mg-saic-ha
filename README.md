@@ -8,8 +8,7 @@
 [![Hassfest](https://github.com/ad-ha/mg-saic-ha/actions/workflows/hassfest.yaml/badge.svg)](https://github.com/ad-ha/mg-saic-ha/actions/workflows/hassfest.yaml)
 [![Integration Usage](https://img.shields.io/badge/dynamic/json?color=41BDF5&logo=home-assistant&label=integration%20usage&suffix=%20installs&cacheSeconds=15600&url=https://analytics.home-assistant.io/custom_integrations.json&query=$.mg_saic.total)](https://analytics.home-assistant.io/)
 
-
-![image](https://brands.home-assistant.io/brands/_/mg_saic/logo.png)
+![Logo](brand/icon.png)
 
 
 </br></br>
@@ -39,14 +38,15 @@
 
 ## CONFIGURATION
 
-Click here:
+To add the integration to your local Home Assistant, click here:
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=ad-ha&repository=mg-saic-ha&category=integration)
 
-Or alternativly:
+Install the integration, restart Home Assistant and then add the integration, either:
 
 [<img src="https://github.com/user-attachments/assets/36459daa-a780-448a-82a5-19ee07ccd3f6">](https://my.home-assistant.io/redirect/config_flow_start?domain=mg_saic)
 
+Or manually by:
 
 1. Go to Configuration -> Integrations.
 2. Click on the "+ Add Integration" button.
