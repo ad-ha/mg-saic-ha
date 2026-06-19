@@ -1461,6 +1461,7 @@ class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
 
                 elif self._field == "bmsPTCHeatResp":
                     # Map bmsPTCHeatResp values to status strings
+                    raw_value = getattr(charging_data, self._field, None)
                     return {
                         0: "Off",
                         1: "On",
