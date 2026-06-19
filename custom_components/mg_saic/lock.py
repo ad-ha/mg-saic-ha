@@ -2,6 +2,7 @@
 
 from homeassistant.components.lock import LockEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from .api import CommandsLimitReachedException
 from .const import (
     DOMAIN,
     LOGGER,
@@ -70,7 +71,6 @@ class SAICMGLockEntity(CoordinatorEntity, LockEntity):
     async def async_lock(self, **kwargs):
         """Lock the vehicle."""
         try:
-            # Fetch intervals from coordinator (which reflects the options set in config)
             immediate_interval = self.coordinator.after_action_delay
             long_interval = self.coordinator.lock_unlock_long_interval
 
@@ -81,13 +81,14 @@ class SAICMGLockEntity(CoordinatorEntity, LockEntity):
                 immediate_interval,
                 long_interval,
             )
+        except CommandsLimitReachedException:
+            await self.coordinator.notify_command_limit_reached(self._vin)
         except Exception as e:
             LOGGER.error("Error locking vehicle for VIN %s: %s", self._vin, e)
 
     async def async_unlock(self, **kwargs):
         """Unlock the vehicle."""
         try:
-            # Fetch intervals from coordinator (which reflects the options set in config)
             immediate_interval = self.coordinator.after_action_delay
             long_interval = self.coordinator.lock_unlock_long_interval
 
@@ -98,6 +99,8 @@ class SAICMGLockEntity(CoordinatorEntity, LockEntity):
                 immediate_interval,
                 long_interval,
             )
+        except CommandsLimitReachedException:
+            await self.coordinator.notify_command_limit_reached(self._vin)
         except Exception as e:
             LOGGER.error("Error unlocking vehicle for VIN %s: %s", self._vin, e)
 
@@ -158,5 +161,7 @@ class SAICMGBootLockEntity(CoordinatorEntity, LockEntity):
                 immediate_interval,
                 long_interval,
             )
+        except CommandsLimitReachedException:
+            await self.coordinator.notify_command_limit_reached(self._vin)
         except Exception as e:
             LOGGER.error("Error opening boot for VIN %s: %s", self._vin, e)
