@@ -15,6 +15,7 @@ from homeassistant.const import (
     ATTR_TEMPERATURE,
 )
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from .api import CommandsLimitReachedException
 from .const import (
     DOMAIN,
     LOGGER,
@@ -177,6 +178,8 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
                 long_interval,
             )
 
+        except CommandsLimitReachedException:
+            await self.coordinator.notify_command_limit_reached(self._vin)
         except Exception as e:
             LOGGER.error("Error setting HVAC mode for VIN %s: %s", self._vin, e)
 
