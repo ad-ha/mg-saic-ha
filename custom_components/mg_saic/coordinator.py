@@ -65,6 +65,8 @@ from .const import (
     LOGGER,
     RETRY_BACKOFF_FACTOR,
     RETRY_LIMIT,
+    STATUS_TIMESTAMP_FUTURE_TOLERANCE,
+    STATUS_TIMESTAMP_MAX_AGE,
     UPDATE_INTERVAL,
     UPDATE_INTERVAL_AFTER_SHUTDOWN,
     UPDATE_INTERVAL_CHARGING,
@@ -94,7 +96,6 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         self.is_charging = False
         self.is_powered_on = False
         self.is_initial_setup = False
-        self.in_grace_period = False
         self.after_shutdown_active = False
 
         # Activity Tracking
@@ -546,6 +547,14 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                 self._is_generic_response_vehicle_status,
                 "vehicle status",
             )
+            if data["status"] is not None and not self._is_status_timestamp_valid(
+                data["status"]
+            ):
+                # Timestamp failed the sanity check — discard the response.
+                # Downstream sensors already retain their last known valid
+                # values, so this degrades gracefully rather than showing
+                # stale/wrong data as if it were current.
+                data["status"] = None
         except Exception as e:
             # During first setup, a vehicle status failure must not prevent
             # the integration from loading.
@@ -1266,6 +1275,59 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         except Exception as e:
             LOGGER.error("Error. Generic Vehicle Status Data: %s", e)
             raise
+
+    def _is_status_timestamp_valid(self, status) -> bool:
+        """Sanity-check the statusTime field on a vehicle status response.
+
+        The SAIC API occasionally returns a response with a bogus or stale
+        statusTime — for example far in the past (a cached/stuck response)
+        or in the future (clock skew on the backend). Trusting such a
+        response could confuse the activity-detection and interval-adjustment
+        logic, which relies on knowing how fresh the data actually is.
+
+        Returns True if the timestamp looks sane (or is absent, since not
+        all responses are guaranteed to include it), False if it should be
+        treated as untrustworthy.
+        """
+        status_time = getattr(status, "statusTime", None)
+        if status_time is None:
+            # Field not present on this response — nothing to validate against,
+            # don't reject the response just because it's missing.
+            return True
+
+        try:
+            status_dt = datetime.fromtimestamp(status_time, tz=timezone.utc)
+        except (ValueError, OSError, OverflowError) as e:
+            LOGGER.warning(
+                "Vehicle status statusTime %s could not be parsed: %s — "
+                "treating response as untrustworthy.",
+                status_time,
+                e,
+            )
+            return False
+
+        now = datetime.now(timezone.utc)
+
+        if status_dt > now + STATUS_TIMESTAMP_FUTURE_TOLERANCE:
+            LOGGER.warning(
+                "Vehicle status statusTime %s is %s in the future — "
+                "treating response as untrustworthy.",
+                status_dt,
+                status_dt - now,
+            )
+            return False
+
+        if status_dt < now - STATUS_TIMESTAMP_MAX_AGE:
+            LOGGER.warning(
+                "Vehicle status statusTime %s is %s old (older than the "
+                "%s sanity limit) — treating response as untrustworthy.",
+                status_dt,
+                now - status_dt,
+                STATUS_TIMESTAMP_MAX_AGE,
+            )
+            return False
+
+        return True
 
     def _is_generic_response_charging(self, charging_info):
         """Check if the charging response is generic."""
