@@ -103,6 +103,50 @@ DATA_100_DECIMAL_CORRECTION = 0.01
 CHARGING_CURRENT_FACTOR = 0.05
 CHARGING_VOLTAGE_FACTOR = 0.25
 
+# Per-vehicle-series profiles.
+#
+# The SAIC API exposes some values (notably AC temperature index scale and
+# totalBatteryCapacity) inconsistently or unreliably across models, so these
+# are tracked here per series rather than trusted from the API response.
+# Series codes come from VinInfo.series (e.g. "EH32SP3", "MIS3E S") and are
+# matched as a substring, consistent with the existing detection pattern.
+#
+# Fields:
+#   min_temp / max_temp / temp_offset: AC temperature index mapping. See
+#       MGSAICDataUpdateCoordinator.get_ac_temperature_idx for usage.
+#   battery_capacity_kwh: known-good usable battery capacity in kWh, used to
+#       override the API's totalBatteryCapacity field when it is known to be
+#       inaccurate. None means "trust the API value" (no override).
+#
+# Sources: EH32 (MG4 Electric) values were already present in this codebase
+# prior to this table's introduction. MIS3E (MGS6 EV) values confirmed
+# against MG UK's official spec sheet and cross-referenced with EV Database,
+# electrive.com, and Carwow (77 kWh gross / 74.3 kWh usable, same across
+# single-motor Long Range and Dual Motor variants).
+VEHICLE_PROFILES = {
+    "EH32": {  # MG4 Electric
+        "min_temp": 17,
+        "max_temp": 33,
+        "temp_offset": 3,
+        "battery_capacity_kwh": None,
+    },
+    "MIS3E": {  # MGS6 EV (Long Range and Dual Motor)
+        "min_temp": 16,
+        "max_temp": 28,
+        "temp_offset": 2,
+        "battery_capacity_kwh": 74.3,
+    },
+}
+
+# Fallback profile used when the vehicle's series does not match any entry
+# in VEHICLE_PROFILES above (e.g. MG5, ZS EV, or any model not yet profiled).
+DEFAULT_VEHICLE_PROFILE = {
+    "min_temp": 16,
+    "max_temp": 28,
+    "temp_offset": 2,
+    "battery_capacity_kwh": None,
+}
+
 # Base update intervals
 UPDATE_INTERVAL = timedelta(minutes=60)
 UPDATE_INTERVAL_CHARGING = timedelta(minutes=10)
