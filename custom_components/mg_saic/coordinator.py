@@ -57,6 +57,7 @@ from .const import (
     DEFAULT_SUNROOF_LONG_INTERVAL,
     DEFAULT_TAILGATE_LONG_INTERVAL,
     DEFAULT_TARGET_SOC_LONG_INTERVAL,
+    DEFAULT_VEHICLE_PROFILE,
     DOMAIN,
     GENERIC_RESPONSE_SOC_THRESHOLD,
     GENERIC_RESPONSE_STATUS_THRESHOLD,
@@ -69,6 +70,7 @@ from .const import (
     UPDATE_INTERVAL_CHARGING,
     UPDATE_INTERVAL_GRACE_PERIOD,
     UPDATE_INTERVAL_POWERED,
+    VEHICLE_PROFILES,
 )
 
 
@@ -122,6 +124,7 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         self.min_temp = 16  # Default fallback
         self.max_temp = 28  # Default fallback
         self.temp_offset = 2  # Default fallback
+        self.known_battery_capacity_kwh = None  # Set once series is detected
 
         # Initialize update intervals from config_entry options, falling back to defaults if not set
         options = config_entry.options
@@ -430,21 +433,39 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             # Get vehicle series from API response
             self.vehicle_series = getattr(vin_info, "series", "").upper()
 
-            # Set temperature range based on vehicle series
-            if "EH32" in self.vehicle_series:
-                self.min_temp = 17
-                self.max_temp = 33
-                self.temp_offset = 3
-            else:  # For other models like MG5, ZS EV, etc.
-                self.min_temp = 16
-                self.max_temp = 28
-                self.temp_offset = 2
+            # Look up the per-model profile (temperature range/offset and
+            # known battery capacity) by matching the series against
+            # VEHICLE_PROFILES. Falls back to DEFAULT_VEHICLE_PROFILE for
+            # any series not yet profiled (e.g. MG5, ZS EV).
+            profile = DEFAULT_VEHICLE_PROFILE
+            matched_series_key = None
+            for series_key, series_profile in VEHICLE_PROFILES.items():
+                if series_key in self.vehicle_series:
+                    profile = series_profile
+                    matched_series_key = series_key
+                    break
+
+            self.min_temp = profile["min_temp"]
+            self.max_temp = profile["max_temp"]
+            self.temp_offset = profile["temp_offset"]
+            self.known_battery_capacity_kwh = profile["battery_capacity_kwh"]
 
             LOGGER.debug(
-                f"Vehicle series detected: {self.vehicle_series}. "
-                f"Temperature range: {self.min_temp}-{self.max_temp}°C, "
-                f"Offset: {self.temp_offset}"
+                "Vehicle series detected: %s (profile: %s). "
+                "Temperature range: %d-%d°C, Offset: %d",
+                self.vehicle_series,
+                matched_series_key or "default/unprofiled",
+                self.min_temp,
+                self.max_temp,
+                self.temp_offset,
             )
+            if self.known_battery_capacity_kwh is not None:
+                LOGGER.debug(
+                    "Known battery capacity override for series %s: %.1f kWh "
+                    "(overrides unreliable API-reported value)",
+                    self.vehicle_series,
+                    self.known_battery_capacity_kwh,
+                )
         else:
             LOGGER.error(f"No 'info' data found for VIN: {vin}")
             raise UpdateFailed("No 'info' data found for VIN.")
