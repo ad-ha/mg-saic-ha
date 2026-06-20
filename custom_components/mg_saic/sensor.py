@@ -1467,6 +1467,18 @@ class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
     @property
     def native_value(self):
         """Return the state of the sensor."""
+        # Total Battery Capacity: the API's totalBatteryCapacity field is
+        # known to be unreliable across the model range. Prefer the
+        # coordinator's known-good value (set via series detection) when
+        # available, falling back to the raw API value for unconfirmed
+        # series so the sensor still works for unsupported models.
+        if self._field == "totalBatteryCapacity":
+            known_capacity = getattr(
+                self.coordinator, "known_battery_capacity_kwh", None
+            )
+            if known_capacity is not None:
+                return known_capacity
+
         try:
             charging_data = getattr(
                 self.coordinator.data.get("charging"), self._data_source, None
