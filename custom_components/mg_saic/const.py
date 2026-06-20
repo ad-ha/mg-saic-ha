@@ -185,6 +185,12 @@ GENERIC_RESPONSE_STATUS_THRESHOLD = 0
 GENERIC_RESPONSE_TEMPERATURE = -40
 GENERIC_RESPONSE_EXTREME_TEMPERATURE = -128
 
+# Sanity bounds for the API's statusTime field. A response whose timestamp
+# falls outside these bounds relative to "now" is treated as untrustworthy
+# and discarded (see SAICMGDataUpdateCoordinator._is_status_timestamp_valid).
+STATUS_TIMESTAMP_FUTURE_TOLERANCE = timedelta(minutes=5)
+STATUS_TIMESTAMP_MAX_AGE = timedelta(hours=24)
+
 # Retry configuration
 RETRY_LIMIT = 5
 RETRY_BACKOFF_FACTOR = 15
