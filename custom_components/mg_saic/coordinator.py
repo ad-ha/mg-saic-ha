@@ -127,6 +127,13 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         self.temp_offset = 2  # Default fallback
         self.known_battery_capacity_kwh = None  # Set once series is detected
 
+        # Reference to the command-error Event entity (event.py), set once it
+        # registers itself via register_command_error_event_entity. May be
+        # None if the entity hasn't loaded yet or was removed — callers must
+        # tolerate that, since the event entity is purely supplementary to
+        # the persistent notification path and must never block commands.
+        self._command_error_event_entity = None
+
         # Initialize update intervals from config_entry options, falling back to defaults if not set
         options = config_entry.options
 
@@ -1135,13 +1142,36 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             )
             await self.async_request_refresh()
 
-    async def notify_command_limit_reached(self, vin: str) -> None:
+    def register_command_error_event_entity(self, entity) -> None:
+        """Register (or deregister, with entity=None) the command-error Event
+        entity so the coordinator can fire events through it.
+
+        Called by SAICMGCommandErrorEvent.async_added_to_hass /
+        async_will_remove_from_hass — entities never need to call this
+        directly.
+        """
+        self._command_error_event_entity = entity
+
+    async def notify_command_limit_reached(
+        self, vin: str, source: str | None = None
+    ) -> None:
         """Fire a persistent notification when the remote command limit is reached.
 
         The SAIC API returns return code 8 when the vehicle has received too many
         remote commands without a physical key start to reset the counter. This
         notification surfaces that clearly in the HA UI rather than silently
         failing or only logging to the error log.
+
+        Also fires a command_limit_reached event via the command-error Event
+        entity (if registered), giving a queryable Logbook history of every
+        time this has happened, alongside the actionable notification.
+
+        Args:
+            vin: the vehicle's VIN.
+            source: optional short identifier of which command triggered the
+                limit (e.g. "climate.set_hvac_mode"), included in the event
+                data for diagnostics. Existing callers that don't pass this
+                still work — it simply falls back to a generic label.
         """
         await self.hass.services.async_call(
             "persistent_notification",
@@ -1160,6 +1190,39 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         LOGGER.warning(
             "Persistent notification fired: remote command limit reached for VIN %s", vin
         )
+
+        if self._command_error_event_entity is not None:
+            self._command_error_event_entity.record_command_limit_reached(
+                source or "unknown command"
+            )
+
+    def record_command_error(self, source: str, error: Exception | str) -> None:
+        """Record a generic command failure via the command-error Event entity.
+
+        This is a lightweight, fire-and-forget complement to the existing
+        LOGGER.error calls already present in every entity's except block —
+        it does not replace logging, it adds a queryable Logbook entry so
+        users without debug logging enabled can see command failures too.
+
+        Safe to call even if the event entity hasn't loaded yet (no-op in
+        that case) — never raises, so it can't break the calling command's
+        own error handling.
+
+        Args:
+            source: short identifier of what failed, e.g.
+                "climate.set_hvac_mode" or "switch.sunroof.turn_on".
+            error: the exception or error message that occurred.
+        """
+        if self._command_error_event_entity is None:
+            return
+        try:
+            self._command_error_event_entity.record_command_error(
+                source, str(error)
+            )
+        except Exception as e:
+            # The event entity is supplementary — never let a failure here
+            # mask the original error or break the calling command.
+            LOGGER.debug("Could not record command error event: %s", e)
 
     async def async_shutdown(self):
         """Release coordinator resources when the entry is unloaded."""
