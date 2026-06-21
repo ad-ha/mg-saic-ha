@@ -85,6 +85,7 @@ class SAICMGLockEntity(CoordinatorEntity, LockEntity):
             await self.coordinator.notify_command_limit_reached(self._vin)
         except Exception as e:
             LOGGER.error("Error locking vehicle for VIN %s: %s", self._vin, e)
+            self.coordinator.record_command_error("Error locking vehicle", e)
 
     async def async_unlock(self, **kwargs):
         """Unlock the vehicle."""
@@ -103,6 +104,7 @@ class SAICMGLockEntity(CoordinatorEntity, LockEntity):
             await self.coordinator.notify_command_limit_reached(self._vin)
         except Exception as e:
             LOGGER.error("Error unlocking vehicle for VIN %s: %s", self._vin, e)
+            self.coordinator.record_command_error("Error unlocking vehicle", e)
 
 
 class SAICMGBootLockEntity(CoordinatorEntity, LockEntity):
@@ -165,3 +167,4 @@ class SAICMGBootLockEntity(CoordinatorEntity, LockEntity):
             await self.coordinator.notify_command_limit_reached(self._vin)
         except Exception as e:
             LOGGER.error("Error opening boot for VIN %s: %s", self._vin, e)
+            self.coordinator.record_command_error("Error opening boot", e)
