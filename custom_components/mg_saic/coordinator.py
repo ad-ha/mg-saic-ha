@@ -1173,14 +1173,26 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                 data for diagnostics. Existing callers that don't pass this
                 still work — it simply falls back to a generic label.
         """
+        # Include the vehicle's brand/model name alongside the VIN so the
+        # notification is identifiable at a glance in multi-vehicle setups,
+        # not just by VIN. Falls back gracefully if vin_info isn't available
+        # for any reason (e.g. very early in setup).
+        vin_info = getattr(self, "vin_info", None)
+        if vin_info is not None:
+            vehicle_label = (
+                f"{vin_info.brandName} {vin_info.modelName} (VIN: {vin})"
+            )
+        else:
+            vehicle_label = f"VIN: {vin}"
+
         await self.hass.services.async_call(
             "persistent_notification",
             "create",
             {
                 "title": "MG SAIC: Remote Command Limit Reached",
                 "message": (
-                    f"The vehicle (VIN: {vin}) has reached the maximum number of "
-                    "remote commands allowed without a physical key start.\n\n"
+                    f"The vehicle {vehicle_label} has reached the maximum number "
+                    "of remote commands allowed without a physical key start.\n\n"
                     "**To reset:** Start the vehicle with the physical key, then "
                     "remote commands will work again."
                 ),
@@ -1188,7 +1200,8 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             },
         )
         LOGGER.warning(
-            "Persistent notification fired: remote command limit reached for VIN %s", vin
+            "Persistent notification fired: remote command limit reached for %s",
+            vehicle_label,
         )
 
         if self._command_error_event_entity is not None:
