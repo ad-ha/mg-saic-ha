@@ -182,6 +182,7 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
             await self.coordinator.notify_command_limit_reached(self._vin)
         except Exception as e:
             LOGGER.error("Error setting HVAC mode for VIN %s: %s", self._vin, e)
+            self.coordinator.record_command_error("Error setting HVAC mode", e)
 
     async def async_turn_on(self):
         """Turn the climate entity on."""
