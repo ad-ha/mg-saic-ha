@@ -207,6 +207,7 @@ PLATFORMS = [
     "button",
     "climate",
     "device_tracker",
+    "event",
     "lock",
     "number",
     "select",
