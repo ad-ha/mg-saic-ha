@@ -185,6 +185,7 @@ class SAICMGBatteryHeatingSwitch(CoordinatorEntity, SwitchEntity):
             await self.coordinator.notify_command_limit_reached(self._vin)
         except Exception as e:
             LOGGER.error("Error starting battery heating for VIN %s: %s", self._vin, e)
+            self.coordinator.record_command_error("Error starting battery heating", e)
 
     async def async_turn_off(self, **kwargs):
         """Stop battery heating."""
@@ -196,6 +197,7 @@ class SAICMGBatteryHeatingSwitch(CoordinatorEntity, SwitchEntity):
             await self.coordinator.notify_command_limit_reached(self._vin)
         except Exception as e:
             LOGGER.error("Error stopping battery heating for VIN %s: %s", self._vin, e)
+            self.coordinator.record_command_error("Error stopping battery heating", e)
 
 
 class SAICMGChargingPortLockSwitch(CoordinatorEntity, SwitchEntity):
@@ -247,6 +249,7 @@ class SAICMGChargingPortLockSwitch(CoordinatorEntity, SwitchEntity):
             await self.coordinator.notify_command_limit_reached(self._vin)
         except Exception as e:
             LOGGER.error("Error locking charging port for VIN %s: %s", self._vin, e)
+            self.coordinator.record_command_error("Error locking charging port", e)
 
     async def async_turn_off(self, **kwargs):
         """Unlock the charging port."""
@@ -258,6 +261,7 @@ class SAICMGChargingPortLockSwitch(CoordinatorEntity, SwitchEntity):
             await self.coordinator.notify_command_limit_reached(self._vin)
         except Exception as e:
             LOGGER.error("Error unlocking charging port for VIN %s: %s", self._vin, e)
+            self.coordinator.record_command_error("Error unlocking charging port", e)
 
 
 class SAICMGChargingSwitch(CoordinatorEntity, SwitchEntity):
@@ -315,6 +319,7 @@ class SAICMGChargingSwitch(CoordinatorEntity, SwitchEntity):
             await self.coordinator.notify_command_limit_reached(self._vin)
         except Exception as e:
             LOGGER.error("Error starting charging for VIN %s: %s", self._vin, e)
+            self.coordinator.record_command_error("Error starting charging", e)
 
     async def async_turn_off(self, **kwargs):
         """Stop charging."""
@@ -326,6 +331,7 @@ class SAICMGChargingSwitch(CoordinatorEntity, SwitchEntity):
             await self.coordinator.notify_command_limit_reached(self._vin)
         except Exception as e:
             LOGGER.error("Error stopping charging for VIN %s: %s", self._vin, e)
+            self.coordinator.record_command_error("Error stopping charging", e)
 
 
 class SAICMGFrontDefrostSwitch(CoordinatorEntity, SwitchEntity):
@@ -377,6 +383,7 @@ class SAICMGFrontDefrostSwitch(CoordinatorEntity, SwitchEntity):
             await self.coordinator.notify_command_limit_reached(self._vin)
         except Exception as e:
             LOGGER.error("Error starting front defrost for VIN %s: %s", self._vin, e)
+            self.coordinator.record_command_error("Error starting front defrost", e)
 
     async def async_turn_off(self, **kwargs):
         """Stop front defrost by stopping the AC."""
@@ -388,6 +395,7 @@ class SAICMGFrontDefrostSwitch(CoordinatorEntity, SwitchEntity):
             await self.coordinator.notify_command_limit_reached(self._vin)
         except Exception as e:
             LOGGER.error("Error stopping front defrost for VIN %s: %s", self._vin, e)
+            self.coordinator.record_command_error("Error stopping front defrost", e)
 
 
 class SAICMGHeatedSeatsSwitch(SAICMGVehicleSwitch):
@@ -485,6 +493,7 @@ class SAICMGHeatedSeatsSwitch(SAICMGVehicleSwitch):
                 self._vin,
                 e,
             )
+            self.coordinator.record_command_error("Error turning on heated seat", e)
 
     async def async_turn_off(self, **kwargs):
         """Turn the heated seat off."""
@@ -520,6 +529,7 @@ class SAICMGHeatedSeatsSwitch(SAICMGVehicleSwitch):
                 self._vin,
                 e,
             )
+            self.coordinator.record_command_error("Error turning off heated seat", e)
 
 
 class SAICMGRearWindowDefrostSwitch(CoordinatorEntity, SwitchEntity):
@@ -573,6 +583,9 @@ class SAICMGRearWindowDefrostSwitch(CoordinatorEntity, SwitchEntity):
             LOGGER.error(
                 "Error turning on rear window defrost for VIN %s: %s", self._vin, e
             )
+            self.coordinator.record_command_error(
+                "Error turning on rear window defrost", e
+            )
 
     async def async_turn_off(self, **kwargs):
         """Turn the rear window defrost off."""
@@ -585,6 +598,9 @@ class SAICMGRearWindowDefrostSwitch(CoordinatorEntity, SwitchEntity):
         except Exception as e:
             LOGGER.error(
                 "Error turning off rear window defrost for VIN %s: %s", self._vin, e
+            )
+            self.coordinator.record_command_error(
+                "Error turning off rear window defrost", e
             )
 
 
@@ -633,6 +649,7 @@ class SAICMGSunroofSwitch(CoordinatorEntity, SwitchEntity):
             await self.coordinator.notify_command_limit_reached(self._vin)
         except Exception as e:
             LOGGER.error("Error opening sunroof for VIN %s: %s", self._vin, e)
+            self.coordinator.record_command_error("Error opening sunroof", e)
 
     async def async_turn_off(self, **kwargs):
         """Close the sunroof."""
@@ -644,3 +661,4 @@ class SAICMGSunroofSwitch(CoordinatorEntity, SwitchEntity):
             await self.coordinator.notify_command_limit_reached(self._vin)
         except Exception as e:
             LOGGER.error("Error closing sunroof for VIN %s: %s", self._vin, e)
+            self.coordinator.record_command_error("Error closing sunroof", e)
