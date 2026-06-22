@@ -760,18 +760,25 @@ class SAICMGVehicleSensor(CoordinatorEntity, SensorEntity):
                 if status_data:
                     raw_value = getattr(status_data, self._field, None)
                     if raw_value is not None:
-                        # Handle special cases where raw_value might be invalid
-                        if (
-                            self._field
-                            in ["interiorTemperature", "exteriorTemperature"]
-                            and raw_value == -128
-                        ):
-                            LOGGER.debug(
-                                "Sensor %s has invalid temperature value -128, "
-                                "retaining last valid value",
-                                self._name,
-                            )
-                            return self._last_valid_temperature.get(self._field)
+                        # Handle special cases where raw_value might be invalid.
+                        # -128 is the SAIC sentinel for "no valid data" across
+                        # multiple fields (temperatures, range, fuel level).
+                        if raw_value == -128:
+                            if self._field in [
+                                "interiorTemperature",
+                                "exteriorTemperature",
+                            ]:
+                                LOGGER.debug(
+                                    "Sensor %s has invalid temperature value -128, "
+                                    "retaining last valid value",
+                                    self._name,
+                                )
+                                return self._last_valid_temperature.get(self._field)
+                            else:
+                                # For range/other fields, return None to trigger
+                                # the coordinator-level retention logic (if any)
+                                # rather than displaying -12.8 or similar.
+                                return None
                         # Store valid temperature readings for retention
                         if self._field in [
                             "interiorTemperature", "exteriorTemperature"
@@ -998,7 +1005,8 @@ class SAICMGElectricRangeSensor(CoordinatorEntity, SensorEntity):
             )
             if charging_status_data:
                 raw_value = getattr(charging_status_data, self._field, None)
-                if raw_value not in (None, 0):
+                # -128 is the SAIC sentinel for "no valid data"
+                if raw_value not in (None, 0, -128):
                     electric_range = raw_value * self._factor
 
         # If electric_range is None or zero, try to get from VehicleStatusResp
@@ -1008,7 +1016,8 @@ class SAICMGElectricRangeSensor(CoordinatorEntity, SensorEntity):
                 basic_status_data = getattr(status_data, self._status_type, None)
                 if basic_status_data:
                     raw_value = getattr(basic_status_data, self._field, None)
-                    if raw_value not in (None, 0):
+                    # -128 is the SAIC sentinel for "no valid data"
+                    if raw_value not in (None, 0, -128):
                         electric_range = raw_value * self._factor
 
         if electric_range is not None:
@@ -1194,7 +1203,12 @@ class SAICMGSOCSensor(CoordinatorEntity, SensorEntity):
             if charging_data:
                 soc = getattr(charging_data, self._field_charging, None)
                 if soc is not None:
-                    soc = soc * DATA_DECIMAL_CORRECTION_SOC
+                    # -128 is the SAIC sentinel for "no valid data" — reject it
+                    # before applying the decimal factor (which would produce -12.8)
+                    if soc == -128:
+                        soc = None
+                    else:
+                        soc = soc * DATA_DECIMAL_CORRECTION_SOC
 
         # If SOC is None or invalid, try to get from basic vehicle status
         if soc is None:
@@ -1203,7 +1217,7 @@ class SAICMGSOCSensor(CoordinatorEntity, SensorEntity):
                 status_data = getattr(status, self._status_type, None)
                 if status_data:
                     soc = getattr(status_data, self._field_basic, None)
-                    if soc == -1 or soc == 0:
+                    if soc in (-128, -1, 0):
                         soc = None
 
         if soc is not None:
@@ -1552,6 +1566,10 @@ class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
                 else:
                     # Handle other numeric fields
                     raw_value = getattr(charging_data, self._field, None)
+                    # -128 is the SAIC sentinel for "no valid data" — reject
+                    # before applying the factor (which would produce -12.8)
+                    if raw_value == -128:
+                        return None
                     return raw_value * self._factor if raw_value is not None else None
 
             if raw_value is None:
