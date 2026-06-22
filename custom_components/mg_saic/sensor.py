@@ -702,6 +702,15 @@ class SAICMGMileageSensor(CoordinatorEntity, SensorEntity):
 class SAICMGVehicleSensor(CoordinatorEntity, SensorEntity):
     """Representation of a MG SAIC vehicle sensor."""
 
+    # Fields where 0 is a legitimate value and must NOT be treated as invalid.
+    # These are either enums (powerMode=0 means "Off") or percentage-like values
+    # where zero is a real reading.
+    _ZERO_VALID_FIELDS = {"powerMode", "fuelLevelPrc", "lastKeySeen"}
+
+    # Fields that produce mapped string values — retain the last mapped string
+    # rather than a numeric value.
+    _MAPPED_FIELDS = {"powerMode"}
+
     def __init__(
         self,
         coordinator,
@@ -732,9 +741,14 @@ class SAICMGVehicleSensor(CoordinatorEntity, SensorEntity):
 
         self._device_info = create_device_info(coordinator, entry.entry_id)
 
-        # Retain last valid temperature readings so the sensor does not drop
-        # to unknown when the API returns -128 (deep sleep / unavailable).
+        # Per-field retention for temperature fields (keyed by field name so a
+        # single class instance cannot cross-contaminate different sensors).
         self._last_valid_temperature: dict[str, float] = {}
+
+        # Generic last-known-good value for all other retainable numeric fields.
+        # Mapped/string fields use _last_valid_mapped instead.
+        self._last_valid_value: float | None = None
+        self._last_valid_mapped: str | None = None
 
     @property
     def unique_id(self):
@@ -748,6 +762,18 @@ class SAICMGVehicleSensor(CoordinatorEntity, SensorEntity):
     @property
     def available(self):
         """Return True if the entity is available."""
+        # If we have any retained value, keep the sensor available so dependant
+        # automations/helpers do not lose their reference.
+        if self._field in ["interiorTemperature", "exteriorTemperature"]:
+            if self._last_valid_temperature.get(self._field) is not None:
+                return True
+        elif self._field in self._MAPPED_FIELDS:
+            if self._last_valid_mapped is not None:
+                return True
+        else:
+            if self._last_valid_value is not None:
+                return True
+
         required_data = self.coordinator.data.get(self._data_type)
         return self.coordinator.last_update_success and required_data is not None
 
@@ -760,9 +786,7 @@ class SAICMGVehicleSensor(CoordinatorEntity, SensorEntity):
                 if status_data:
                     raw_value = getattr(status_data, self._field, None)
                     if raw_value is not None:
-                        # Handle special cases where raw_value might be invalid.
-                        # -128 is the SAIC sentinel for "no valid data" across
-                        # multiple fields (temperatures, range, fuel level).
+                        # -128 is the SAIC sentinel for "no valid data".
                         if raw_value == -128:
                             if self._field in [
                                 "interiorTemperature",
@@ -775,38 +799,95 @@ class SAICMGVehicleSensor(CoordinatorEntity, SensorEntity):
                                 )
                                 return self._last_valid_temperature.get(self._field)
                             else:
-                                # For range/other fields, return None to trigger
-                                # the coordinator-level retention logic (if any)
-                                # rather than displaying -12.8 or similar.
+                                # Return last known numeric value if we have one,
+                                # otherwise None — either way avoids -12.8 etc.
+                                if self._last_valid_value is not None:
+                                    LOGGER.debug(
+                                        "Sensor %s: sentinel -128 received, "
+                                        "retaining last known value %.2f",
+                                        self._name,
+                                        self._last_valid_value,
+                                    )
+                                    return self._last_valid_value
                                 return None
-                        # Store valid temperature readings for retention
+
+                        # --- Temperature fields ---
                         if self._field in [
                             "interiorTemperature", "exteriorTemperature"
                         ]:
-                            self._last_valid_temperature[self._field] = (
-                                raw_value * self._factor
-                            )
-                        # Add mapping for powerMode
+                            computed = raw_value * self._factor
+                            self._last_valid_temperature[self._field] = computed
+                            return computed
+
+                        # --- Mapped / enum fields ---
                         if self._field == "powerMode":
-                            return {
+                            mapped = {
                                 0: "Off",
                                 1: "Accessory",
                                 2: "On",
                                 3: "Start",
                             }.get(raw_value, f"Unknown ({raw_value})")
+                            self._last_valid_mapped = mapped
+                            return mapped
 
-                        return raw_value * self._factor
+                        # --- Numeric fields ---
+                        # Treat 0 as invalid for fields where it cannot occur
+                        # in practice (e.g. tyre pressures, battery voltage,
+                        # fuel range). Fields listed in _ZERO_VALID_FIELDS skip
+                        # this guard.
+                        if raw_value == 0 and self._field not in self._ZERO_VALID_FIELDS:
+                            if self._last_valid_value is not None:
+                                LOGGER.debug(
+                                    "Sensor %s: zero value received (likely invalid), "
+                                    "retaining last known value %.2f",
+                                    self._name,
+                                    self._last_valid_value,
+                                )
+                                return self._last_valid_value
+                            return None
+
+                        computed = raw_value * self._factor
+                        self._last_valid_value = computed
+                        return computed
+
             elif self._data_type == "charging":
                 charging_data = getattr(data, self._status_type, None)
                 if charging_data:
                     raw_value = getattr(charging_data, self._field, None)
                     if raw_value is not None:
-                        return raw_value * self._factor
+                        if raw_value == -128:
+                            if self._last_valid_value is not None:
+                                return self._last_valid_value
+                            return None
+                        computed = raw_value * self._factor
+                        self._last_valid_value = computed
+                        return computed
+
             elif self._data_type == "info":
                 vin_info = data[0]
                 raw_value = getattr(vin_info, self._field, None)
                 if raw_value is not None:
                     return raw_value
+
+        # Fall through — return whatever we last retained
+        if self._field in ["interiorTemperature", "exteriorTemperature"]:
+            retained = self._last_valid_temperature.get(self._field)
+            if retained is not None:
+                LOGGER.debug(
+                    "Sensor %s: no data from API, retaining last temperature %.1f",
+                    self._name,
+                    retained,
+                )
+            return retained
+        if self._field in self._MAPPED_FIELDS:
+            return self._last_valid_mapped
+        if self._last_valid_value is not None:
+            LOGGER.debug(
+                "Sensor %s: no data from API, retaining last value %.2f",
+                self._name,
+                self._last_valid_value,
+            )
+            return self._last_valid_value
         return None
 
     @property
@@ -816,7 +897,12 @@ class SAICMGVehicleSensor(CoordinatorEntity, SensorEntity):
 
 
 class SAICMGVehicleDetailSensor(CoordinatorEntity, SensorEntity):
-    """Representation of a sensor for MG SAIC vehicle details."""
+    """Representation of a sensor for MG SAIC vehicle details.
+
+    NOTE: No value retention applied — Brand, Model, Model Year are static
+    metadata fields that are either present or not.  Retaining a stale name
+    would never cause problems in practice, but it also adds no real benefit.
+    """
 
     def __init__(self, coordinator, entry, name, field, data_type):
         """Initialize the sensor."""
@@ -862,7 +948,13 @@ class SAICMGVehicleDetailSensor(CoordinatorEntity, SensorEntity):
 
 # STATUS SENSORS
 class SAICMGHeatedSeatLevelSensor(CoordinatorEntity, SensorEntity):
-    """Sensor to monitor the current heating level of a heated seat."""
+    """Sensor to monitor the current heating level of a heated seat.
+
+    Retention note: 0 maps to "Off" which IS a valid/expected state, so we
+    retain the last mapped string value (including "Off") rather than treating
+    0 as a sentinel.  The sensor only falls back to the retained value when the
+    API returns None or raises an exception.
+    """
 
     def __init__(
         self,
@@ -894,6 +986,10 @@ class SAICMGHeatedSeatLevelSensor(CoordinatorEntity, SensorEntity):
 
         self._device_info = create_device_info(coordinator, entry.entry_id)
 
+        # Retain last mapped string value.  "Off" (raw=0) is a legitimate
+        # reading so we always update the retained value when raw is not None.
+        self._last_valid_level: str | None = None
+
     @property
     def unique_id(self):
         """Return the unique ID of the sensor."""
@@ -908,6 +1004,8 @@ class SAICMGHeatedSeatLevelSensor(CoordinatorEntity, SensorEntity):
     @property
     def available(self):
         """Return True if the entity is available."""
+        if self._last_valid_level is not None:
+            return True
         data = self.coordinator.data.get(self._data_type)
         return self.coordinator.last_update_success and data is not None
 
@@ -920,11 +1018,23 @@ class SAICMGHeatedSeatLevelSensor(CoordinatorEntity, SensorEntity):
                 vehicle_status = getattr(data, self._data_source, None)
                 if vehicle_status:
                     raw_value = getattr(vehicle_status, self._field, None)
-                    return {0: "Off", 1: "Low", 2: "Medium", 3: "High"}.get(
-                        raw_value, f"Unknown ({raw_value})"
-                    )
+                    if raw_value is not None:
+                        mapped = {0: "Off", 1: "Low", 2: "Medium", 3: "High"}.get(
+                            raw_value, f"Unknown ({raw_value})"
+                        )
+                        self._last_valid_level = mapped
+                        return mapped
         except Exception as e:
             LOGGER.error("Error retrieving heated seat level for %s: %s", self._name, e)
+
+        # Return last retained value (including "Off") when API gives nothing
+        if self._last_valid_level is not None:
+            LOGGER.debug(
+                "Heated seat sensor %s: no data from API, retaining '%s'",
+                self._name,
+                self._last_valid_level,
+            )
+            return self._last_valid_level
         return None
 
     @property
@@ -1043,7 +1153,14 @@ class SAICMGElectricRangeSensor(CoordinatorEntity, SensorEntity):
 
 
 class SAICMGInstantPowerSensor(CoordinatorEntity, SensorEntity):
-    """Sensor for Instant Power when the vehicle is powered on and driving."""
+    """Sensor for Instant Power when the vehicle is powered on and driving.
+
+    Retention note: 0 kW IS a valid reading (vehicle on but not accelerating /
+    regenerating).  Retention is therefore only applied when the API returns
+    None or raises — not when it returns 0.  When the vehicle is not in power
+    modes 2 or 3 the sensor intentionally returns 0; that explicit 0 is also
+    NOT retained (it would override the last real driving value unhelpfully).
+    """
 
     def __init__(
         self,
@@ -1075,6 +1192,10 @@ class SAICMGInstantPowerSensor(CoordinatorEntity, SensorEntity):
 
         self._device_info = create_device_info(coordinator, entry.entry_id)
 
+        # Retain last computed power value.  Updated only when a real
+        # calculation succeeds; the "not driving → 0" path does not update it.
+        self._last_valid_power: float | None = None
+
     @property
     def unique_id(self):
         return self._unique_id
@@ -1087,6 +1208,8 @@ class SAICMGInstantPowerSensor(CoordinatorEntity, SensorEntity):
     @property
     def available(self):
         """Return True if the entity is available."""
+        if self._last_valid_power is not None:
+            return True
         required_data = self.coordinator.data.get(self._data_type)
         return self.coordinator.last_update_success and required_data is not None
 
@@ -1113,24 +1236,38 @@ class SAICMGInstantPowerSensor(CoordinatorEntity, SensorEntity):
 
                         # Calculate power in kW
                         power = decoded_current * decoded_voltage / 1000.0
+                        power = round(power, 2)
 
-                        return round(power, 2)
+                        # Update retention (0 kW is a valid driving reading)
+                        self._last_valid_power = power
+                        return power
                     else:
                         LOGGER.warning(
                             "Instant Power: Current or Voltage not available in charging data."
                         )
-                        return None
+                        # Fall through to retention below
                 else:
+                    # Vehicle not in driving power mode — report 0 explicitly
+                    # but do NOT update the retained value.
                     return 0
             else:
                 LOGGER.error("No charging data available for %s", self._name)
-                return None
 
         except Exception as e:
             LOGGER.error(
                 "Error retrieving instant power for sensor %s: %s", self._name, e
             )
-            return None
+
+        # API gave nothing usable — hold the last real power reading
+        if self._last_valid_power is not None:
+            LOGGER.debug(
+                "Instant power sensor %s: no data from API, "
+                "retaining last known value %.2f kW",
+                self._name,
+                self._last_valid_power,
+            )
+            return self._last_valid_power
+        return None
 
     @property
     def device_info(self):
@@ -1244,7 +1381,14 @@ class SAICMGSOCSensor(CoordinatorEntity, SensorEntity):
 
 # CHARGING SENSORS
 class SAICMGChargingCurrentSensor(CoordinatorEntity, SensorEntity):
-    """Representation of a MG SAIC charging current sensor"""
+    """Representation of a MG SAIC charging current sensor.
+
+    Retention note: 0 A IS a legitimate value (not charging / plugged but idle).
+    The early-return path that explicitly sets 0 when bmsChrgSts is 0 or 5 does
+    NOT update the retained value.  Retention is only updated on a successful
+    current calculation, and is only returned as fallback when the API gives
+    nothing usable.
+    """
 
     def __init__(
         self,
@@ -1280,6 +1424,10 @@ class SAICMGChargingCurrentSensor(CoordinatorEntity, SensorEntity):
 
         self._device_info = create_device_info(coordinator, entry.entry_id)
 
+        # Retain last computed current.  Not updated by the "not charging → 0"
+        # explicit path so that the retained value reflects the last real session.
+        self._last_valid_current: float | None = None
+
     @property
     def unique_id(self):
         return self._unique_id
@@ -1292,12 +1440,14 @@ class SAICMGChargingCurrentSensor(CoordinatorEntity, SensorEntity):
     @property
     def available(self):
         """Return True if the entity is available."""
+        if self._last_valid_current is not None:
+            return True
         required_data = self.coordinator.data.get(self._data_type)
         return self.coordinator.last_update_success and required_data is not None
 
     @property
     def native_value(self):
-        """Return the state of the sensor"""
+        """Return the state of the sensor."""
         try:
             charging_data = getattr(
                 self.coordinator.data.get("charging"), self._data_source, None
@@ -1306,19 +1456,31 @@ class SAICMGChargingCurrentSensor(CoordinatorEntity, SensorEntity):
                 charging_status = getattr(charging_data, "bmsChrgSts", None)
 
                 if charging_status in [0, 5]:
+                    # Explicitly not charging — return 0 without updating retention
                     return 0
 
                 raw_value = getattr(charging_data, self._field, None)
 
-                # Calculate Current
+                # -128 sentinel — fall through to retention
+                if raw_value == -128:
+                    if self._last_valid_current is not None:
+                        LOGGER.debug(
+                            "Charging current sensor %s: sentinel -128, "
+                            "retaining %.2f A",
+                            self._name,
+                            self._last_valid_current,
+                        )
+                        return self._last_valid_current
+                    return None
+
                 if raw_value is not None and self._factor is not None:
-                    calculated_value = 1000 - (raw_value * self._factor)
-                    return round(calculated_value, 2)
+                    calculated_value = round(1000 - (raw_value * self._factor), 2)
+                    self._last_valid_current = calculated_value
+                    return calculated_value
                 else:
                     return None
             else:
                 LOGGER.error("No charging data available for %s", self._name)
-                return None
 
         except Exception as e:
             LOGGER.error(
@@ -1327,7 +1489,17 @@ class SAICMGChargingCurrentSensor(CoordinatorEntity, SensorEntity):
                 e,
                 exc_info=True,
             )
-            return None
+
+        # API gave nothing usable — hold the last real reading
+        if self._last_valid_current is not None:
+            LOGGER.debug(
+                "Charging current sensor %s: no data from API, "
+                "retaining last known value %.2f A",
+                self._name,
+                self._last_valid_current,
+            )
+            return self._last_valid_current
+        return None
 
     @property
     def device_info(self):
@@ -1336,7 +1508,12 @@ class SAICMGChargingCurrentSensor(CoordinatorEntity, SensorEntity):
 
 
 class SAICMGChargingPowerSensor(CoordinatorEntity, SensorEntity):
-    """Sensor for Charging Power, calculated from voltage and current."""
+    """Sensor for Charging Power, calculated from voltage and current.
+
+    Retention note: 0 kW IS legitimate (plugged but not actively charging).
+    Same retention strategy as SAICMGChargingCurrentSensor — the explicit
+    "not charging → 0" path does not update the retained value.
+    """
 
     def __init__(
         self,
@@ -1368,6 +1545,10 @@ class SAICMGChargingPowerSensor(CoordinatorEntity, SensorEntity):
 
         self._device_info = create_device_info(coordinator, entry.entry_id)
 
+        # Retain last computed charging power.  Not updated by the explicit
+        # "not charging → 0" path.
+        self._last_valid_power: float | None = None
+
     @property
     def unique_id(self):
         return self._unique_id
@@ -1380,6 +1561,8 @@ class SAICMGChargingPowerSensor(CoordinatorEntity, SensorEntity):
     @property
     def available(self):
         """Return True if the entity is available."""
+        if self._last_valid_power is not None:
+            return True
         required_data = self.coordinator.data.get(self._data_type)
         return self.coordinator.last_update_success and required_data is not None
 
@@ -1391,34 +1574,51 @@ class SAICMGChargingPowerSensor(CoordinatorEntity, SensorEntity):
                 self.coordinator.data.get("charging"), self._data_source, None
             )
             if charging_data:
-                # Fetch the charging status to determine if the sensor should display data
                 charging_status = getattr(charging_data, "bmsChrgSts", None)
 
                 if charging_status in [0, 5]:
+                    # Explicitly not charging — return 0 without updating retention
                     return 0
 
-                # Get raw current and voltage
                 raw_current = getattr(charging_data, "bmsPackCrnt", None)
                 raw_voltage = getattr(charging_data, "bmsPackVol", None)
 
+                # Reject -128 sentinel on either input
+                if raw_current == -128 or raw_voltage == -128:
+                    if self._last_valid_power is not None:
+                        LOGGER.debug(
+                            "Charging power sensor %s: sentinel -128 in input, "
+                            "retaining %.2f kW",
+                            self._name,
+                            self._last_valid_power,
+                        )
+                        return self._last_valid_power
+                    return None
+
                 if raw_current is not None and raw_voltage is not None:
-                    # Apply decoding to current and voltage
                     decoded_current = 1000 - raw_current * CHARGING_CURRENT_FACTOR
                     decoded_voltage = raw_voltage * CHARGING_VOLTAGE_FACTOR
-
-                    # Calculate power in kW
-                    power = decoded_current * decoded_voltage / 1000.0
-
-                    return round(power, 2)
+                    power = round(decoded_current * decoded_voltage / 1000.0, 2)
+                    self._last_valid_power = power
+                    return power
                 else:
                     return None
             else:
                 LOGGER.error("No charging data available for %s", self._name)
-                return None
 
         except Exception as e:
             LOGGER.error("Error retrieving charging power sensor %s: %s", self._name, e)
-            return None
+
+        # API gave nothing usable — hold the last real reading
+        if self._last_valid_power is not None:
+            LOGGER.debug(
+                "Charging power sensor %s: no data from API, "
+                "retaining last known value %.2f kW",
+                self._name,
+                self._last_valid_power,
+            )
+            return self._last_valid_power
+        return None
 
     @property
     def device_info(self):
@@ -1427,7 +1627,38 @@ class SAICMGChargingPowerSensor(CoordinatorEntity, SensorEntity):
 
 
 class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
-    """Representation of a MG SAIC charging sensor."""
+    """Representation of a MG SAIC charging sensor.
+
+    Retention strategy per field:
+
+    Fields where 0 IS a legitimate value (returned explicitly when not charging):
+      bmsPackVol, bmsPackCrnt, lastChargeEndingPower, bmsChrgOtptCrntReq,
+      chargingDuration, chrgngRmnngTime, chrgngAddedElecRng
+      → The explicit "not charging → 0" return path does NOT update retention.
+        Retention only activates when the API gives nothing at all.
+
+    Mapped/enum fields (bmsOnBdChrgTrgtSOCDspCmd, bmsChrgSts, bmsPTCHeatResp):
+      → Retain last mapped string/int value; None from mapping is not retained.
+
+    Numeric fields (bmsEstdElecRng, mileageSinceLastCharge, powerUsageSinceLastCharge,
+      totalBatteryCapacity, etc.):
+      → Retain last numeric result; -128 sentinel rejected before factor applied.
+
+    totalBatteryCapacity uses coordinator.known_battery_capacity_kwh when set
+      (no retention needed — the coordinator value is always authoritative).
+    """
+
+    # Fields where charging_status in [0, 5] → explicit 0 return (not charging).
+    # These fields must NOT treat that explicit 0 as a retained value.
+    _NOT_CHARGING_ZERO_FIELDS = {
+        "bmsPackVol",
+        "bmsPackCrnt",
+        "lastChargeEndingPower",
+        "bmsChrgOtptCrntReq",
+        "chargingDuration",
+        "chrgngRmnngTime",
+        "chrgngAddedElecRng",
+    }
 
     def __init__(
         self,
@@ -1463,6 +1694,10 @@ class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
 
         self._device_info = create_device_info(coordinator, entry.entry_id)
 
+        # Generic last-known-good value.  Holds a float for numeric fields or a
+        # string for mapped fields.  None until a valid value has been seen.
+        self._last_valid_value: float | str | None = None
+
     @property
     def unique_id(self):
         return self._unique_id
@@ -1475,17 +1710,15 @@ class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
     @property
     def available(self):
         """Return True if the entity is available."""
+        if self._last_valid_value is not None:
+            return True
         required_data = self.coordinator.data.get(self._data_type)
         return self.coordinator.last_update_success and required_data is not None
 
     @property
     def native_value(self):
         """Return the state of the sensor."""
-        # Total Battery Capacity: the API's totalBatteryCapacity field is
-        # known to be unreliable across the model range. Prefer the
-        # coordinator's known-good value (set via series detection) when
-        # available, falling back to the raw API value for unconfirmed
-        # series so the sensor still works for unsupported models.
+        # Total Battery Capacity: prefer coordinator's known-good value when set.
         if self._field == "totalBatteryCapacity":
             known_capacity = getattr(
                 self.coordinator, "known_battery_capacity_kwh", None
@@ -1497,34 +1730,30 @@ class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
             charging_data = getattr(
                 self.coordinator.data.get("charging"), self._data_source, None
             )
-            raw_value = None
 
             if charging_data:
-                # Fetch the charging status to determine if the sensor should display data
                 charging_status = getattr(charging_data, "bmsChrgSts", None)
 
-                # Apply the "Not charging" condition only for the specified sensors
-                if self._field in [
-                    "bmsPackVol",
-                    "bmsPackCrnt",
-                    "lastChargeEndingPower",
-                    "bmsChrgOtptCrntReq",
-                    "chargingDuration",
-                    "chrgngRmnngTime",
-                    "chrgngAddedElecRng",
-                ]:
+                # --- Fields that return explicit 0 when not charging ---
+                if self._field in self._NOT_CHARGING_ZERO_FIELDS:
                     if charging_status in [0, 5]:
+                        # Explicit "not charging" zero — do NOT update retention
                         return 0
-                    else:
-                        raw_value = getattr(charging_data, self._field, None)
-                        return (
-                            raw_value * self._factor if raw_value is not None else None
-                        )
-
-                elif self._field == "bmsOnBdChrgTrgtSOCDspCmd":
-                    # Map the target SOC values to percentages
                     raw_value = getattr(charging_data, self._field, None)
-                    return {
+                    if raw_value == -128:
+                        if self._last_valid_value is not None:
+                            return self._last_valid_value
+                        return None
+                    if raw_value is not None:
+                        result = raw_value * self._factor
+                        self._last_valid_value = result
+                        return result
+                    return None
+
+                # --- Target SOC mapping ---
+                elif self._field == "bmsOnBdChrgTrgtSOCDspCmd":
+                    raw_value = getattr(charging_data, self._field, None)
+                    mapped = {
                         1: 40,
                         2: 50,
                         3: 60,
@@ -1532,12 +1761,19 @@ class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
                         5: 80,
                         6: 90,
                         7: 100,
-                    }.get(raw_value, None)
+                    }.get(raw_value)
+                    if mapped is not None:
+                        self._last_valid_value = mapped
+                        return mapped
+                    # Unknown code — fall through to retention
+                    if self._last_valid_value is not None:
+                        return self._last_valid_value
+                    return None
 
+                # --- Charging status string mapping ---
                 elif self._field == "bmsChrgSts":
-                    # Map bmsChrgSts values to charging statuses (these are strings)
                     raw_value = getattr(charging_data, self._field, None)
-                    return {
+                    mapped = {
                         0: "Not Charging",
                         1: "Charging (AC)",
                         2: "Charging Finished",
@@ -1552,35 +1788,61 @@ class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
                         11: "Super Offboard Charging",
                         12: "Charging",
                         13: "V2X Discharging",
-                    }.get(raw_value, f"Unknown ({raw_value})")
+                    }.get(raw_value, f"Unknown ({raw_value})" if raw_value is not None else None)
+                    if mapped is not None:
+                        self._last_valid_value = mapped
+                        return mapped
+                    if self._last_valid_value is not None:
+                        return self._last_valid_value
+                    return None
 
+                # --- Battery heating status mapping ---
                 elif self._field == "bmsPTCHeatResp":
-                    # Map bmsPTCHeatResp values to status strings
                     raw_value = getattr(charging_data, self._field, None)
-                    return {
+                    mapped = {
                         0: "Off",
                         1: "On",
                         2: "Error",
-                    }.get(raw_value, f"Unknown ({raw_value})")
+                    }.get(raw_value, f"Unknown ({raw_value})" if raw_value is not None else None)
+                    if mapped is not None:
+                        self._last_valid_value = mapped
+                        return mapped
+                    if self._last_valid_value is not None:
+                        return self._last_valid_value
+                    return None
 
+                # --- Generic numeric fields ---
                 else:
-                    # Handle other numeric fields
                     raw_value = getattr(charging_data, self._field, None)
-                    # -128 is the SAIC sentinel for "no valid data" — reject
-                    # before applying the factor (which would produce -12.8)
                     if raw_value == -128:
+                        if self._last_valid_value is not None:
+                            LOGGER.debug(
+                                "Charging sensor %s: sentinel -128, "
+                                "retaining last known value",
+                                self._name,
+                            )
+                            return self._last_valid_value
                         return None
-                    return raw_value * self._factor if raw_value is not None else None
+                    if raw_value is not None:
+                        result = raw_value * self._factor if self._factor is not None else raw_value
+                        self._last_valid_value = result
+                        return result
+                    # raw_value is None — fall through to retention below
 
-            if raw_value is None:
-                LOGGER.warning("Field %s returned None in charging data.", self._field)
             else:
                 LOGGER.error("No charging data available for %s", self._name)
-                return None
 
         except Exception as e:
             LOGGER.error("Error retrieving charging sensor %s: %s", self._name, e)
-            return None
+
+        # API gave nothing usable — return last retained value
+        if self._last_valid_value is not None:
+            LOGGER.debug(
+                "Charging sensor %s: no data from API, retaining last known value",
+                self._name,
+            )
+            return self._last_valid_value
+        return None
 
     @property
     def device_info(self):
@@ -1589,7 +1851,11 @@ class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
 
 
 class SAICMGChargingCurrentLimitSensor(CoordinatorEntity, SensorEntity):
-    """Sensor to show the charging current limit."""
+    """Sensor to show the charging current limit.
+
+    Retention note: code 0 maps to "0A (Ignore)" which is a valid state —
+    retention stores the mapped string and returns it on API failure.
+    """
 
     def __init__(
         self,
@@ -1625,6 +1891,10 @@ class SAICMGChargingCurrentLimitSensor(CoordinatorEntity, SensorEntity):
 
         self._device_info = create_device_info(coordinator, entry.entry_id)
 
+        # Retain last mapped string.  Code 0 → "0A (Ignore)" is valid, so we
+        # always store the result when the API gives a known code.
+        self._last_valid_limit: str | None = None
+
     @property
     def unique_id(self):
         return self._unique_id
@@ -1637,6 +1907,8 @@ class SAICMGChargingCurrentLimitSensor(CoordinatorEntity, SensorEntity):
     @property
     def available(self):
         """Return True if the entity is available."""
+        if self._last_valid_limit is not None:
+            return True
         required_data = self.coordinator.data.get(self._data_type)
         return self.coordinator.last_update_success and required_data is not None
 
@@ -1650,20 +1922,31 @@ class SAICMGChargingCurrentLimitSensor(CoordinatorEntity, SensorEntity):
             if charging_data:
                 current_limit_code = getattr(charging_data, self._field, None)
                 if current_limit_code is not None:
-                    # Map the charging limit code to human-readable format
-                    return {
+                    mapped = {
                         0: "0A (Ignore)",
                         1: "6A",
                         2: "8A",
                         3: "16A",
                         4: "Max",
                     }.get(current_limit_code, f"Unknown ({current_limit_code})")
-            return None
+                    self._last_valid_limit = mapped
+                    return mapped
+
         except Exception as e:
             LOGGER.error(
                 "Error retrieving charging current limit for %s: %s", self._name, e
             )
-            return None
+
+        # Return last retained value when API gives nothing
+        if self._last_valid_limit is not None:
+            LOGGER.debug(
+                "Charging current limit sensor %s: no data from API, "
+                "retaining '%s'",
+                self._name,
+                self._last_valid_limit,
+            )
+            return self._last_valid_limit
+        return None
 
     @property
     def device_info(self):
@@ -1673,7 +1956,11 @@ class SAICMGChargingCurrentLimitSensor(CoordinatorEntity, SensorEntity):
 
 # LAST UPDATE TIME DATA SENSOR
 class SAICMGLastUpdateSensor(CoordinatorEntity, SensorEntity):
-    """Sensor to display the timestamp of the last successful data update."""
+    """Sensor to display the timestamp of the last successful data update.
+
+    NOTE: No value retention — retaining a stale "last update" timestamp would
+    be actively misleading (it would imply the data is more recent than it is).
+    """
 
     def __init__(
         self,
@@ -1746,7 +2033,10 @@ class SAICMGLastUpdateSensor(CoordinatorEntity, SensorEntity):
 
 # NEXT UPDATE TIME DATA SENSOR
 class SAICMGNextUpdateSensor(CoordinatorEntity, SensorEntity):
-    """Sensor to display the timestamp of the next scheduled data update."""
+    """Sensor to display the timestamp of the next scheduled data update.
+
+    NOTE: No value retention — same rationale as SAICMGLastUpdateSensor.
+    """
 
     def __init__(
         self,
@@ -1818,7 +2108,11 @@ class SAICMGNextUpdateSensor(CoordinatorEntity, SensorEntity):
 
 
 class SAICMGTimestampSensor(CoordinatorEntity, SensorEntity):
-    """Representation of a timestamp sensor for MG SAIC vehicles."""
+    """Representation of a timestamp sensor for MG SAIC vehicles.
+
+    NOTE: No value retention — retaining a stale timestamp (last powered on/off,
+    last vehicle activity) would be misleading rather than helpful.
+    """
 
     def __init__(self, coordinator, entry, name, field, device_class, icon, attribute):
         """Initialize the sensor."""
@@ -1870,7 +2164,13 @@ class SAICMGTimestampSensor(CoordinatorEntity, SensorEntity):
 
 
 class SAICMGVehicleSpeedSensor(CoordinatorEntity, SensorEntity):
-    """Sensor for Vehicle Speed."""
+    """Sensor for Vehicle Speed.
+
+    NOTE: No value retention intentionally — a stale speed value displayed as
+    "current speed" would be actively misleading (e.g. showing 80 km/h when
+    the car is parked).  HA showing Unknown when data is unavailable is the
+    correct behaviour here.
+    """
 
     def __init__(
         self,
