@@ -43,7 +43,8 @@
       "auth": "Falha na autenticação, por favor, verifique as suas credenciais."
     },
     "abort": {
-      "vin": "Veículo com VIN {vin} já configurado."
+      "vin": "Veículo com VIN {vin} já configurado.",
+      "already_configured": "All vehicles on this account are already configured in Home Assistant."
     }
   },
   "services": {
@@ -211,7 +212,7 @@
         }
       }
     },
-   "start_front_defrost": {
+    "start_front_defrost": {
       "name": "Ligar Desembaciador Frontal",
       "description": "Ligar o sistema de desembaciamento frontal do veículo.",
       "fields": {
