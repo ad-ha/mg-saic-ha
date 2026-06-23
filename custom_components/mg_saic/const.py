@@ -148,8 +148,15 @@ DEFAULT_VEHICLE_PROFILE = {
 }
 
 # Base update intervals
-UPDATE_INTERVAL = timedelta(minutes=60)
-UPDATE_INTERVAL_CHARGING = timedelta(minutes=10)
+# UPDATE_INTERVAL is the idle/parked background refresh — a safety net to keep
+# data from going completely stale.  Now that the SAICMGAccountPoller triggers
+# an immediate refresh on engine-start, shutdown, and charging events, this
+# interval only matters when the car is genuinely sitting idle with nothing
+# happening.  30 minutes is a good balance: fresh enough to be useful, infrequent
+# enough not to drain the 12V battery or hit API rate limits.
+# Users can still override this lower via the integration options if they prefer.
+UPDATE_INTERVAL = timedelta(minutes=30)
+UPDATE_INTERVAL_CHARGING = timedelta(minutes=5)
 UPDATE_INTERVAL_POWERED = timedelta(minutes=15)
 
 # Additional Update Intervals
@@ -195,8 +202,12 @@ STATUS_TIMESTAMP_MAX_AGE = timedelta(hours=24)
 RETRY_LIMIT = 5
 RETRY_BACKOFF_FACTOR = 15
 
-# Charging status codes indicating that the vehicle is charging
-CHARGING_STATUS_CODES = {1, 3, 10, 12}
+# Charging status codes indicating that the vehicle is actively using the
+# charging/discharging system.  Used by the coordinator to select the
+# charging update interval and keep the session alive.
+# 13 = V2X_DISCHARGING — included so V2X export sessions get the same
+# frequent refresh cadence as AC/DC charging sessions.
+CHARGING_STATUS_CODES = {1, 3, 10, 12, 13}
 
 # Charging Current Limit options
 CHARGING_CURRENT_OPTIONS = ["0A (Ignore)", "6A", "8A", "16A", "Max"]
