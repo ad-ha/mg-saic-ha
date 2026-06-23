@@ -9,38 +9,14 @@ from homeassistant.util.dt import utcnow
 from .api import SAICMGAPIClient, CommandsLimitReachedException
 from .logic import select_update_interval
 
-# ── Message-driven update constants ─────────────────────────────────────────
-# How often to poll the SAIC alarm message queue (seconds).
-# 60s matches the MQTT gateway default; the message queue is lightweight —
-# it queries SAIC's server, not the car's telematics module directly.
-MESSAGE_POLL_INTERVAL_SECONDS = 60
-
-# messageType string that indicates a vehicle start / engine-on event.
-# Confirmed from saic-python-mqtt-gateway source (messageType "323").
-MESSAGE_TYPE_VEHICLE_START = "323"
-
-# Keywords in message title/content indicating vehicle shutdown (offCar).
-# The new REST API does not expose a distinct messageType for shutdown,
-# so we infer from message text.
-SHUTDOWN_TITLE_KEYWORDS = [
-    "vehicle off", "car off", "turned off", "engine off", "ignition off",
-    "vehicle stopped", "parked",
-]
-
-# Keywords indicating a charging / plug-in event.
-CHARGING_TITLE_KEYWORDS = [
-    "charging", "charge", "plugged", "connected to charger",
-    "charging started", "ev connected",
-]
-
 # After the car turns off, fire extra refreshes at these intervals (seconds)
-# to catch plug-in as quickly as possible. The coordinator is still on its
-# 15-min powered poll cycle when shutdown occurs, so without this we'd wait
-# up to 15 minutes before detecting plug-in.
-# The sequence exits early as soon as is_charging is detected, so a long
-# sequence costs nothing if you plug in quickly.
-# Sequence: 1min, 3min, 7min, 15min, 25min → catches plug-in within ~1-25 minutes.
+# to catch plug-in as quickly as possible.  The coordinator is still on its
+# powered-on poll cycle when shutdown occurs; without this we could wait the
+# full powered interval before detecting plug-in.
+# The sequence exits early as soon as is_charging is detected.
+# Sequence: 1 min, 3 min, 7 min, 15 min, 25 min → catches plug-in within ~1-25 min.
 POST_SHUTDOWN_REFRESH_SEQUENCE = [60, 120, 240, 480, 600]
+
 from .const import (
     AFTER_ACTION_UPDATE_INTERVAL_DELAY,
     CHARGING_STATUS_CODES,
@@ -108,10 +84,12 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         self._action_refresh_task = None
         self._action_refresh_generation = 0
 
-        # Message queue polling state
-        self._message_poll_task: asyncio.Task | None = None
-        self._last_seen_message_id: str | int | None = None
-        self._last_seen_message_ts = None
+        # Account-level API lock — shared with all coordinators on the same
+        # account and the SAICMGAccountPoller.  Serialises concurrent API calls
+        # so that a message-poll and a data refresh on the same account never
+        # race each other and invalidate the session token.
+        # Injected by __init__.async_setup_entry after construction.
+        self._api_lock: asyncio.Lock | None = None
 
         # Post-shutdown rapid refresh state
         self._shutdown_refresh_task: asyncio.Task | None = None
@@ -237,6 +215,39 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         self.has_battery_heating = config_entry.options.get(
             "has_battery_heating", config_entry.data.get("has_battery_heating", False)
         )
+
+    # ── Account-level lock injection ─────────────────────────────────────────
+
+    def set_api_lock(self, lock: asyncio.Lock) -> None:
+        """Inject the shared account-level API lock.
+
+        Called by __init__.async_setup_entry immediately after the coordinator
+        is constructed, before async_setup() is awaited.  The lock is shared
+        with all other coordinators on the same (username, region) account and
+        with the SAICMGAccountPoller, ensuring that message-queue polls and
+        vehicle-data fetches never race each other.
+        """
+        self._api_lock = lock
+
+    # ── Event-driven refresh (called by SAICMGAccountPoller) ─────────────────
+
+    async def async_trigger_refresh(self, reason: str = "message event") -> None:
+        """Immediately request a data refresh, triggered by an alarm message.
+
+        Called by SAICMGAccountPoller when it detects a significant event
+        (engine start, shutdown, charging) for this coordinator's VIN.
+        Uses async_request_refresh so HA's built-in deduplication prevents
+        a pile-up if multiple messages arrive in the same poll cycle.
+
+        Args:
+            reason: short human-readable description for log output.
+        """
+        LOGGER.info(
+            "Coordinator VIN %s: event-driven refresh requested — %s",
+            self.vin,
+            reason,
+        )
+        await self.async_request_refresh()
 
     # Update Options
     async def async_update_options(self, options):
@@ -491,113 +502,107 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
 
         self.is_initial_setup = False
 
-        # Register alarm switches so SAIC server queues event messages for us.
-        # Wrapped in a timeout so a slow or unreachable SAIC API during setup
-        # does not block entity loading and cause a CancelledError in HA.
-        try:
-            await asyncio.wait_for(
-                self.client.set_alarm_switches(vin=self.vin),
-                timeout=30,
-            )
-        except asyncio.TimeoutError:
-            LOGGER.warning(
-                "set_alarm_switches timed out for VIN %s — "
-                "message-driven updates may not function until next restart",
-                self.vin,
-            )
-        except Exception as e:
-            LOGGER.warning(
-                "set_alarm_switches failed for VIN %s: %s — "
-                "message-driven updates may not function until next restart",
-                self.vin,
-                e,
-            )
-
-        # Start the background message-queue polling loop
-        await self._start_message_polling()
+        # NOTE: set_alarm_switches and message-queue polling are no longer
+        # managed here.  Both are handled by __init__.async_setup_entry under
+        # the shared api_lock, and the SAICMGAccountPoller owns the poll loop
+        # for the whole account.  See __init__.py and message_poller.py.
 
         return True
 
     async def _async_update_data(self):
-        """Fetch data from the API."""
+        """Fetch data from the API.
+
+        All network calls are made while holding the account-level _api_lock.
+        This serialises concurrent fetches across coordinators sharing the same
+        SAIC account, preventing session token invalidation when two VINs try
+        to refresh simultaneously (the #147 startup race).
+
+        The lock is acquired once for the entire update cycle (info + status +
+        charging) rather than per-call, so the three sequential fetches for one
+        VIN are never interleaved with fetches for another VIN on the same
+        account.
+        """
         data = {}
 
-        # Fetch vehicle info with retries
-        data["info"] = (
-            await self._fetch_with_retries(
-                self.client.get_vehicle_info,
-                self._is_generic_response_vehicle_info,
-                "vehicle info",
-            )
-            or []
-        )
+        # _api_lock is injected by __init__ before async_setup is called.
+        # Fall back to a no-op context if somehow not set (single-entry case
+        # where __init__ predates this change — belt-and-braces only).
+        lock = self._api_lock or asyncio.Lock()
 
-        if not data["info"]:
-            raise UpdateFailed("Cannot proceed without vehicle info.")
-
-        vin = self.config_entry.data.get("vin")
-        filtered_info = [v for v in data["info"] if v.vin == vin]
-        if not filtered_info:
-            raise UpdateFailed(f"No data found for VIN: {vin}")
-
-        # Overwrite info with the filtered result and store it in an attribute
-        data["info"] = filtered_info
-        self.vin_info = filtered_info[0]
-
-        if not filtered_info:
-            raise UpdateFailed(f"No data found for VIN: {vin}")
-
-        # Fetch vehicle status with retries
-        try:
-            data["status"] = await self._fetch_with_retries(
-                self.client.get_vehicle_status,
-                self._is_generic_response_vehicle_status,
-                "vehicle status",
-            )
-            if data["status"] is not None and not self._is_status_timestamp_valid(
-                data["status"]
-            ):
-                # Timestamp failed the sanity check — discard the response.
-                # Downstream sensors already retain their last known valid
-                # values, so this degrades gracefully rather than showing
-                # stale/wrong data as if it were current.
-                data["status"] = None
-        except Exception as e:
-            # During first setup, a vehicle status failure must not prevent
-            # the integration from loading.
-            if self.is_initial_setup:
-                LOGGER.warning(
-                    "Vehicle status unavailable during setup for VIN %s: %s — "
-                    "will retry on next scheduled update",
-                    self.vin,
-                    e,
+        async with lock:
+            # Fetch vehicle info with retries
+            data["info"] = (
+                await self._fetch_with_retries(
+                    self.client.get_vehicle_info,
+                    self._is_generic_response_vehicle_info,
+                    "vehicle info",
                 )
-                data["status"] = None
-            else:
-                raise
+                or []
+            )
 
-        # Fetch charging info with retries
-        if self.vehicle_type in ["BEV", "PHEV"]:
+            if not data["info"]:
+                raise UpdateFailed("Cannot proceed without vehicle info.")
+
+            vin = self.config_entry.data.get("vin")
+            filtered_info = [v for v in data["info"] if v.vin == vin]
+            if not filtered_info:
+                raise UpdateFailed(f"No data found for VIN: {vin}")
+
+            # Overwrite info with the filtered result and store it in an attribute
+            data["info"] = filtered_info
+            self.vin_info = filtered_info[0]
+
+            # Fetch vehicle status with retries
             try:
-                data["charging"] = await self._fetch_with_retries(
-                    self.client.get_charging_info,
-                    self._is_generic_response_charging,
-                    "charging info",
+                data["status"] = await self._fetch_with_retries(
+                    self.client.get_vehicle_status,
+                    self._is_generic_response_vehicle_status,
+                    "vehicle status",
                 )
+                if data["status"] is not None and not self._is_status_timestamp_valid(
+                    data["status"]
+                ):
+                    # Timestamp failed the sanity check — discard the response.
+                    # Downstream sensors already retain their last known valid
+                    # values, so this degrades gracefully rather than showing
+                    # stale/wrong data as if it were current.
+                    data["status"] = None
             except Exception as e:
-                # During first setup, a charging info failure must not prevent
-                # the integration from loading — entities will show unavailable
-                # until the next successful poll.
+                # During first setup, a vehicle status failure must not prevent
+                # the integration from loading.
                 if self.is_initial_setup:
                     LOGGER.warning(
-                        "Charging info unavailable during setup for VIN %s: %s — "
+                        "Vehicle status unavailable during setup for VIN %s: %s — "
                         "will retry on next scheduled update",
                         self.vin,
                         e,
                     )
-                    data["charging"] = None
+                    data["status"] = None
                 else:
                     raise
+
+            # Fetch charging info with retries
+            if self.vehicle_type in ["BEV", "PHEV"]:
+                try:
+                    data["charging"] = await self._fetch_with_retries(
+                        self.client.get_charging_info,
+                        self._is_generic_response_charging,
+                        "charging info",
+                    )
+                except Exception as e:
+                    # During first setup, a charging info failure must not prevent
+                    # the integration from loading — entities will show unavailable
+                    # until the next successful poll.
+                    if self.is_initial_setup:
+                        LOGGER.warning(
+                            "Charging info unavailable during setup for VIN %s: %s — "
+                            "will retry on next scheduled update",
+                            self.vin,
+                            e,
+                        )
+                        data["charging"] = None
+                    else:
+                        raise
 
         # Determine charging status
         self.is_charging = False
@@ -951,197 +956,6 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         finally:
             self._shutdown_refresh_task = None
 
-    # ── Message queue polling (event-driven updates) ─────────────────────────
-
-    async def _start_message_polling(self) -> None:
-        """Start the background task that polls the SAIC alarm message queue."""
-        if self._message_poll_task and not self._message_poll_task.done():
-            LOGGER.debug("Message poll task already running for VIN %s", self.vin)
-            return
-        LOGGER.debug(
-            "Starting message poll loop for VIN %s (interval: %ds)",
-            self.vin,
-            MESSAGE_POLL_INTERVAL_SECONDS,
-        )
-        self._message_poll_task = self.config_entry.async_create_background_task(
-            self.hass,
-            self._message_poll_loop(),
-            f"mg_saic_message_poll_{self.vin}",
-        )
-
-    async def _stop_message_polling(self) -> None:
-        """Stop the background message poll task."""
-        if self._message_poll_task and not self._message_poll_task.done():
-            LOGGER.debug("Stopping message poll task for VIN %s", self.vin)
-            self._message_poll_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await self._message_poll_task
-        self._message_poll_task = None
-
-    async def _message_poll_loop(self) -> None:
-        """Poll the SAIC alarm message queue periodically and react to events."""
-        # Initial delay so startup does not pile on to the first coordinator refresh
-        await asyncio.sleep(MESSAGE_POLL_INTERVAL_SECONDS)
-        while True:
-            try:
-                await self._check_alarm_messages()
-            except asyncio.CancelledError:
-                LOGGER.debug("Message poll loop cancelled for VIN %s", self.vin)
-                raise
-            except Exception as e:
-                LOGGER.warning(
-                    "Message poll loop error for VIN %s: %s", self.vin, e
-                )
-            await asyncio.sleep(MESSAGE_POLL_INTERVAL_SECONDS)
-
-    async def _check_alarm_messages(self) -> None:
-        """Check the SAIC alarm message queue and force a refresh on key events.
-
-        Paginates through the message queue (page_size=1, like the MQTT gateway)
-        until we reach a message we have already seen, collecting all new messages.
-        Triggers an immediate coordinator refresh when significant vehicle events
-        are detected:
-        - Engine start (messageType 323) → refresh to capture driving state
-        - Vehicle shutdown (offCar) → refresh to capture final parked state
-        - Charging started (plug-in) → refresh to update charging state
-        """
-        all_new_messages = []
-        page = 1
-        max_pages = 20  # Safety limit
-
-        while page <= max_pages:
-            try:
-                response = await self.client.get_alarm_messages(
-                    page_num=page, page_size=1
-                )
-            except Exception as e:
-                LOGGER.warning(
-                    "Failed to fetch alarm messages (page %d) for VIN %s: %s",
-                    page, self.vin, e,
-                )
-                break
-
-            if response is None or not getattr(response, "messages", None):
-                break
-
-            msg = response.messages[0]
-
-            # Skip messages for other VINs
-            if msg.vin and msg.vin != self.vin:
-                page += 1
-                continue
-
-            # Stop when we reach a message we have already seen
-            if msg.messageId is not None and msg.messageId == self._last_seen_message_id:
-                break
-
-            # Stop when we reach a message older than our last seen timestamp
-            if (
-                self._last_seen_message_ts is not None
-                and msg.message_time is not None
-                and msg.message_time <= self._last_seen_message_ts
-            ):
-                break
-
-            all_new_messages.append(msg)
-            page += 1
-
-        if not all_new_messages:
-            LOGGER.debug("No new alarm messages since last check for VIN %s", self.vin)
-            return
-
-        # On first run, just record where we are — do NOT act on historical messages.
-        # This prevents a burst of spurious refreshes every time HA restarts.
-        if self._last_seen_message_id is None:
-            latest = all_new_messages[0]
-            self._last_seen_message_id = latest.messageId
-            self._last_seen_message_ts = latest.message_time
-            LOGGER.debug(
-                "First message queue check for VIN %s — recording latest id=%s, "
-                "skipping %d historical message(s)",
-                self.vin,
-                latest.messageId,
-                len(all_new_messages),
-            )
-            return
-
-        LOGGER.info(
-            "%d new alarm message(s) detected for VIN %s",
-            len(all_new_messages),
-            self.vin,
-        )
-
-        # Record the latest (newest) message we have now seen
-        latest = all_new_messages[0]
-        self._last_seen_message_id = latest.messageId
-        self._last_seen_message_ts = latest.message_time
-
-        should_force_refresh = False
-        refresh_reason = None
-
-        for msg in all_new_messages:
-            title = (msg.title or "").lower()
-            content_text = (msg.content or "").lower()
-            msg_type = msg.messageType or ""
-
-            LOGGER.debug(
-                "Alarm message for VIN %s: type=%s id=%s title=%s",
-                self.vin,
-                msg_type,
-                msg.messageId,
-                msg.title,
-            )
-
-            # Engine start (highest priority — break immediately)
-            if msg_type == MESSAGE_TYPE_VEHICLE_START or any(
-                kw in title for kw in ["start", "engine on", "ignition on", "power on"]
-            ):
-                LOGGER.info(
-                    "Engine start event for VIN %s (type=%s title='%s')",
-                    self.vin,
-                    msg_type,
-                    msg.title,
-                )
-                should_force_refresh = True
-                refresh_reason = "engine start"
-                break
-
-            # Vehicle shutdown / offCar equivalent
-            if any(kw in title for kw in SHUTDOWN_TITLE_KEYWORDS) or any(
-                kw in content_text for kw in SHUTDOWN_TITLE_KEYWORDS
-            ):
-                LOGGER.info(
-                    "Vehicle shutdown event for VIN %s (title='%s')",
-                    self.vin,
-                    msg.title,
-                )
-                should_force_refresh = True
-                refresh_reason = "vehicle shutdown"
-
-            # Charging / plug-in event
-            if any(kw in title for kw in CHARGING_TITLE_KEYWORDS) or any(
-                kw in content_text for kw in CHARGING_TITLE_KEYWORDS
-            ):
-                LOGGER.info(
-                    "Charging/plug-in event for VIN %s (title='%s')",
-                    self.vin,
-                    msg.title,
-                )
-                should_force_refresh = True
-                refresh_reason = (
-                    f"{refresh_reason} + charging"
-                    if refresh_reason
-                    else "charging detected"
-                )
-
-        if should_force_refresh:
-            LOGGER.info(
-                "Forcing coordinator refresh for VIN %s — reason: %s",
-                self.vin,
-                refresh_reason,
-            )
-            await self.async_request_refresh()
-
     def register_command_error_event_entity(self, entity) -> None:
         """Register (or deregister, with entity=None) the command-error Event
         entity so the coordinator can fire events through it.
@@ -1238,9 +1052,12 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             LOGGER.debug("Could not record command error event: %s", e)
 
     async def async_shutdown(self):
-        """Release coordinator resources when the entry is unloaded."""
-        # Stop background tasks before anything else
-        await self._stop_message_polling()
+        """Release coordinator resources when the entry is unloaded.
+
+        Note: the SAICMGAccountPoller is NOT stopped here.  It is managed by
+        __init__.async_unload_entry, which stops the poller only when the last
+        coordinator for that account is unloaded.
+        """
         if self._shutdown_refresh_task and not self._shutdown_refresh_task.done():
             self._shutdown_refresh_task.cancel()
             with suppress(asyncio.CancelledError):
