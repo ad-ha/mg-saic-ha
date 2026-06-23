@@ -1221,24 +1221,36 @@ class SAICMGInstantPowerSensor(CoordinatorEntity, SensorEntity):
                 self.coordinator.data.get("charging"), self._data_source, None
             )
             if charging_data:
-                # Check if the vehicle is driving
+                # Determine whether there is real power flow to report.
+                # Two active cases:
+                #   1. Vehicle is driving (powerMode 2=On, 3=Start) — traction power
+                #   2. V2X discharging (bmsChrgSts 13) — export power, even though
+                #      powerMode will be 0 (Off) during a stationary V2X session.
                 status_data = self.coordinator.data.get("status")
-                power_mode = getattr(status_data.basicVehicleStatus, "powerMode", None)
-                if power_mode in [2, 3]:
+                power_mode = getattr(
+                    getattr(status_data, "basicVehicleStatus", None),
+                    "powerMode",
+                    None,
+                )
+                bms_chrg_sts = getattr(charging_data, "bmsChrgSts", None)
+                is_driving = power_mode in [2, 3]
+                is_v2x = bms_chrg_sts == 13
+
+                if is_driving or is_v2x:
                     # Get raw current and voltage
                     raw_current = getattr(charging_data, "bmsPackCrnt", None)
                     raw_voltage = getattr(charging_data, "bmsPackVol", None)
 
                     if raw_current is not None and raw_voltage is not None:
-                        # Apply decoding to current and voltage
+                        # decoded_current: positive = driving/charging into battery,
+                        # negative = V2X discharging out of battery.
                         decoded_current = raw_current * CHARGING_CURRENT_FACTOR - 1000
                         decoded_voltage = raw_voltage * CHARGING_VOLTAGE_FACTOR
 
-                        # Calculate power in kW
-                        power = decoded_current * decoded_voltage / 1000.0
-                        power = round(power, 2)
+                        # Power in kW — negative value indicates V2X export.
+                        power = round(decoded_current * decoded_voltage / 1000.0, 2)
 
-                        # Update retention (0 kW is a valid driving reading)
+                        # Update retention (0 kW is a valid reading)
                         self._last_valid_power = power
                         return power
                     else:
@@ -1247,8 +1259,8 @@ class SAICMGInstantPowerSensor(CoordinatorEntity, SensorEntity):
                         )
                         # Fall through to retention below
                 else:
-                    # Vehicle not in driving power mode — report 0 explicitly
-                    # but do NOT update the retained value.
+                    # No active power flow — report 0 explicitly but do NOT
+                    # update the retained value.
                     return 0
             else:
                 LOGGER.error("No charging data available for %s", self._name)
@@ -1456,7 +1468,8 @@ class SAICMGChargingCurrentSensor(CoordinatorEntity, SensorEntity):
                 charging_status = getattr(charging_data, "bmsChrgSts", None)
 
                 if charging_status in [0, 5]:
-                    # Explicitly not charging — return 0 without updating retention
+                    # Explicitly inactive (unplugged or connecting) — return 0 without updating retention
+                    # Note: status 13 (V2X_DISCHARGING) is NOT suppressed here — real current flows.
                     return 0
 
                 raw_value = getattr(charging_data, self._field, None)
@@ -1474,7 +1487,11 @@ class SAICMGChargingCurrentSensor(CoordinatorEntity, SensorEntity):
                     return None
 
                 if raw_value is not None and self._factor is not None:
-                    calculated_value = round(1000 - (raw_value * self._factor), 2)
+                    # Formula: raw * factor - 1000
+                    # Positive result = current flowing INTO battery (charging)
+                    # Negative result = current flowing OUT of battery (V2X discharge)
+                    # This matches the API model's decoded_current property convention.
+                    calculated_value = round((raw_value * self._factor) - 1000, 2)
                     self._last_valid_current = calculated_value
                     return calculated_value
                 else:
@@ -1577,7 +1594,8 @@ class SAICMGChargingPowerSensor(CoordinatorEntity, SensorEntity):
                 charging_status = getattr(charging_data, "bmsChrgSts", None)
 
                 if charging_status in [0, 5]:
-                    # Explicitly not charging — return 0 without updating retention
+                    # Explicitly inactive (unplugged or connecting) — return 0 without updating retention
+                    # Note: status 13 (V2X_DISCHARGING) is NOT suppressed — real power flows.
                     return 0
 
                 raw_current = getattr(charging_data, "bmsPackCrnt", None)
@@ -1596,7 +1614,9 @@ class SAICMGChargingPowerSensor(CoordinatorEntity, SensorEntity):
                     return None
 
                 if raw_current is not None and raw_voltage is not None:
-                    decoded_current = 1000 - raw_current * CHARGING_CURRENT_FACTOR
+                    # decoded_current: positive = charging, negative = V2X discharge.
+                    # Matches the API model's decoded_current property convention.
+                    decoded_current = raw_current * CHARGING_CURRENT_FACTOR - 1000
                     decoded_voltage = raw_voltage * CHARGING_VOLTAGE_FACTOR
                     power = round(decoded_current * decoded_voltage / 1000.0, 2)
                     self._last_valid_power = power
@@ -1648,8 +1668,10 @@ class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
       (no retention needed — the coordinator value is always authoritative).
     """
 
-    # Fields where charging_status in [0, 5] → explicit 0 return (not charging).
+    # Fields where charging_status in _INACTIVE_CHARGING_STATUSES → explicit 0 return.
     # These fields must NOT treat that explicit 0 as a retained value.
+    # Status 13 (V2X_DISCHARGING) is intentionally excluded from _INACTIVE_CHARGING_STATUSES
+    # — during V2X discharge, voltage and current carry real non-zero readings.
     _NOT_CHARGING_ZERO_FIELDS = {
         "bmsPackVol",
         "bmsPackCrnt",
@@ -1659,6 +1681,10 @@ class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
         "chrgngRmnngTime",
         "chrgngAddedElecRng",
     }
+    # Status codes where there is genuinely no charge/discharge activity and the
+    # _NOT_CHARGING_ZERO_FIELDS above should return 0 explicitly.
+    # V2X_DISCHARGING (13) is deliberately absent — it has live current/voltage data.
+    _INACTIVE_CHARGING_STATUSES = frozenset({0, 5})
 
     def __init__(
         self,
@@ -1736,7 +1762,7 @@ class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
 
                 # --- Fields that return explicit 0 when not charging ---
                 if self._field in self._NOT_CHARGING_ZERO_FIELDS:
-                    if charging_status in [0, 5]:
+                    if charging_status in self._INACTIVE_CHARGING_STATUSES:
                         # Explicit "not charging" zero — do NOT update retention
                         return 0
                     raw_value = getattr(charging_data, self._field, None)
@@ -1774,12 +1800,12 @@ class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
                 elif self._field == "bmsChrgSts":
                     raw_value = getattr(charging_data, self._field, None)
                     mapped = {
-                        0: "Not Charging",
+                        0: "Unplugged",
                         1: "Charging (AC)",
                         2: "Charging Finished",
                         3: "Charging",
                         4: "Fault Charging",
-                        5: "Idle",
+                        5: "Connecting",
                         6: "Unrecognized Connection",
                         7: "Plugged In",
                         8: "Charging Stopped",
