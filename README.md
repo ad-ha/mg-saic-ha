@@ -199,6 +199,21 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 * **Entities showing as 'Unavailable':** The integration respects API rate limits to prevent account lockouts. If an entity is temporarily unavailable, wait for the next scheduled update or use the `button.update_vehicle_data` entity to force a refresh.
 * **My App keeps logging me out:** As noted above, ensure your Home Assistant integration uses a **Secondary Account** credentials, not your primary mobile application credentials.
 
+## How to enable logging
+
+* Add the following lines to `configuration.yaml` (or your sub `logger.yaml` file if you have broken down `configuraiton.yaml` into smaller files)
+  ```
+  logger:
+  default: warning
+  
+  logs:
+    custom_components.mg_saic: debug
+  ```
+* Restart Home Assistant
+* Go to System -> Logs
+* Search for `mg_saic`
+* Click the 3 vertical dots
+* Choose `Show full logs`
 
 ## Contributing
 
