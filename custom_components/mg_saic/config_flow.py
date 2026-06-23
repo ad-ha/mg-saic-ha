@@ -132,10 +132,19 @@ class SAICMGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self.vin = selected_vin
             return await self.async_step_vehicle_capabilities()
 
+        # Filter out VINs that are already configured in HA so the user cannot
+        # accidentally add the same car twice.
+        already_configured = configured_vins(self.hass)
+        available_vehicles = [v for v in self.vehicles if v not in already_configured]
+
+        if not available_vehicles:
+            # Every VIN on this account is already set up — nothing to add.
+            return self.async_abort(reason="already_configured")
+
         # Add vehicle_type selection with fallback for user confirmation
         data_schema = vol.Schema(
             {
-                vol.Required("vin"): vol.In(self.vehicles),
+                vol.Required("vin"): vol.In(available_vehicles),
                 vol.Required("vehicle_type"): vol.In(["BEV", "PHEV", "HEV", "ICE"]),
             }
         )
