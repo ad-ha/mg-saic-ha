@@ -61,6 +61,7 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
         )
         self._attr_hvac_modes = [
             HVACMode.OFF,
+            HVACMode.HEAT,
             HVACMode.COOL,
             HVACMode.FAN_ONLY,
         ]
@@ -123,7 +124,9 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
         if climate_status == 3:
             return HVACMode.COOL
         elif climate_status == 2:
-            return HVACMode.FAN_ONLY
+            return HVACMode.HEAT
+        elif climate_status == 4:
+            return HVACMode.FAN_ONLY  # unconfirmed — assumed by elimination
 
         return HVACMode.OFF
 
@@ -145,8 +148,25 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
             # Get temperature index from coordinator
             temperature_idx = self.coordinator.get_ac_temperature_idx(temp_clamped)
 
-            if hvac_mode == HVACMode.COOL:
-                # Cooling mode
+            if hvac_mode == HVACMode.HEAT:
+                # Heat mode: confirmed from iSMART app traffic capture.
+                # The MG4 heats via PTC resistive heater, not the compressor.
+                #   AC_ON_OFF = 0x00 (explicit zero — absent is NOT the same)
+                #   TEMPERATURE = max index (19 = 33°C for EH32)
+                # AC_ON_OFF=0x01 always drives the compressor in cooling mode.
+                # AC_ON_OFF absent leaves the car in its previous state.
+                heat_temperature_idx = self.coordinator.get_ac_temperature_idx(
+                    int(self.max_temp)
+                )
+                await self._client.start_climate(
+                    self._vin,
+                    temperature_idx=heat_temperature_idx,
+                    fan_speed=2,  # AUTO fan required for PTC heater — confirmed from iSMART traffic
+                    ac_on=False,
+                )
+
+            elif hvac_mode == HVACMode.COOL:
+                # Explicit cooling mode
                 await self._client.start_climate(
                     self._vin,
                     temperature_idx=temperature_idx,
@@ -185,7 +205,7 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
         immediate_interval = self.coordinator.after_action_delay
         long_interval = self.coordinator.ac_long_interval
 
-        await self.async_set_hvac_mode(HVACMode.COOL)
+        await self.async_set_hvac_mode(HVACMode.HEAT)
         await self.coordinator.schedule_action_refresh(
             self._vin,
             immediate_interval,
