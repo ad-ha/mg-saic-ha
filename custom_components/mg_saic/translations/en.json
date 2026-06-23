@@ -43,7 +43,8 @@
       "auth": "Failed to authenticate, please check your credentials."
     },
     "abort": {
-      "vin": "Vehicle with VIN {vin} already configured."
+      "vin": "Vehicle with VIN {vin} already configured.",
+      "already_configured": "All vehicles on this account are already configured in Home Assistant."
     }
   },
   "services": {
