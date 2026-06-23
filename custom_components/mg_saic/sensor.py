@@ -560,6 +560,22 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 ),
             )
 
+        if coordinator.has_steering_wheel_heat:
+            sensors.append(
+                SAICMGSteeringWheelHeatSensor(
+                    coordinator,
+                    entry,
+                    "Steering Wheel Heat",
+                    "steeringHeatLevel",
+                    None,
+                    None,
+                    "mdi:steering",
+                    None,
+                    "basicVehicleStatus",
+                    "status",
+                ),
+            )
+
         # Add sensors
         async_add_entities(sensors, update_before_add=True)
 
@@ -1036,6 +1052,130 @@ class SAICMGHeatedSeatLevelSensor(CoordinatorEntity, SensorEntity):
             )
             return self._last_valid_level
         return None
+
+    @property
+    def device_info(self):
+        """Return device info."""
+        return self._device_info
+
+
+class SAICMGSteeringWheelHeatSensor(CoordinatorEntity, SensorEntity):
+    """Sensor to monitor the current state of the steering wheel heater.
+
+    The iSmart app exposes steering wheel heat as a simple On/Off toggle.
+    The API field steeringHeatLevel reflects the current state:
+      0 = Off
+      1 = On
+    steeringWheelHeatFailureReason carries a fault code (0 = no fault).
+
+    Retention: "Off" (raw=0) is a valid state — retained just like the
+    heated seat sensor so the entity does not go Unknown on a bad poll.
+
+    Control (switch) is NOT yet implemented — the RvcParamsId for steering
+    wheel heat is not defined in saic-python-client-ng 0.9.3.  The param ID
+    needs to be confirmed via mitmproxy capture of the iSmart app before a
+    switch entity can be safely added.  See GitHub issue tracker for progress.
+    """
+
+    def __init__(
+        self,
+        coordinator,
+        entry,
+        name,
+        field,
+        device_class,
+        unit,
+        icon,
+        state_class,
+        data_source="basicVehicleStatus",
+        data_type="status",
+    ):
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._name = name
+        self._field = field
+        self._attr_device_class = device_class
+        self._attr_native_unit_of_measurement = unit
+        self._attr_icon = icon
+        self._attr_state_class = state_class
+        self._data_source = data_source
+        self._data_type = data_type
+        vin_info = self.coordinator.vin_info
+        self._unique_id = f"{entry.entry_id}_{vin_info.vin}_steering_wheel_heat"
+
+        self._device_info = create_device_info(coordinator, entry.entry_id)
+
+        # Retain last mapped string value — "Off" (raw=0) is a legitimate
+        # reading and is stored just like the heated seat sensor.
+        self._last_valid_state: str | None = None
+
+    @property
+    def unique_id(self):
+        """Return the unique ID of the sensor."""
+        return self._unique_id
+
+    @property
+    def name(self):
+        """Return the name of the sensor."""
+        vin_info = self.coordinator.vin_info
+        return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
+
+    @property
+    def available(self):
+        """Return True if the entity is available."""
+        if self._last_valid_state is not None:
+            return True
+        data = self.coordinator.data.get(self._data_type)
+        return self.coordinator.last_update_success and data is not None
+
+    @property
+    def native_value(self):
+        """Return the current steering wheel heat state."""
+        try:
+            data = self.coordinator.data.get(self._data_type)
+            if data:
+                vehicle_status = getattr(data, self._data_source, None)
+                if vehicle_status:
+                    raw_value = getattr(vehicle_status, self._field, None)
+                    if raw_value is not None:
+                        mapped = {0: "Off", 1: "On"}.get(
+                            raw_value, f"Unknown ({raw_value})"
+                        )
+                        self._last_valid_state = mapped
+                        return mapped
+        except Exception as e:
+            LOGGER.error(
+                "Error retrieving steering wheel heat state for %s: %s",
+                self._name,
+                e,
+            )
+
+        # Return last retained value when API gives nothing
+        if self._last_valid_state is not None:
+            LOGGER.debug(
+                "Steering wheel heat sensor %s: no data from API, retaining '%s'",
+                self._name,
+                self._last_valid_state,
+            )
+            return self._last_valid_state
+        return None
+
+    @property
+    def extra_state_attributes(self):
+        """Expose the failure reason code as an extra attribute."""
+        try:
+            data = self.coordinator.data.get(self._data_type)
+            if data:
+                vehicle_status = getattr(data, self._data_source, None)
+                if vehicle_status:
+                    failure_reason = getattr(
+                        vehicle_status, "steeringWheelHeatFailureReason", None
+                    )
+                    if failure_reason is not None:
+                        return {"failure_reason": failure_reason}
+        except Exception:
+            pass
+        return {}
 
     @property
     def device_info(self):
