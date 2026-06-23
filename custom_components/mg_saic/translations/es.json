@@ -41,6 +41,9 @@
     },
     "error": {
       "auth": "Error de autenticación, por favor verifique sus credenciales."
+    },
+    "abort": {
+      "already_configured": "All vehicles on this account are already configured in Home Assistant."
     }
   },
   "services": {
