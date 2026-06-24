@@ -220,6 +220,14 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             config_entry.data.get("has_steering_wheel_heat", False),
         )
 
+        # Post-shutdown refresh sequence — enabled by default, opt-out via options.
+        # When enabled, the coordinator fires a rapid series of refreshes after
+        # detecting engine-off or door-lock, to catch plug-in within 1-3 minutes
+        # without relying on SAIC's slow/unreliable poweroff notifications.
+        self.enable_shutdown_refresh_sequence = config_entry.options.get(
+            "enable_shutdown_refresh_sequence", True
+        )
+
     # ── Account-level lock injection ─────────────────────────────────────────
 
     def set_api_lock(self, lock: asyncio.Lock) -> None:
@@ -342,6 +350,9 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         )
         self.has_steering_wheel_heat = options.get(
             "has_steering_wheel_heat", self.has_steering_wheel_heat
+        )
+        self.enable_shutdown_refresh_sequence = options.get(
+            "enable_shutdown_refresh_sequence", self.enable_shutdown_refresh_sequence
         )
 
         LOGGER.debug(
@@ -685,10 +696,12 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                     self.last_powered_off_time = datetime.now(timezone.utc)
                     LOGGER.info(
                         "Vehicle powered off detected for VIN %s — "
-                        "starting post-shutdown refresh sequence",
+                        "%s post-shutdown refresh sequence",
                         self.vin,
+                        "starting" if self.enable_shutdown_refresh_sequence else "skipping (disabled)",
                     )
-                    self._start_shutdown_refresh_sequence()
+                    if self.enable_shutdown_refresh_sequence:
+                        self._start_shutdown_refresh_sequence()
                 self.is_powered_on = False
 
             # Detect vehicle activity
@@ -710,17 +723,19 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             not status_data
             and self.is_charging
             and self._prev_is_powered_on
-            and self.is_powered_on  # still True because status block was skipped
+            and self.is_powered_on
         ):
             if self._shutdown_refresh_task is None or self._shutdown_refresh_task.done():
                 LOGGER.info(
                     "Charging detected after status unavailable for VIN %s — "
-                    "inferring shutdown, starting post-shutdown refresh sequence",
+                    "inferring shutdown, %s post-shutdown refresh sequence",
                     self.vin,
+                    "starting" if self.enable_shutdown_refresh_sequence else "skipping (disabled)",
                 )
                 self.last_powered_off_time = datetime.now(timezone.utc)
                 self.is_powered_on = False
-                self._start_shutdown_refresh_sequence()
+                if self.enable_shutdown_refresh_sequence:
+                    self._start_shutdown_refresh_sequence()
 
         # Update activity timestamp
         if recent_activity:
@@ -736,7 +751,23 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
 
     # Chech Vehicle Activity
     def _detect_activity(self, basic_status, charging_data=None):
-        """Detect recent activity based on changes in vehicle status and charging."""
+        """Detect recent activity based on changes in vehicle status and charging.
+
+        Lock-to-locked transition (0 → 1) is treated as a special trigger:
+        when the car locks while not already charging, it almost certainly means
+        the occupants have just arrived home and may be about to plug in.  We
+        start the post-shutdown rapid refresh sequence immediately on lock so
+        that plug-in is detected within 1-3 minutes without waiting for SAIC's
+        slow poweroff message or the background poll timer.
+
+        This is strictly better than waiting for poweroff detection because:
+        - Lock is a real-time state change from the vehicle status API (no SAIC
+          message queue delay)
+        - Charging port must be opened before locking, so lock always follows
+          plug-in at home
+        - The sequence exits as soon as is_charging is True, so false triggers
+          (locking at a shop) just run a few extra polls then stop harmlessly
+        """
         activity_keys = [
             "lockStatus",
             "driverDoor",
@@ -750,6 +781,7 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             "engineStatus",
         ]
         detected_activity = False
+        lock_just_engaged = False
 
         # Check for door, lock, and other physical activity
         for key in activity_keys:
@@ -762,6 +794,9 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                     last_value,
                     current_value,
                 )
+                # Detect the specific locked transition (unlocked → locked)
+                if key == "lockStatus" and last_value == 0 and current_value == 1:
+                    lock_just_engaged = True
                 setattr(self, f"_last_{key}", current_value)
                 detected_activity = True
 
@@ -789,6 +824,29 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                 )
                 self._last_charging_status = charging_status
                 detected_activity = True
+
+        # Lock-engaged trigger: start the post-shutdown rapid refresh sequence
+        # when the car locks while not already actively charging.
+        # This catches the "just arrived home, about to plug in" scenario without
+        # any dependency on the slow SAIC poweroff notification.
+        if (
+            lock_just_engaged
+            and not self.is_charging
+            and self.enable_shutdown_refresh_sequence
+        ):
+            if self._shutdown_refresh_task is None or self._shutdown_refresh_task.done():
+                LOGGER.info(
+                    "Lock engaged for VIN %s while not charging — "
+                    "starting post-shutdown refresh sequence to catch plug-in",
+                    self.vin,
+                )
+                self._start_shutdown_refresh_sequence()
+            else:
+                LOGGER.debug(
+                    "Lock engaged for VIN %s but shutdown sequence already running — "
+                    "not starting a second one",
+                    self.vin,
+                )
 
         # Log no activity detected
         if not detected_activity:
