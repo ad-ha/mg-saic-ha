@@ -209,33 +209,28 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
         )
 
     async def async_set_temperature(self, **kwargs):
-        """Set new target temperature."""
-        immediate_interval = self.coordinator.after_action_delay
-        long_interval = self.coordinator.ac_long_interval
+        """Update the target temperature in local state only.
 
+        Temperature is stored locally and applied the next time the user
+        explicitly changes HVAC mode (which sends the actual command).
+        Changing temperature alone does NOT send a command — this preserves
+        the 3-command-per-day limit for intentional AC actions only.
+        """
         temperature = kwargs.get(ATTR_TEMPERATURE)
         if temperature is None:
             return
 
-        # Clamp temperature within allowed range
         min_temp = self.min_temp
         max_temp = self.max_temp
-
         temp_clamped = int(max(min_temp, min(max_temp, round(temperature))))
 
         if temp_clamped != self._attr_target_temperature:
             LOGGER.debug(
-                f"Updating target temperature from {self._attr_target_temperature} to {temp_clamped}"
+                "Target temperature updated to %s°C (will apply on next AC command)",
+                temp_clamped,
             )
             self._attr_target_temperature = temp_clamped
-
-            if self.hvac_mode != HVACMode.OFF:
-                await self.async_set_hvac_mode(self.hvac_mode)
-                await self.coordinator.schedule_action_refresh(
-                    self._vin,
-                    immediate_interval,
-                    long_interval,
-                )
+            self.async_write_ha_state()
 
     @property
     def fan_mode(self):
@@ -243,23 +238,19 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
         return self._attr_fan_mode
 
     async def async_set_fan_mode(self, fan_mode):
-        """Set the fan mode."""
-        immediate_interval = self.coordinator.after_action_delay
-        long_interval = self.coordinator.ac_long_interval
+        """Update the fan mode in local state only.
 
+        Fan mode is stored locally and applied the next time the user
+        explicitly changes HVAC mode (which sends the actual command).
+        Changing fan mode alone does NOT send a command — this preserves
+        the 3-command-per-day limit for intentional AC actions only.
+        """
         if fan_mode in self._attr_fan_modes:
             self._attr_fan_mode = fan_mode
-            LOGGER.debug(f"Set fan mode to {fan_mode}")
-
-            if self.hvac_mode != HVACMode.OFF:
-                await self.async_set_hvac_mode(self.hvac_mode)
-
-                # Schedule data refresh
-                await self.coordinator.schedule_action_refresh(
-                    self._vin,
-                    immediate_interval,
-                    long_interval,
-                )
+            LOGGER.debug(
+                "Fan mode updated to %s (will apply on next AC command)", fan_mode
+            )
+            self.async_write_ha_state()
         else:
             LOGGER.warning("Unsupported fan mode: %s", fan_mode)
 
