@@ -86,6 +86,7 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 - Last Powered Off
 - Last Powered On
 - Last Vehicle Activity
+- Steering Wheel Heat
 
 #### Tyre Pressure
 - Front Left Tyre Pressure
