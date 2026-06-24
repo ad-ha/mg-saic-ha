@@ -310,7 +310,8 @@
           "tailgate_long_interval": "Intervalo Longo Porta da Bagageira (em minutos)",
           "target_soc_long_interval": "Intervalo Longo SOC Alvo (em minutos)",
           "charging_current_long_interval": "Intervalo Longo Corrente de Carregamento (em minutos)",
-          "has_steering_wheel_heat": "Tem aquecimento no volante"
+          "has_steering_wheel_heat": "Tem aquecimento no volante",
+          "enable_shutdown_refresh_sequence": "Ativar sequência de atualização pós-desligamento"
         },
         "description": "Definir configurações adicionais para Integração MG/SAIC",
         "title": "Opções MG/SAIC"
