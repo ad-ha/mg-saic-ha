@@ -272,8 +272,14 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
         )
 
     def _fan_speed_to_int(self):
-        """Convert fan mode to integer value expected by the API."""
-        return {FAN_LOW: 1, FAN_MEDIUM: 3, FAN_HIGH: 5}.get(self._attr_fan_mode, 3)
+        """Convert fan mode to integer value expected by the API.
+
+        Fan speed 5 is reserved for start_front_defrost in the upstream API
+        client — sending fan_speed=5 via control_climate triggers the front
+        windscreen heater, not simply a high fan speed.  Cap normal climate
+        fan control at 4 so FAN_HIGH does not accidentally activate defrost.
+        """
+        return {FAN_LOW: 1, FAN_MEDIUM: 2, FAN_HIGH: 4}.get(self._attr_fan_mode, 2)
 
     @property
     def device_info(self):
