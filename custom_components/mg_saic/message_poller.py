@@ -209,6 +209,13 @@ class SAICMGAccountPoller:
         Paginates through the message queue (page_size=1) until we reach a
         message we have already seen.  Safety-limited to 20 pages so a
         large backlog on first run does not block the loop indefinitely.
+
+        401 handling: when a coordinator on the same account re-auths (e.g.
+        after a generic response or retry), it can invalidate the shared
+        session token.  A 401 from get_alarm_messages is therefore expected
+        occasionally and is handled by re-logging in and retrying once within
+        the same poll cycle.  This avoids the 60-second gap before the next
+        poll and keeps WARNING noise out of the log for a known benign error.
         """
         new_messages: list = []
         page = 1
@@ -221,13 +228,36 @@ class SAICMGAccountPoller:
                         page_num=page, page_size=1
                     )
                 except Exception as exc:
-                    LOGGER.warning(
-                        "AccountPoller %s: failed to fetch messages (page %d): %s",
-                        self._account_key,
-                        page,
-                        exc,
-                    )
-                    break
+                    exc_str = str(exc)
+                    # 401 means the session token was invalidated by a concurrent
+                    # coordinator re-auth.  Re-login and retry this page once.
+                    if "401" in exc_str:
+                        LOGGER.debug(
+                            "AccountPoller %s: 401 on message poll (token invalidated "
+                            "by concurrent coordinator re-auth) — re-logging in",
+                            self._account_key,
+                        )
+                        try:
+                            await self._client.login()
+                            # Retry the same page after re-auth
+                            response = await self._client.get_alarm_messages(
+                                page_num=page, page_size=1
+                            )
+                        except Exception as retry_exc:
+                            LOGGER.warning(
+                                "AccountPoller %s: re-auth and retry failed: %s",
+                                self._account_key,
+                                retry_exc,
+                            )
+                            break
+                    else:
+                        LOGGER.warning(
+                            "AccountPoller %s: failed to fetch messages (page %d): %s",
+                            self._account_key,
+                            page,
+                            exc,
+                        )
+                        break
 
                 if not response or not getattr(response, "messages", None):
                     break
