@@ -296,6 +296,13 @@ class SAICMGOptionsFlowHandler(config_entries.OptionsFlow):
                         self.config_entry.data.get("has_steering_wheel_heat", False),
                     ),
                 ): bool,
+                # Behaviour options
+                vol.Optional(
+                    "enable_shutdown_refresh_sequence",
+                    default=self.options.get(
+                        "enable_shutdown_refresh_sequence", True
+                    ),
+                ): bool,
                 # Update Intervals in minutes
                 vol.Optional(
                     "update_interval",
