@@ -194,6 +194,62 @@ The MG/SAIC Custom Integration provides the following sensors and binary sensors
 **Note: Actions (Services) can be accessed and activated from the Actions menu under Developer Tools.**
 ![image](https://github.com/user-attachments/assets/14be0d41-ae65-4738-8bc0-5b0f743c290f)
 
+## Climate Control
+
+The MG SAIC integration exposes a climate entity for remote control of the
+vehicle's air conditioning. Because SAIC limits remote commands to
+ **3 per cycle between starting the car with a key**, the integration is designed to use commands as
+efficiently as possible.
+
+### How commands are used
+
+The SAIC API counts each instruction sent to the car as one command. To avoid
+wasting your daily allowance, only explicit HVAC mode changes send a command.
+Adjusting fan speed or temperature on their own does not.
+
+**Uses a command:**
+- Turning the AC on (HVAC mode set to `Cool` or `Fan Only`)
+- Turning the AC off (HVAC mode set to `Off`)
+- Switching between `Cool` and `Fan Only`
+
+**Does NOT use a command:**
+- Changing fan speed (`Low`, `Medium`, `High`)
+- Changing target temperature
+
+### Recommended usage
+
+Set your preferred temperature and fan speed **first**, then turn the AC on.
+The command sent to the car will include whatever fan speed and temperature you
+have already set in HA. A complete remote pre-conditioning session uses exactly
+**2 commands** — one to turn on, one to turn off — leaving one spare for a
+lock or unlock action.
+
+If you want to change temperature or fan speed while the AC is already running,
+update the values in HA first, then turn the AC off and back on. This applies
+your new settings using 2 commands.
+
+### Fan speeds
+
+| HA setting | API speed | Notes |
+|---|---|---|
+| Low | 1 | Gentle airflow |
+| Medium | 2 | Default when turning on |
+| High | 4 | Maximum normal fan speed |
+
+> **Note:** API speed 5 is reserved for the **Front Defrost** command and is
+> not used for normal fan control. Selecting High fan speed will never
+> accidentally trigger the windscreen heater.
+
+### HVAC modes
+
+| Mode | Behaviour |
+|---|---|
+| `Cool` | Runs the compressor with your chosen temperature and fan speed |
+| `Fan Only` | Runs the fan without the compressor (blowing only) |
+| `Off` | Stops all climate activity |
+
+
+
 ## 💡 Troubleshooting & FAQ
 
 * **"Invalid Credentials" or Connection Timeouts:** Ensure you are choosing the correct region (EU, China, Australia, Rest of World) matching your mobile app setup.
