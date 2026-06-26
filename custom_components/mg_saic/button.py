@@ -3,6 +3,7 @@
 import asyncio
 from homeassistant.components.button import ButtonEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from .api import CommandsLimitReachedException
 from .const import (
     DOMAIN,
     LOGGER,
@@ -94,8 +95,11 @@ class SAICMGTriggerAlarmButton(CoordinatorEntity, ButtonEntity):
                 immediate_interval,
                 long_interval,
             )
+        except CommandsLimitReachedException:
+            await self.coordinator.notify_command_limit_reached(self._vin)
         except Exception as e:
             LOGGER.error("Error triggering alarm for VIN %s: %s", self._vin, e)
+            self.coordinator.record_command_error("Error triggering alarm", e)
 
     @property
     def device_info(self):
@@ -126,6 +130,7 @@ class SAICMGUpdateDataButton(CoordinatorEntity, ButtonEntity):
             LOGGER.info("Data update triggered for VIN: %s", self._vin)
         except Exception as e:
             LOGGER.error("Error triggering data update for VIN %s: %s", self._vin, e)
+            self.coordinator.record_command_error("Error triggering data update", e)
 
     @property
     def device_info(self):

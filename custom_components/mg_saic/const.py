@@ -103,9 +103,151 @@ DATA_100_DECIMAL_CORRECTION = 0.01
 CHARGING_CURRENT_FACTOR = 0.05
 CHARGING_VOLTAGE_FACTOR = 0.25
 
+# Per-vehicle-series profiles.
+#
+# The SAIC API exposes some values (notably AC temperature index scale and
+# totalBatteryCapacity) inconsistently or unreliably across models, so these
+# are tracked here per series rather than trusted from the API response.
+# Series codes come from VinInfo.series (e.g. "EH32SP3", "MIS3E S") and are
+# matched as a substring, consistent with the existing detection pattern.
+#
+# Fields:
+#   min_temp / max_temp / temp_offset: AC temperature index mapping. See
+#       MGSAICDataUpdateCoordinator.get_ac_temperature_idx for usage.
+#   battery_capacity_kwh: known-good usable battery capacity in kWh, used to
+#       override the API's totalBatteryCapacity field when it is known to be
+#       inaccurate. None means "trust the API value" (no override).
+#
+# Sources: EH32 (MG4 Electric) values were already present in this codebase
+# prior to this table's introduction. MIS3E (MGS6 EV) values confirmed
+# against MG UK's official spec sheet and cross-referenced with EV Database,
+# electrive.com, and Carwow (77 kWh gross / 74.3 kWh usable, same across
+# single-motor Long Range and Dual Motor variants).
+VEHICLE_PROFILES = {
+    "EH32": {  # MG4 Electric
+        "min_temp": 17,
+        "max_temp": 33,
+        "temp_offset": 3,
+        "battery_capacity_kwh": None,
+        # remoteClimateStatus values that indicate AC is running in cooling mode.
+        # On MG4, status=3 is confirmed cooling and status=2 is fan-only blowing.
+        "climate_status_cool": {3},
+        "climate_status_fan_only": {2},
+        # Fan speed values for cooling mode (1=low, 2=med, 3=high).
+        # On MG4 values 4 and 5 trigger heating/defrost — avoid them.
+        "fan_speed_low": 1,
+        "fan_speed_medium": 3,
+        "fan_speed_high": 5,
+        # Temperature index direction: False = forward (low temp -> low idx)
+        "temp_idx_inverted": False,
+        # Whether the car supports setting a Target SOC via the SAIC API.
+        # True for most BEV/PHEV models; set False for models where the iSmart
+        # app does not expose this control (prevents an always-Unknown entity).
+        "supports_target_soc": True,
+        # Whether the fuelRangeElec field in basicVehicleStatus is reliable for
+        # this model.  When False the electric range sensor falls back to
+        # bmsEstdElecRng from chrgMgmtData (estimated range after full charge)
+        # instead of the per-second live value, which the API returns as -128.
+        "reliable_fuel_range_elec": True,
+    },
+    "MIS3E": {  # MGS6 EV (Long Range and Dual Motor)
+        "min_temp": 16,
+        "max_temp": 28,
+        "temp_offset": 2,
+        "battery_capacity_kwh": 74.3,
+        # On MGS6, remoteClimateStatus reflects fan speed during cooling:
+        #   1 = cooling low fan (assumed, not yet tested)
+        #   2 = cooling medium fan (confirmed)
+        #   3 = cooling high fan (confirmed)
+        #   4 = heating/defrost, 6 = driving ventilation (both shown as OFF)
+        "climate_status_cool": {1, 2, 3},
+        "climate_status_fan_only": set(),  # MGS6 does not expose fan-only via status
+        # On MGS6, fan speeds 4 and 5 trigger heating and defrost respectively.
+        # Cooling fan speeds are 1 (low), 2 (medium), 3 (high).
+        "fan_speed_low": 1,
+        "fan_speed_medium": 2,
+        "fan_speed_high": 3,
+        # Temperature index direction: True = inverted (low temp -> high idx)
+        # Confirmed: idx=14 at 16°C correctly cooled the MGS6.
+        "temp_idx_inverted": True,
+        "supports_target_soc": True,
+        "reliable_fuel_range_elec": True,
+    },
+    "AS33P": {  # MG HS PHEV (2025/2026 Super Hybrid)
+        # Series string from API: 'AS33P S'
+        # Battery capacity: API reports totalBatteryCapacity=725 (→ 72.5 kWh with
+        # ×0.1 factor), which is incorrect by a factor of ~3.  The HS PHEV has a
+        # 24.7 kWh usable PHEV battery; override here so the sensor shows correctly.
+        # lastChargeEndingPower similarly reports 724 (÷10 = 72.4 kWh) — the profile
+        # battery_capacity_kwh override covers totalBatteryCapacity; lastChargeEndingPower
+        # is corrected via PHEV_BATTERY_CAPACITY_CORRECTION_FACTOR in the profile.
+        "min_temp": 16,
+        "max_temp": 28,
+        "temp_offset": 2,
+        "battery_capacity_kwh": 24.7,
+        "climate_status_cool": {3},
+        "climate_status_fan_only": {2},
+        "fan_speed_low": 1,
+        "fan_speed_medium": 3,
+        "fan_speed_high": 5,
+        "temp_idx_inverted": False,
+        # iSmart app does not expose Target SOC control on some variants of the
+        # HS PHEV.  However, other AS33P owners report it does work on their car,
+        # so we cannot suppress the entity at the profile level.  The entity will
+        # show Unknown/unavailable on cars where the API does not support it.
+        "supports_target_soc": True,
+        # iSmart app does not expose Charging Current Limit for the HS PHEV —
+        # attempting to set it returns a "Target SOC could not be found" error.
+        # Suppress both the status sensor and the select control for this model.
+        "supports_charging_current_limit": False,
+        # The API returns fuelRangeElec=-128 (sentinel) for this model when the car
+        # is parked — the live electric range field is not populated.  Fall back to
+        # bmsEstdElecRng (estimated range after full charge) from chrgMgmtData.
+        "reliable_fuel_range_elec": False,
+        # Correction factor for energy-based fields that the API reports inflated
+        # by approximately ×3 (totalBatteryCapacity, lastChargeEndingPower).
+        # 24.7 kWh / 72.5 kWh (API) ≈ 0.3407; applying ×0.1 factor then ×(1/3)
+        # is equivalent to using the raw value ÷ 30 rather than ÷ 10.
+        # This is stored as a divisor multiplier applied on top of the standard
+        # DATA_DECIMAL_CORRECTION — see SAICMGChargingSensor for usage.
+        "charging_capacity_correction": 1 / 3,
+    },
+}
+
+# Fallback profile used when the vehicle's series does not match any entry
+# in VEHICLE_PROFILES above (e.g. MG5, ZS EV, or any model not yet profiled).
+# Values match the original integration behaviour so existing users are unaffected.
+DEFAULT_VEHICLE_PROFILE = {
+    "min_temp": 16,
+    "max_temp": 28,
+    "temp_offset": 2,
+    "battery_capacity_kwh": None,
+    "climate_status_cool": {3},
+    "climate_status_fan_only": {2},
+    "fan_speed_low": 1,
+    "fan_speed_medium": 3,
+    "fan_speed_high": 5,
+    "temp_idx_inverted": False,
+    # Default: assume Target SOC is supported (safe for BEV/PHEV unless known otherwise).
+    "supports_target_soc": True,
+    # Default: assume Charging Current Limit is supported (correct for most BEV/PHEV).
+    "supports_charging_current_limit": True,
+    # Default: assume the fuelRangeElec field is reliable (correct for most BEVs).
+    "reliable_fuel_range_elec": True,
+    # Default: no capacity correction needed (API value is correct for most models).
+    "charging_capacity_correction": None,
+}
+
 # Base update intervals
-UPDATE_INTERVAL = timedelta(minutes=60)
-UPDATE_INTERVAL_CHARGING = timedelta(minutes=10)
+# UPDATE_INTERVAL is the idle/parked background refresh — a safety net to keep
+# data from going completely stale.  Now that the SAICMGAccountPoller triggers
+# an immediate refresh on engine-start, shutdown, and charging events, this
+# interval only matters when the car is genuinely sitting idle with nothing
+# happening.  30 minutes is a good balance: fresh enough to be useful, infrequent
+# enough not to drain the 12V battery or hit API rate limits.
+# Users can still override this lower via the integration options if they prefer.
+UPDATE_INTERVAL = timedelta(minutes=30)
+UPDATE_INTERVAL_CHARGING = timedelta(minutes=5)
 UPDATE_INTERVAL_POWERED = timedelta(minutes=15)
 
 # Additional Update Intervals
@@ -134,6 +276,7 @@ DEFAULT_CHARGING_CURRENT_LONG_INTERVAL = timedelta(minutes=5)
 CONF_HAS_SUNROOF = "has_sunroof"
 CONF_HAS_HEATED_SEATS = "has_heated_seats"
 CONF_HAS_BATTERY_HEATING = "has_battery_heating"
+CONF_HAS_STEERING_WHEEL_HEAT = "has_steering_wheel_heat"
 
 # Generic response tresholds
 GENERIC_RESPONSE_SOC_THRESHOLD = 1000
@@ -141,12 +284,22 @@ GENERIC_RESPONSE_STATUS_THRESHOLD = 0
 GENERIC_RESPONSE_TEMPERATURE = -40
 GENERIC_RESPONSE_EXTREME_TEMPERATURE = -128
 
+# Sanity bounds for the API's statusTime field. A response whose timestamp
+# falls outside these bounds relative to "now" is treated as untrustworthy
+# and discarded (see SAICMGDataUpdateCoordinator._is_status_timestamp_valid).
+STATUS_TIMESTAMP_FUTURE_TOLERANCE = timedelta(minutes=5)
+STATUS_TIMESTAMP_MAX_AGE = timedelta(hours=24)
+
 # Retry configuration
 RETRY_LIMIT = 5
 RETRY_BACKOFF_FACTOR = 15
 
-# Charging status codes indicating that the vehicle is charging
-CHARGING_STATUS_CODES = {1, 3, 10, 12}
+# Charging status codes indicating that the vehicle is actively using the
+# charging/discharging system.  Used by the coordinator to select the
+# charging update interval and keep the session alive.
+# 13 = V2X_DISCHARGING — included so V2X export sessions get the same
+# frequent refresh cadence as AC/DC charging sessions.
+CHARGING_STATUS_CODES = {1, 3, 10, 12, 13}
 
 # Charging Current Limit options
 CHARGING_CURRENT_OPTIONS = ["0A (Ignore)", "6A", "8A", "16A", "Max"]
@@ -157,6 +310,7 @@ PLATFORMS = [
     "button",
     "climate",
     "device_tracker",
+    "event",
     "lock",
     "number",
     "select",

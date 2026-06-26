@@ -11,6 +11,15 @@ from .const import LOGGER, REGION_BASE_URIS, BatterySoc, ChargeCurrentLimitOptio
 from .logic import normalize_sunroof_action
 
 
+class CommandsLimitReachedException(Exception):
+    """Raised when the SAIC API returns return code 8 (too many remote commands).
+
+    The vehicle will not accept further remote commands until it is started
+    with the physical key. This resets the remote command counter.
+    """
+    pass
+
+
 class SAICMGAPIClient:
     def __init__(
         self,
@@ -41,7 +50,7 @@ class SAICMGAPIClient:
                     await self.login()
 
     async def _make_api_call(self, api_call, *args, **kwargs):
-        """Wrap API calls to handle token expiration and re-login."""
+        """Wrap API calls to handle token expiration, re-login, and command limits."""
         await self._ensure_initialized()
         try:
             return await api_call(*args, **kwargs)
@@ -63,6 +72,12 @@ class SAICMGAPIClient:
                 except Exception as retry_e:
                     LOGGER.error(f"API call failed after re-login: {retry_e}")
                     raise
+            elif "return code: 8" in str(e) or "too frequent" in error_message:
+                LOGGER.warning(
+                    "Remote command limit reached (return code 8). "
+                    "Vehicle must be started with the physical key to reset the counter."
+                )
+                raise CommandsLimitReachedException(str(e))
             else:
                 LOGGER.error(f"API call failed: {e}")
                 raise

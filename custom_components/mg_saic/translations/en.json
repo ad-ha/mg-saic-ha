@@ -35,7 +35,8 @@
         "data": {
           "has_sunroof": "Has Sunroof",
           "has_heated_seats": "Has Heated Seats",
-          "has_battery_heating": "Has Battery Heating"
+          "has_battery_heating": "Has Battery Heating",
+          "has_steering_wheel_heat": "Has Steering Wheel Heat"
         }
       }
     },
@@ -43,7 +44,8 @@
       "auth": "Failed to authenticate, please check your credentials."
     },
     "abort": {
-      "vin": "Vehicle with VIN {vin} already configured."
+      "vin": "Vehicle with VIN {vin} already configured.",
+      "already_configured": "All vehicles on this account are already configured in Home Assistant."
     }
   },
   "services": {
@@ -307,7 +309,9 @@
           "sunroof_long_interval": "Sunroof Long Interval (in minutes)",
           "tailgate_long_interval": "Tailgate Long Interval (in minutes)",
           "target_soc_long_interval": "Target SOC Long Interval (in minutes)",
-          "charging_current_long_interval": "Charging Current Long Interval (in minutes)"
+          "charging_current_long_interval": "Charging Current Long Interval (in minutes)",
+          "has_steering_wheel_heat": "Has Steering Wheel Heat",
+          "enable_shutdown_refresh_sequence": "Enable Post-Shutdown Refresh Sequence"
         },
         "description": "Define additional settings for MG/SAIC Integration",
         "title": "MG/SAIC Options"

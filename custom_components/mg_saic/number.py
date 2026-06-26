@@ -26,7 +26,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
     # Check if the vehicle supports setting Target SOC
     vehicle_type = coordinator.vehicle_type
-    if vehicle_type in ["BEV", "PHEV"]:
+    if vehicle_type in ["BEV", "PHEV"] and coordinator.supports_target_soc:
         number_entities.append(
             SAICMGTargetSOCNumber(coordinator, client, entry, vin_info, vin)
         )

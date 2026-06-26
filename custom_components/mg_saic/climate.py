@@ -15,6 +15,7 @@ from homeassistant.const import (
     ATTR_TEMPERATURE,
 )
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from .api import CommandsLimitReachedException
 from .const import (
     DOMAIN,
     LOGGER,
@@ -113,19 +114,52 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
 
     @property
     def hvac_mode(self):
-        """Return the current HVAC mode."""
+        """Return the current HVAC mode.
+
+        Priority:
+        1. API-derived state (from remoteClimateStatus) when available — this
+           reflects what the car actually reports and keeps HA in sync after
+           the car responds to a command.
+        2. _attr_hvac_mode as fallback when API data is missing.
+
+        remoteClimateStatus values are model-specific — see VEHICLE_PROFILES
+        in const.py and coordinator.climate_status_cool / climate_status_fan_only.
+
+        MGS6: statuses 1/2/3 -> COOL (fan-speed dependent), 4/6 -> OFF
+        MG4:  status 3 -> COOL, status 2 -> FAN_ONLY
+        """
         status = self.coordinator.data.get("status")
-        if not status or not status.basicVehicleStatus:
-            return HVACMode.OFF
+        if status and status.basicVehicleStatus:
+            climate_status = getattr(
+                status.basicVehicleStatus, "remoteClimateStatus", 0
+            )
+            # A non-zero status means the car has reported an active climate state.
+            # Trust it and update _attr_hvac_mode to stay in sync.
+            if climate_status in self.coordinator.climate_status_cool:
+                self._attr_hvac_mode = HVACMode.COOL
+                return HVACMode.COOL
+            elif climate_status in self.coordinator.climate_status_fan_only:
+                self._attr_hvac_mode = HVACMode.FAN_ONLY
+                return HVACMode.FAN_ONLY
+            elif climate_status == 0:
+                # Car explicitly reports Off — but only trust this if our local
+                # state is also Off, or if we have no local state.  If we just
+                # sent a Cool command, the car takes a few seconds to respond;
+                # status=0 during that window should not override the command.
+                if self._attr_hvac_mode in (HVACMode.OFF, None):
+                    return HVACMode.OFF
+                # Local state says we sent a command — keep it until the car
+                # confirms (next coordinator refresh).
+                return self._attr_hvac_mode
+            else:
+                # Unknown/unhandled status (e.g. 4=heat, 6=driving ventilation)
+                # — show as Off in HA; do not override local state.
+                if self._attr_hvac_mode in (HVACMode.OFF, None):
+                    return HVACMode.OFF
+                return self._attr_hvac_mode
 
-        climate_status = getattr(status.basicVehicleStatus, "remoteClimateStatus", 0)
-
-        if climate_status == 3:
-            return HVACMode.COOL
-        elif climate_status == 2:
-            return HVACMode.FAN_ONLY
-
-        return HVACMode.OFF
+        # No API data available — fall back to last known local state
+        return self._attr_hvac_mode if self._attr_hvac_mode is not None else HVACMode.OFF
 
     async def async_set_hvac_mode(self, hvac_mode):
         """Set the HVAC mode."""
@@ -133,6 +167,7 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
             if hvac_mode == HVACMode.OFF:
                 await self._client.stop_ac(self._vin)
                 self._attr_hvac_mode = HVACMode.OFF
+                self.async_write_ha_state()
                 return
 
             # Common parameters for climate modes
@@ -166,6 +201,7 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
                 return
 
             self._attr_hvac_mode = hvac_mode
+            self.async_write_ha_state()
 
             # Schedule data refresh
             immediate_interval = self.coordinator.after_action_delay
@@ -177,8 +213,11 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
                 long_interval,
             )
 
+        except CommandsLimitReachedException:
+            await self.coordinator.notify_command_limit_reached(self._vin)
         except Exception as e:
             LOGGER.error("Error setting HVAC mode for VIN %s: %s", self._vin, e)
+            self.coordinator.record_command_error("Error setting HVAC mode", e)
 
     async def async_turn_on(self):
         """Turn the climate entity on."""
@@ -205,33 +244,28 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
         )
 
     async def async_set_temperature(self, **kwargs):
-        """Set new target temperature."""
-        immediate_interval = self.coordinator.after_action_delay
-        long_interval = self.coordinator.ac_long_interval
+        """Update the target temperature in local state only.
 
+        Temperature is stored locally and applied the next time the user
+        explicitly changes HVAC mode (which sends the actual command).
+        Changing temperature alone does NOT send a command — this preserves
+        the 3-command-per-day limit for intentional AC actions only.
+        """
         temperature = kwargs.get(ATTR_TEMPERATURE)
         if temperature is None:
             return
 
-        # Clamp temperature within allowed range
         min_temp = self.min_temp
         max_temp = self.max_temp
-
         temp_clamped = int(max(min_temp, min(max_temp, round(temperature))))
 
         if temp_clamped != self._attr_target_temperature:
             LOGGER.debug(
-                f"Updating target temperature from {self._attr_target_temperature} to {temp_clamped}"
+                "Target temperature updated to %s°C (will apply on next AC command)",
+                temp_clamped,
             )
             self._attr_target_temperature = temp_clamped
-
-            if self.hvac_mode != HVACMode.OFF:
-                await self.async_set_hvac_mode(self.hvac_mode)
-                await self.coordinator.schedule_action_refresh(
-                    self._vin,
-                    immediate_interval,
-                    long_interval,
-                )
+            self.async_write_ha_state()
 
     @property
     def fan_mode(self):
@@ -239,23 +273,19 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
         return self._attr_fan_mode
 
     async def async_set_fan_mode(self, fan_mode):
-        """Set the fan mode."""
-        immediate_interval = self.coordinator.after_action_delay
-        long_interval = self.coordinator.ac_long_interval
+        """Update the fan mode in local state only.
 
+        Fan mode is stored locally and applied the next time the user
+        explicitly changes HVAC mode (which sends the actual command).
+        Changing fan mode alone does NOT send a command — this preserves
+        the 3-command-per-day limit for intentional AC actions only.
+        """
         if fan_mode in self._attr_fan_modes:
             self._attr_fan_mode = fan_mode
-            LOGGER.debug(f"Set fan mode to {fan_mode}")
-
-            if self.hvac_mode != HVACMode.OFF:
-                await self.async_set_hvac_mode(self.hvac_mode)
-
-                # Schedule data refresh
-                await self.coordinator.schedule_action_refresh(
-                    self._vin,
-                    immediate_interval,
-                    long_interval,
-                )
+            LOGGER.debug(
+                "Fan mode updated to %s (will apply on next AC command)", fan_mode
+            )
+            self.async_write_ha_state()
         else:
             LOGGER.warning("Unsupported fan mode: %s", fan_mode)
 
@@ -268,8 +298,17 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
         )
 
     def _fan_speed_to_int(self):
-        """Convert fan mode to integer value expected by the API."""
-        return {FAN_LOW: 1, FAN_MEDIUM: 3, FAN_HIGH: 5}.get(self._attr_fan_mode, 3)
+        """Convert fan mode to integer value expected by the API.
+
+        Fan speed values are model-specific — values 4 and 5 trigger heating
+        and defrost on the MGS6, so per-model values are stored in the
+        coordinator's fan_speed_low/medium/high from VEHICLE_PROFILES.
+        """
+        return {
+            FAN_LOW: self.coordinator.fan_speed_low,
+            FAN_MEDIUM: self.coordinator.fan_speed_medium,
+            FAN_HIGH: self.coordinator.fan_speed_high,
+        }.get(self._attr_fan_mode, self.coordinator.fan_speed_medium)
 
     @property
     def device_info(self):

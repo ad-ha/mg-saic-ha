@@ -63,6 +63,7 @@ class SAICMGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self.has_sunroof = False
         self.has_heated_seats = False
         self.has_battery_heating = False
+        self.has_steering_wheel_heat = False
 
     async def async_step_user(self, user_input=None):
         errors = {}
@@ -132,10 +133,19 @@ class SAICMGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self.vin = selected_vin
             return await self.async_step_vehicle_capabilities()
 
+        # Filter out VINs that are already configured in HA so the user cannot
+        # accidentally add the same car twice.
+        already_configured = configured_vins(self.hass)
+        available_vehicles = [v for v in self.vehicles if v not in already_configured]
+
+        if not available_vehicles:
+            # Every VIN on this account is already set up — nothing to add.
+            return self.async_abort(reason="already_configured")
+
         # Add vehicle_type selection with fallback for user confirmation
         data_schema = vol.Schema(
             {
-                vol.Required("vin"): vol.In(self.vehicles),
+                vol.Required("vin"): vol.In(available_vehicles),
                 vol.Required("vehicle_type"): vol.In(["BEV", "PHEV", "HEV", "ICE"]),
             }
         )
@@ -151,6 +161,7 @@ class SAICMGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self.has_sunroof = user_input["has_sunroof"]
             self.has_heated_seats = user_input["has_heated_seats"]
             self.has_battery_heating = user_input["has_battery_heating"]
+            self.has_steering_wheel_heat = user_input["has_steering_wheel_heat"]
 
             return self.async_create_entry(
                 title=f"MG SAIC - {self.vin}",
@@ -165,6 +176,7 @@ class SAICMGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     "has_sunroof": self.has_sunroof,
                     "has_heated_seats": self.has_heated_seats,
                     "has_battery_heating": self.has_battery_heating,
+                    "has_steering_wheel_heat": self.has_steering_wheel_heat,
                 },
             )
 
@@ -174,6 +186,9 @@ class SAICMGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required("has_heated_seats", default=self.has_heated_seats): bool,
                 vol.Required(
                     "has_battery_heating", default=self.has_battery_heating
+                ): bool,
+                vol.Required(
+                    "has_steering_wheel_heat", default=self.has_steering_wheel_heat
                 ): bool,
             }
         )
@@ -272,6 +287,20 @@ class SAICMGOptionsFlowHandler(config_entries.OptionsFlow):
                     default=self.options.get(
                         "has_battery_heating",
                         self.config_entry.data.get("has_battery_heating", False),
+                    ),
+                ): bool,
+                vol.Optional(
+                    "has_steering_wheel_heat",
+                    default=self.options.get(
+                        "has_steering_wheel_heat",
+                        self.config_entry.data.get("has_steering_wheel_heat", False),
+                    ),
+                ): bool,
+                # Behaviour options
+                vol.Optional(
+                    "enable_shutdown_refresh_sequence",
+                    default=self.options.get(
+                        "enable_shutdown_refresh_sequence", True
                     ),
                 ): bool,
                 # Update Intervals in minutes
