@@ -362,6 +362,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
                         "chrgMgmtData",
                         "charging",
                     ),
+                ]
+            )
+
+            if coordinator.supports_charging_current_limit:
+                sensors.append(
                     SAICMGChargingCurrentLimitSensor(
                         coordinator,
                         entry,
@@ -374,7 +379,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
                         1.0,
                         "chrgMgmtData",
                         "charging",
-                    ),
+                    )
+                )
+
+            sensors.extend(
+                [
                     SAICMGChargingSensor(
                         coordinator,
                         entry,
