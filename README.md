@@ -238,7 +238,7 @@ The integration includes built-in profiles for specific MG/SAIC models that corr
 |---|---|---|
 | `EH32` | MG4 Electric | Temperature range and fan speed values confirmed |
 | `MIS3E` | MGS6 EV (Long Range / Dual Motor) | Battery capacity 74.3 kWh; inverted temperature index |
-| `AS33P` | MG HS PHEV (Super Hybrid 2025/2026) | Battery capacity 24.7 kWh; Target SOC not supported by iSmart; electric range via estimated field |
+| `AS33P` | MG HS PHEV (Super Hybrid 2025/2026) | BBattery capacity 24.7 kWh; Target SOC not supported by iSmart; electric range uses live SOC-tracking field |
  
 Models not listed above use safe default values and should work normally. If you notice incorrect sensor readings for your model, please open an issue with your vehicle's debug logs.
 
