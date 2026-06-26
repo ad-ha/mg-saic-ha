@@ -113,6 +113,10 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         self.fan_speed_medium: int = 3
         self.fan_speed_high: int = 5
         self.temp_idx_inverted: bool = False
+        # Per-model feature flags — set from VEHICLE_PROFILES on first data fetch.
+        self.supports_target_soc: bool = True
+        self.reliable_fuel_range_elec: bool = True
+        self.charging_capacity_correction: float | None = None
 
         # Reference to the command-error Event entity (event.py), set once it
         # registers itself via register_command_error_event_entity. May be
@@ -501,6 +505,9 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             self.fan_speed_medium = profile.get("fan_speed_medium", 3)
             self.fan_speed_high = profile.get("fan_speed_high", 5)
             self.temp_idx_inverted = profile.get("temp_idx_inverted", False)
+            self.supports_target_soc = profile.get("supports_target_soc", True)
+            self.reliable_fuel_range_elec = profile.get("reliable_fuel_range_elec", True)
+            self.charging_capacity_correction = profile.get("charging_capacity_correction", None)
 
             LOGGER.debug(
                 "Vehicle series detected: %s (profile: %s). "
