@@ -962,6 +962,13 @@ class SAICMGVehicleDetailSensor(CoordinatorEntity, SensorEntity):
             vin_info = data[0]
             raw_value = getattr(vin_info, self._field, None)
             if raw_value is not None:
+                # Apply profile override for fields known to be wrong in the API.
+                # Currently only modelYear is overridden (e.g. MGS6 reports 2024
+                # but launched in 2025 — there is no 2024 model year variant).
+                if self._field == "modelYear":
+                    override = getattr(self.coordinator, "model_year_override", None)
+                    if override is not None:
+                        return override
                 return raw_value
         return None
 
