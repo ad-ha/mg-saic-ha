@@ -1249,15 +1249,20 @@ class SAICMGElectricRangeSensor(CoordinatorEntity, SensorEntity):
 
         # For models where the API's fuelRangeElec field is known to be unreliable
         # (profile flag reliable_fuel_range_elec=False), skip the normal live-range
-        # fields entirely and go straight to bmsEstdElecRng in chrgMgmtData.
-        # This is the case for the MG HS PHEV (AS33P), which always returns -128
-        # in fuelRangeElec regardless of actual charge state.
+        # fields entirely and use imcuVehElecRng from chrgMgmtData instead.
+        # This is the case for the MG HS PHEV (AS33P):
+        #   fuelRangeElec = -128 (sentinel, always)
+        #   bmsEstdElecRng = 120 km (fixed full-charge estimate — NOT live)
+        #   imcuVehElecRng = 111 km (live, tracks SOC — this is what we want)
+        # bmsEstdElecRng is correctly used by the "Estimated Range After Charging"
+        # sensor, so we must not also use it here or both sensors read the same
+        # fixed value regardless of current SOC.
         reliable_fuel_range = getattr(
             self.coordinator, "reliable_fuel_range_elec", True
         )
 
         if reliable_fuel_range:
-            # First, try to get electric range from RvsChargeStatus
+            # Standard path: try fuelRangeElec from RvsChargeStatus first
             charging_data = self.coordinator.data.get("charging")
             if charging_data:
                 charging_status_data = getattr(
@@ -1265,37 +1270,49 @@ class SAICMGElectricRangeSensor(CoordinatorEntity, SensorEntity):
                 )
                 if charging_status_data:
                     raw_value = getattr(charging_status_data, self._field, None)
-                    # -128 is the SAIC sentinel for "no valid data"
                     if raw_value not in (None, 0, -128):
                         electric_range = raw_value * self._factor
 
-            # If electric_range is None, try to get from VehicleStatusResp
+            # Then try fuelRangeElec from basicVehicleStatus
             if electric_range is None:
                 status_data = self.coordinator.data.get("status")
                 if status_data:
                     basic_status_data = getattr(status_data, self._status_type, None)
                     if basic_status_data:
                         raw_value = getattr(basic_status_data, self._field, None)
-                        # -128 is the SAIC sentinel for "no valid data"
                         if raw_value not in (None, 0, -128):
                             electric_range = raw_value * self._factor
 
-        if electric_range is None:
-            # Fallback: use bmsEstdElecRng from chrgMgmtData.
-            # For reliable models this is a secondary source; for unreliable models
-            # (HS PHEV) this is the primary source — it holds the estimated range
-            # at full charge (e.g. 120 km / 75 miles for the HS PHEV 24.7 kWh pack).
+            # Last resort for reliable models: bmsEstdElecRng as a secondary source
+            if electric_range is None:
+                charging_data = self.coordinator.data.get("charging")
+                if charging_data:
+                    chrg_mgmt = getattr(charging_data, "chrgMgmtData", None)
+                    if chrg_mgmt:
+                        raw_estd = getattr(chrg_mgmt, "bmsEstdElecRng", None)
+                        if raw_estd not in (None, 0, -128):
+                            electric_range = float(raw_estd)
+                            LOGGER.debug(
+                                "Electric range sensor %s: bmsEstdElecRng fallback "
+                                "= %s km",
+                                self._name,
+                                electric_range,
+                            )
+        else:
+            # Unreliable-fuelRangeElec path (e.g. AS33P / MG HS PHEV):
+            # Use imcuVehElecRng — the live vehicle electric range that tracks SOC.
+            # Do NOT use bmsEstdElecRng here; that is the fixed full-charge estimate
+            # and is already shown by the "Estimated Range After Charging" sensor.
             charging_data = self.coordinator.data.get("charging")
             if charging_data:
                 chrg_mgmt = getattr(charging_data, "chrgMgmtData", None)
                 if chrg_mgmt:
-                    raw_estd = getattr(chrg_mgmt, "bmsEstdElecRng", None)
-                    if raw_estd not in (None, 0, -128):
-                        # bmsEstdElecRng is already in km (no factor needed)
-                        electric_range = float(raw_estd)
+                    raw_live = getattr(chrg_mgmt, "imcuVehElecRng", None)
+                    if raw_live not in (None, 0, -128):
+                        electric_range = float(raw_live)
                         LOGGER.debug(
-                            "Electric range sensor %s: using bmsEstdElecRng "
-                            "fallback value %s km",
+                            "Electric range sensor %s: using imcuVehElecRng "
+                            "(live SOC-tracking) = %s km",
                             self._name,
                             electric_range,
                         )
