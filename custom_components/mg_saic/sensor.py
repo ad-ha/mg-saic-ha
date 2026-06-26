@@ -86,18 +86,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 1.0,
                 "status",
             ),
-            SAICMGVehicleSensor(
+            SAICMGLastKeySeenSensor(
                 coordinator,
                 entry,
                 "Last Key Seen",
-                "lastKeySeen",
-                "basicVehicleStatus",
-                None,
-                None,
                 "mdi:key",
-                None,
-                1.0,
-                "status",
             ),
             SAICMGTimestampSensor(
                 coordinator,
@@ -495,6 +488,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
                         "chrgMgmtData",
                         "charging",
                     ),
+                ]
+            )
+
+            if coordinator.supports_target_soc:
+                sensors.append(
                     SAICMGChargingSensor(
                         coordinator,
                         entry,
@@ -507,9 +505,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
                         1.0,
                         "chrgMgmtData",
                         "charging",
-                    ),
-                ]
-            )
+                    )
+                )
 
         if coordinator.has_heated_seats:
             sensors.extend(
@@ -1250,28 +1247,58 @@ class SAICMGElectricRangeSensor(CoordinatorEntity, SensorEntity):
         """Return the electric range value, prioritizing charging data."""
         electric_range = None
 
-        # First, try to get electric range from RvsChargeStatus
-        charging_data = self.coordinator.data.get("charging")
-        if charging_data:
-            charging_status_data = getattr(
-                charging_data, self._charging_status_type, None
-            )
-            if charging_status_data:
-                raw_value = getattr(charging_status_data, self._field, None)
-                # -128 is the SAIC sentinel for "no valid data"
-                if raw_value not in (None, 0, -128):
-                    electric_range = raw_value * self._factor
+        # For models where the API's fuelRangeElec field is known to be unreliable
+        # (profile flag reliable_fuel_range_elec=False), skip the normal live-range
+        # fields entirely and go straight to bmsEstdElecRng in chrgMgmtData.
+        # This is the case for the MG HS PHEV (AS33P), which always returns -128
+        # in fuelRangeElec regardless of actual charge state.
+        reliable_fuel_range = getattr(
+            self.coordinator, "reliable_fuel_range_elec", True
+        )
 
-        # If electric_range is None or zero, try to get from VehicleStatusResp
-        if electric_range is None:
-            status_data = self.coordinator.data.get("status")
-            if status_data:
-                basic_status_data = getattr(status_data, self._status_type, None)
-                if basic_status_data:
-                    raw_value = getattr(basic_status_data, self._field, None)
+        if reliable_fuel_range:
+            # First, try to get electric range from RvsChargeStatus
+            charging_data = self.coordinator.data.get("charging")
+            if charging_data:
+                charging_status_data = getattr(
+                    charging_data, self._charging_status_type, None
+                )
+                if charging_status_data:
+                    raw_value = getattr(charging_status_data, self._field, None)
                     # -128 is the SAIC sentinel for "no valid data"
                     if raw_value not in (None, 0, -128):
                         electric_range = raw_value * self._factor
+
+            # If electric_range is None, try to get from VehicleStatusResp
+            if electric_range is None:
+                status_data = self.coordinator.data.get("status")
+                if status_data:
+                    basic_status_data = getattr(status_data, self._status_type, None)
+                    if basic_status_data:
+                        raw_value = getattr(basic_status_data, self._field, None)
+                        # -128 is the SAIC sentinel for "no valid data"
+                        if raw_value not in (None, 0, -128):
+                            electric_range = raw_value * self._factor
+
+        if electric_range is None:
+            # Fallback: use bmsEstdElecRng from chrgMgmtData.
+            # For reliable models this is a secondary source; for unreliable models
+            # (HS PHEV) this is the primary source — it holds the estimated range
+            # at full charge (e.g. 120 km / 75 miles for the HS PHEV 24.7 kWh pack).
+            charging_data = self.coordinator.data.get("charging")
+            if charging_data:
+                chrg_mgmt = getattr(charging_data, "chrgMgmtData", None)
+                if chrg_mgmt:
+                    raw_estd = getattr(chrg_mgmt, "bmsEstdElecRng", None)
+                    if raw_estd not in (None, 0, -128):
+                        # bmsEstdElecRng is already in km (no factor needed)
+                        electric_range = float(raw_estd)
+                        LOGGER.debug(
+                            "Electric range sensor %s: using bmsEstdElecRng "
+                            "fallback value %s km",
+                            self._name,
+                            electric_range,
+                        )
 
         if electric_range is not None:
             self._last_valid_range = electric_range
@@ -1386,14 +1413,16 @@ class SAICMGInstantPowerSensor(CoordinatorEntity, SensorEntity):
 
                     if raw_current is not None and raw_voltage is not None:
                         # SAIC encoding: raw < 20000 => charging (positive current),
-                        # raw > 20000 => discharging/V2X (negative current).
+                        # raw > 20000 => discharging/traction (negative current).
                         # Formula 1000 - (raw * factor) naturally gives:
                         #   charging:   positive kW  ✓
-                        #   V2X export: negative kW  ✓
+                        #   traction/V2X export: negative kW  ✓
+                        # Note: values very close to 20000 (e.g. 20033 while coasting)
+                        # are real small discharge readings — do not filter them out.
                         decoded_current = 1000 - (raw_current * CHARGING_CURRENT_FACTOR)
                         decoded_voltage = raw_voltage * CHARGING_VOLTAGE_FACTOR
 
-                        # Power in kW — negative value indicates V2X export.
+                        # Power in kW — negative value indicates traction/V2X export.
                         power = round(decoded_current * decoded_voltage / 1000.0, 2)
 
                         # Update retention (0 kW is a valid reading)
@@ -1831,6 +1860,10 @@ class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
 
     totalBatteryCapacity uses coordinator.known_battery_capacity_kwh when set
       (no retention needed — the coordinator value is always authoritative).
+
+    lastChargeEndingPower: if the coordinator has charging_capacity_correction set
+      (from VEHICLE_PROFILES), the corrected result is returned so models that
+      report inflated energy values (e.g. MG HS PHEV × 1/3) show correctly.
     """
 
     # Fields where charging_status in _INACTIVE_CHARGING_STATUSES → explicit 0 return.
@@ -1937,6 +1970,16 @@ class SAICMGChargingSensor(CoordinatorEntity, SensorEntity):
                         return None
                     if raw_value is not None:
                         result = raw_value * self._factor
+                        # lastChargeEndingPower: some models (e.g. HS PHEV) report
+                        # this field inflated by ~3× relative to the true kWh value.
+                        # Apply the profile's charging_capacity_correction factor
+                        # when set so the displayed value matches the real battery.
+                        if self._field == "lastChargeEndingPower":
+                            correction = getattr(
+                                self.coordinator, "charging_capacity_correction", None
+                            )
+                            if correction is not None:
+                                result = result * correction
                         self._last_valid_value = result
                         return result
                     return None
@@ -2291,6 +2334,87 @@ class SAICMGNextUpdateSensor(CoordinatorEntity, SensorEntity):
     @property
     def state_class(self):
         return self._state_class
+
+    @property
+    def device_info(self):
+        """Return device info."""
+        return self._device_info
+
+
+class SAICMGLastKeySeenSensor(CoordinatorEntity, SensorEntity):
+    """Sensor for Last Key Seen.
+
+    The SAIC API field lastKeySeen contains a raw integer that appears to be a
+    key fob identifier or pairing code (e.g. 7859) rather than a timestamp or
+    elapsed time.  Evidence from real vehicle logs:
+      - The same value (7859) appears consistently whether the car is parked or
+        actively being driven (powerMode=2), ruling out elapsed-seconds semantics.
+      - The vehicleModelConfiguration entry KEYPOS indicates key-position tracking
+        is a per-model capability; when KEYPOS=0 (e.g. HS PHEV) the field is 0.
+
+    This sensor therefore displays the raw integer value as-is.  When the value
+    is 0 (key not present / model does not support key tracking) it returns None
+    so the sensor shows as Unknown rather than a misleading zero.
+
+    Value retention is applied so the sensor stays available between polls.
+    """
+
+    def __init__(self, coordinator, entry, name, icon):
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._name = name
+        self._attr_icon = icon
+        self._attr_device_class = None
+        self._attr_native_unit_of_measurement = None
+        self._attr_state_class = None
+        vin_info = self.coordinator.vin_info
+        self._unique_id = f"{entry.entry_id}_{vin_info.vin}_lastKeySeen"
+        self._device_info = create_device_info(coordinator, entry.entry_id)
+        self._last_valid_value: int | None = None
+
+    @property
+    def unique_id(self):
+        return self._unique_id
+
+    @property
+    def name(self):
+        vin_info = self.coordinator.vin_info
+        return f"{vin_info.brandName} {vin_info.modelName} {self._name}"
+
+    @property
+    def available(self):
+        """Return True if the entity is available."""
+        if self._last_valid_value is not None:
+            return True
+        return (
+            self.coordinator.last_update_success
+            and self.coordinator.data.get("status") is not None
+        )
+
+    @property
+    def native_value(self):
+        """Return the raw key ID integer, or None when 0 / unavailable."""
+        try:
+            status_data = self.coordinator.data.get("status")
+            if not status_data:
+                return self._last_valid_value
+
+            basic = getattr(status_data, "basicVehicleStatus", None)
+            if not basic:
+                return self._last_valid_value
+
+            raw = getattr(basic, "lastKeySeen", None)
+            if raw is None:
+                return self._last_valid_value
+            if raw == 0:
+                # 0 = key not present or model does not support key tracking
+                return None
+            self._last_valid_value = raw
+            return raw
+
+        except Exception as e:
+            LOGGER.error("Error reading Last Key Seen sensor: %s", e)
+            return self._last_valid_value
 
     @property
     def device_info(self):
