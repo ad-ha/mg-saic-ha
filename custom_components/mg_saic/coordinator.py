@@ -104,6 +104,15 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         self.max_temp = 28  # Default fallback
         self.temp_offset = 2  # Default fallback
         self.known_battery_capacity_kwh = None  # Set once series is detected
+        # Climate control profile — set from VEHICLE_PROFILES on first data fetch.
+        # Defaults match original integration behaviour so unrecognised models
+        # continue to work as before.
+        self.climate_status_cool: set = {3}
+        self.climate_status_fan_only: set = {2}
+        self.fan_speed_low: int = 1
+        self.fan_speed_medium: int = 3
+        self.fan_speed_high: int = 5
+        self.temp_idx_inverted: bool = False
 
         # Reference to the command-error Event entity (event.py), set once it
         # registers itself via register_command_error_event_entity. May be
@@ -486,15 +495,29 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             self.max_temp = profile["max_temp"]
             self.temp_offset = profile["temp_offset"]
             self.known_battery_capacity_kwh = profile["battery_capacity_kwh"]
+            self.climate_status_cool = profile.get("climate_status_cool", {3})
+            self.climate_status_fan_only = profile.get("climate_status_fan_only", {2})
+            self.fan_speed_low = profile.get("fan_speed_low", 1)
+            self.fan_speed_medium = profile.get("fan_speed_medium", 3)
+            self.fan_speed_high = profile.get("fan_speed_high", 5)
+            self.temp_idx_inverted = profile.get("temp_idx_inverted", False)
 
             LOGGER.debug(
                 "Vehicle series detected: %s (profile: %s). "
-                "Temperature range: %d-%d°C, Offset: %d",
+                "Temperature range: %d-%d°C, Offset: %d, "
+                "Temp index inverted: %s, "
+                "Fan speeds: low=%d mid=%d high=%d, "
+                "Cool status codes: %s",
                 self.vehicle_series,
                 matched_series_key or "default/unprofiled",
                 self.min_temp,
                 self.max_temp,
                 self.temp_offset,
+                self.temp_idx_inverted,
+                self.fan_speed_low,
+                self.fan_speed_medium,
+                self.fan_speed_high,
+                self.climate_status_cool,
             )
             if self.known_battery_capacity_kwh is not None:
                 LOGGER.debug(
@@ -1169,7 +1192,15 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         await self.async_refresh()
 
     async def _fetch_with_retries(self, fetch_func, is_generic_func, data_name):
-        """Fetch data with retries and handle generic responses."""
+        """Fetch data with retries and handle generic responses.
+
+        On a 401 (token expired/invalidated), re-login immediately and retry
+        without waiting for the full RETRY_BACKOFF_FACTOR delay.  This handles
+        the race where the message poller re-auths and invalidates the
+        coordinator's token a fraction of a second before an event-driven
+        refresh fires — previously this caused a 15-second delay and noisy
+        ERROR log entries on every engine-start event for two-car accounts.
+        """
         retries = 0
         while retries < RETRY_LIMIT:
             try:
@@ -1183,6 +1214,29 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                 return data
             except (UpdateFailed, GenericResponseException, Exception) as e:
                 retries += 1
+                exc_str = str(e)
+
+                # 401 means our token was invalidated — re-login immediately
+                # rather than waiting RETRY_BACKOFF_FACTOR seconds.  This is
+                # the common case when the poller re-auths concurrently.
+                if "401" in exc_str:
+                    LOGGER.debug(
+                        "401 on %s fetch for VIN %s — re-logging in before retry "
+                        "(attempt %d/%d)",
+                        data_name,
+                        self.vin,
+                        retries,
+                        RETRY_LIMIT,
+                    )
+                    try:
+                        await self.client.login()
+                    except Exception as login_exc:
+                        LOGGER.warning(
+                            "Re-login failed for VIN %s: %s", self.vin, login_exc
+                        )
+                    # No sleep — retry immediately after re-auth
+                    continue
+
                 delay = RETRY_BACKOFF_FACTOR
                 LOGGER.warning(
                     "Error fetching %s: %s. Retrying in %s seconds... (Attempt %d/%d)",
@@ -1371,20 +1425,25 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
 
     # ---- AC Temperature Handling ----
     def get_ac_temperature_idx(self, desired_temp: int) -> int:
-        """Calculate the temperature index based on the desired temperature.
+        """Calculate the temperature index for the SAIC climate control API.
 
-        Args:
-            desired_temp (int): The desired target temperature in Celsius.
+        The index direction is model-specific and stored in self.temp_idx_inverted
+        (set from VEHICLE_PROFILES on first data fetch):
 
-        Returns:
-            int: The calculated temperature index.
+        Standard (temp_idx_inverted=False) — e.g. MG4, default/unknown models:
+            temperature_idx = temp_offset + (desired_temp - min_temp)
+            Low temp -> low index, high temp -> high index.
 
+        Inverted (temp_idx_inverted=True) — e.g. MGS6:
+            temperature_idx = max_idx - (desired_temp - min_temp)
+            Low temp -> high index (confirmed: idx=14 at 16°C correctly cooled the MGS6).
         """
-
-        # Ensure desired_temp is within bounds
         desired_temp = int(max(self.min_temp, min(self.max_temp, desired_temp)))
-
-        temperature_idx = self.temp_offset + (desired_temp - self.min_temp)
+        if self.temp_idx_inverted:
+            max_idx = self.temp_offset + (self.max_temp - self.min_temp)
+            temperature_idx = max_idx - (desired_temp - self.min_temp)
+        else:
+            temperature_idx = self.temp_offset + (desired_temp - self.min_temp)
         LOGGER.debug(
             f"Calculated temperature index: {temperature_idx} for desired_temp: {desired_temp}°C"
         )
