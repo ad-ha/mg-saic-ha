@@ -129,22 +129,55 @@ VEHICLE_PROFILES = {
         "max_temp": 33,
         "temp_offset": 3,
         "battery_capacity_kwh": None,
+        # remoteClimateStatus values that indicate AC is running in cooling mode.
+        # On MG4, status=3 is confirmed cooling and status=2 is fan-only blowing.
+        "climate_status_cool": {3},
+        "climate_status_fan_only": {2},
+        # Fan speed values for cooling mode (1=low, 2=med, 3=high).
+        # On MG4 values 4 and 5 trigger heating/defrost — avoid them.
+        "fan_speed_low": 1,
+        "fan_speed_medium": 3,
+        "fan_speed_high": 5,
+        # Temperature index direction: False = forward (low temp -> low idx)
+        "temp_idx_inverted": False,
     },
     "MIS3E": {  # MGS6 EV (Long Range and Dual Motor)
         "min_temp": 16,
         "max_temp": 28,
         "temp_offset": 2,
         "battery_capacity_kwh": 74.3,
+        # On MGS6, remoteClimateStatus reflects fan speed during cooling:
+        #   1 = cooling low fan (assumed, not yet tested)
+        #   2 = cooling medium fan (confirmed)
+        #   3 = cooling high fan (confirmed)
+        #   4 = heating/defrost, 6 = driving ventilation (both shown as OFF)
+        "climate_status_cool": {1, 2, 3},
+        "climate_status_fan_only": set(),  # MGS6 does not expose fan-only via status
+        # On MGS6, fan speeds 4 and 5 trigger heating and defrost respectively.
+        # Cooling fan speeds are 1 (low), 2 (medium), 3 (high).
+        "fan_speed_low": 1,
+        "fan_speed_medium": 2,
+        "fan_speed_high": 3,
+        # Temperature index direction: True = inverted (low temp -> high idx)
+        # Confirmed: idx=14 at 16°C correctly cooled the MGS6.
+        "temp_idx_inverted": True,
     },
 }
 
 # Fallback profile used when the vehicle's series does not match any entry
 # in VEHICLE_PROFILES above (e.g. MG5, ZS EV, or any model not yet profiled).
+# Values match the original integration behaviour so existing users are unaffected.
 DEFAULT_VEHICLE_PROFILE = {
     "min_temp": 16,
     "max_temp": 28,
     "temp_offset": 2,
     "battery_capacity_kwh": None,
+    "climate_status_cool": {3},
+    "climate_status_fan_only": {2},
+    "fan_speed_low": 1,
+    "fan_speed_medium": 3,
+    "fan_speed_high": 5,
+    "temp_idx_inverted": False,
 }
 
 # Base update intervals
