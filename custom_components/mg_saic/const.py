@@ -140,6 +140,15 @@ VEHICLE_PROFILES = {
         "fan_speed_high": 5,
         # Temperature index direction: False = forward (low temp -> low idx)
         "temp_idx_inverted": False,
+        # Whether the car supports setting a Target SOC via the SAIC API.
+        # True for most BEV/PHEV models; set False for models where the iSmart
+        # app does not expose this control (prevents an always-Unknown entity).
+        "supports_target_soc": True,
+        # Whether the fuelRangeElec field in basicVehicleStatus is reliable for
+        # this model.  When False the electric range sensor falls back to
+        # bmsEstdElecRng from chrgMgmtData (estimated range after full charge)
+        # instead of the per-second live value, which the API returns as -128.
+        "reliable_fuel_range_elec": True,
     },
     "MIS3E": {  # MGS6 EV (Long Range and Dual Motor)
         "min_temp": 16,
@@ -161,6 +170,41 @@ VEHICLE_PROFILES = {
         # Temperature index direction: True = inverted (low temp -> high idx)
         # Confirmed: idx=14 at 16°C correctly cooled the MGS6.
         "temp_idx_inverted": True,
+        "supports_target_soc": True,
+        "reliable_fuel_range_elec": True,
+    },
+    "AS33P": {  # MG HS PHEV (2025/2026 Super Hybrid)
+        # Series string from API: 'AS33P S'
+        # Battery capacity: API reports totalBatteryCapacity=725 (→ 72.5 kWh with
+        # ×0.1 factor), which is incorrect by a factor of ~3.  The HS PHEV has a
+        # 24.7 kWh usable PHEV battery; override here so the sensor shows correctly.
+        # lastChargeEndingPower similarly reports 724 (÷10 = 72.4 kWh) — the profile
+        # battery_capacity_kwh override covers totalBatteryCapacity; lastChargeEndingPower
+        # is corrected via PHEV_BATTERY_CAPACITY_CORRECTION_FACTOR in the profile.
+        "min_temp": 16,
+        "max_temp": 28,
+        "temp_offset": 2,
+        "battery_capacity_kwh": 24.7,
+        "climate_status_cool": {3},
+        "climate_status_fan_only": {2},
+        "fan_speed_low": 1,
+        "fan_speed_medium": 3,
+        "fan_speed_high": 5,
+        "temp_idx_inverted": False,
+        # iSmart app does not expose Target SOC control for the HS PHEV.
+        # Disable the Target SOC entity to avoid a permanently-Unknown number card.
+        "supports_target_soc": False,
+        # The API returns fuelRangeElec=-128 (sentinel) for this model when the car
+        # is parked — the live electric range field is not populated.  Fall back to
+        # bmsEstdElecRng (estimated range after full charge) from chrgMgmtData.
+        "reliable_fuel_range_elec": False,
+        # Correction factor for energy-based fields that the API reports inflated
+        # by approximately ×3 (totalBatteryCapacity, lastChargeEndingPower).
+        # 24.7 kWh / 72.5 kWh (API) ≈ 0.3407; applying ×0.1 factor then ×(1/3)
+        # is equivalent to using the raw value ÷ 30 rather than ÷ 10.
+        # This is stored as a divisor multiplier applied on top of the standard
+        # DATA_DECIMAL_CORRECTION — see SAICMGChargingSensor for usage.
+        "charging_capacity_correction": 1 / 3,
     },
 }
 
@@ -178,6 +222,12 @@ DEFAULT_VEHICLE_PROFILE = {
     "fan_speed_medium": 3,
     "fan_speed_high": 5,
     "temp_idx_inverted": False,
+    # Default: assume Target SOC is supported (safe for BEV/PHEV unless known otherwise).
+    "supports_target_soc": True,
+    # Default: assume the fuelRangeElec field is reliable (correct for most BEVs).
+    "reliable_fuel_range_elec": True,
+    # Default: no capacity correction needed (API value is correct for most models).
+    "charging_capacity_correction": None,
 }
 
 # Base update intervals
