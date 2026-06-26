@@ -26,11 +26,14 @@ async def async_setup_entry(hass, entry, async_add_entities):
     vin_info = coordinator.vin_info
     vin = vin_info.vin
 
-    select_entities = [
-        SAICMGChargingCurrentSelect(
-            coordinator, client, entry, vin_info, vin, "mdi:current-ac"
-        ),
-    ]
+    select_entities = []
+
+    if coordinator.supports_charging_current_limit:
+        select_entities.append(
+            SAICMGChargingCurrentSelect(
+                coordinator, client, entry, vin_info, vin, "mdi:current-ac"
+            )
+        )
 
     if coordinator.has_heated_seats:
         select_entities.extend(
