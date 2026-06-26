@@ -12,16 +12,33 @@ The SAIC message queue is a server-side, per-account stream — it is not
 filtered per vehicle at the API level.  If two coordinators (one per VIN)
 both call get_alarm_messages concurrently they get duplicate messages,
 consume each other's queue position, and can trigger session token
-conflicts (the second login invalidates the first session).  A single
-poller serialises all access so:
+conflicts.  A single poller serialises all access so:
   - Exactly one get_alarm_messages call is made per 60-second cycle per
     account, regardless of how many VINs are configured.
   - Messages are routed to the correct coordinator by matching the VIN
     field on each message.  Messages with no VIN, or a VIN that isn't
     registered, are logged and discarded.
-  - The #147 startup race (two coordinators logging in simultaneously and
-    invalidating each other's tokens) is eliminated by the account-level
-    asyncio.Lock that serialises all API calls on the same account.
+
+Why a shared client (not one client per VIN)?
+---------------------------------------------
+The SAIC backend maintains a single session per account.  When two
+SAICMGAPIClient instances log in independently for the same account, each
+login invalidates the other's session token, producing a cycle of 401 errors
+and re-auth races.  This was the root cause of issues #147 and #195.
+
+The fix: one SAICMGAPIClient per (username, region) account, shared by the
+poller and all coordinators on that account.  __init__.async_setup_entry
+creates this shared client on the first VIN and passes the same object to
+every subsequent VIN for the same account.  All API calls (data fetches,
+message polling, remote commands) go through this one client and its single
+live session.
+
+API lock per-page (not for entire poll loop)
+--------------------------------------------
+The api_lock is acquired for each individual page request rather than for
+the entire pagination loop.  This prevents the poller from starving
+coordinator data fetches on multi-VIN accounts during the (rare) case where
+there are many new messages to process.
 
 Lifecycle
 ---------
@@ -210,36 +227,37 @@ class SAICMGAccountPoller:
         message we have already seen.  Safety-limited to 20 pages so a
         large backlog on first run does not block the loop indefinitely.
 
-        401 handling: when a coordinator on the same account re-auths (e.g.
-        after a generic response or retry), it can invalidate the shared
-        session token.  A 401 from get_alarm_messages is therefore expected
-        occasionally and is handled by re-logging in and retrying once within
-        the same poll cycle.  This avoids the 60-second gap before the next
-        poll and keeps WARNING noise out of the log for a known benign error.
+        The api_lock is acquired per-page rather than for the entire loop so
+        that coordinator data fetches on the same account are not starved while
+        we paginate.  Each page acquisition is brief (one lightweight API call).
+
+        401 handling: when the shared session token is refreshed by a concurrent
+        coordinator re-auth, the next message poll may see a 401.  This is handled
+        by re-logging in via the shared client and retrying once.  Because all
+        coordinators share the same client object, the refreshed token is
+        immediately available to them too.
         """
         new_messages: list = []
         page = 1
         max_pages = 20
 
-        async with self._api_lock:
-            while page <= max_pages:
+        while page <= max_pages:
+            response = None
+            async with self._api_lock:
                 try:
                     response = await self._client.get_alarm_messages(
                         page_num=page, page_size=1
                     )
                 except Exception as exc:
                     exc_str = str(exc)
-                    # 401 means the session token was invalidated by a concurrent
-                    # coordinator re-auth.  Re-login and retry this page once.
                     if "401" in exc_str:
                         LOGGER.debug(
-                            "AccountPoller %s: 401 on message poll (token invalidated "
-                            "by concurrent coordinator re-auth) — re-logging in",
+                            "AccountPoller %s: 401 on message poll (token invalidated) "
+                            "— re-logging in via shared client",
                             self._account_key,
                         )
                         try:
                             await self._client.login()
-                            # Retry the same page after re-auth
                             response = await self._client.get_alarm_messages(
                                 page_num=page, page_size=1
                             )
@@ -259,28 +277,28 @@ class SAICMGAccountPoller:
                         )
                         break
 
-                if not response or not getattr(response, "messages", None):
-                    break
+            if not response or not getattr(response, "messages", None):
+                break
 
-                msg = response.messages[0]
+            msg = response.messages[0]
 
-                # Stop on a message we have already processed
-                if (
-                    msg.messageId is not None
-                    and msg.messageId == self._last_seen_message_id
-                ):
-                    break
+            # Stop on a message we have already processed
+            if (
+                msg.messageId is not None
+                and msg.messageId == self._last_seen_message_id
+            ):
+                break
 
-                # Stop on a message older than our watermark
-                if (
-                    self._last_seen_message_ts is not None
-                    and getattr(msg, "message_time", None) is not None
-                    and msg.message_time <= self._last_seen_message_ts
-                ):
-                    break
+            # Stop on a message older than our watermark
+            if (
+                self._last_seen_message_ts is not None
+                and getattr(msg, "message_time", None) is not None
+                and msg.message_time <= self._last_seen_message_ts
+            ):
+                break
 
-                new_messages.append(msg)
-                page += 1
+            new_messages.append(msg)
+            page += 1
 
         if not new_messages:
             LOGGER.debug(
