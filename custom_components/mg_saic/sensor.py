@@ -668,12 +668,15 @@ class SAICMGMileageSensor(CoordinatorEntity, SensorEntity):
             status_data = getattr(data, self._status_type, None)
             if status_data:
                 mileage = getattr(status_data, self._field, None)
-                if mileage == 0 or mileage is None:
-                    mileage = None  # Invalid or zero mileage
+                # Reject zero, None, and any negative value (includes -128 sentinel).
+                # Mileage is always a positive, monotonically increasing odometer
+                # reading — any value <= 0 is invalid API data.
+                if mileage is None or mileage <= 0:
+                    mileage = None
                 else:
                     mileage = mileage * self._factor
 
-        # If mileage is None or zero, try to get from ChrgMgmtDataResp
+        # If mileage is None or invalid, try to get from ChrgMgmtDataResp
         if mileage is None:
             charging_data = self.coordinator.data.get("charging")
             if charging_data:
@@ -682,7 +685,7 @@ class SAICMGMileageSensor(CoordinatorEntity, SensorEntity):
                 )
                 if charging_status_data:
                     mileage = getattr(charging_status_data, self._field, None)
-                    if mileage == 0 or mileage is None:
+                    if mileage is None or mileage <= 0:
                         mileage = None
                     else:
                         mileage = mileage * self._factor
@@ -1635,6 +1638,16 @@ class SAICMGChargingCurrentSensor(CoordinatorEntity, SensorEntity):
                     # Formula 1000 - (raw * factor) gives the correct sign
                     # for both cases without needing separate branch logic.
                     calculated_value = round(1000 - (raw_value * self._factor), 2)
+
+                    # During active AC/DC charging or charge-finished state,
+                    # bmsPackCrnt oscillates around 20000 and can produce small
+                    # negative values (e.g. -1.90A at raw=20038). These are
+                    # measurement noise — clamp to 0 rather than show negative.
+                    # V2X discharge (status 13) is intentionally excluded so
+                    # genuine negative discharge current is preserved.
+                    if calculated_value < 0 and charging_status in {1, 2, 3, 9, 10, 12}:
+                        calculated_value = 0.0
+
                     self._last_valid_current = calculated_value
                     return calculated_value
                 else:
@@ -1763,6 +1776,14 @@ class SAICMGChargingPowerSensor(CoordinatorEntity, SensorEntity):
                     decoded_current = 1000 - (raw_current * CHARGING_CURRENT_FACTOR)
                     decoded_voltage = raw_voltage * CHARGING_VOLTAGE_FACTOR
                     power = round(decoded_current * decoded_voltage / 1000.0, 2)
+
+                    # During active AC/DC charging or charge-finished state,
+                    # bmsPackCrnt oscillates around 20000 and can produce small
+                    # negative power values. Clamp to 0.
+                    # V2X discharge (status 13) excluded — negative power is correct.
+                    if power < 0 and charging_status in {1, 2, 3, 9, 10, 12}:
+                        power = 0.0
+
                     self._last_valid_power = power
                     return power
                 else:
