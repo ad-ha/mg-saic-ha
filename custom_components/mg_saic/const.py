@@ -191,9 +191,15 @@ VEHICLE_PROFILES = {
         "fan_speed_medium": 3,
         "fan_speed_high": 5,
         "temp_idx_inverted": False,
-        # iSmart app does not expose Target SOC control for the HS PHEV.
-        # Disable the Target SOC entity to avoid a permanently-Unknown number card.
-        "supports_target_soc": False,
+        # iSmart app does not expose Target SOC control on some variants of the
+        # HS PHEV.  However, other AS33P owners report it does work on their car,
+        # so we cannot suppress the entity at the profile level.  The entity will
+        # show Unknown/unavailable on cars where the API does not support it.
+        "supports_target_soc": True,
+        # iSmart app does not expose Charging Current Limit for the HS PHEV —
+        # attempting to set it returns a "Target SOC could not be found" error.
+        # Suppress both the status sensor and the select control for this model.
+        "supports_charging_current_limit": False,
         # The API returns fuelRangeElec=-128 (sentinel) for this model when the car
         # is parked — the live electric range field is not populated.  Fall back to
         # bmsEstdElecRng (estimated range after full charge) from chrgMgmtData.
@@ -224,6 +230,8 @@ DEFAULT_VEHICLE_PROFILE = {
     "temp_idx_inverted": False,
     # Default: assume Target SOC is supported (safe for BEV/PHEV unless known otherwise).
     "supports_target_soc": True,
+    # Default: assume Charging Current Limit is supported (correct for most BEV/PHEV).
+    "supports_charging_current_limit": True,
     # Default: assume the fuelRangeElec field is reliable (correct for most BEVs).
     "reliable_fuel_range_elec": True,
     # Default: no capacity correction needed (API value is correct for most models).
