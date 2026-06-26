@@ -118,6 +118,7 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         self.reliable_fuel_range_elec: bool = True
         self.charging_capacity_correction: float | None = None
         self.supports_charging_current_limit: bool = True
+        self.model_year_override: str | None = None
 
         # Reference to the command-error Event entity (event.py), set once it
         # registers itself via register_command_error_event_entity. May be
@@ -510,6 +511,7 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             self.reliable_fuel_range_elec = profile.get("reliable_fuel_range_elec", True)
             self.charging_capacity_correction = profile.get("charging_capacity_correction", None)
             self.supports_charging_current_limit = profile.get("supports_charging_current_limit", True)
+            self.model_year_override = profile.get("model_year_override", None)
 
             LOGGER.debug(
                 "Vehicle series detected: %s (profile: %s). "
