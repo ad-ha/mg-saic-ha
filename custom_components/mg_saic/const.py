@@ -172,6 +172,10 @@ VEHICLE_PROFILES = {
         "temp_idx_inverted": True,
         "supports_target_soc": True,
         "reliable_fuel_range_elec": True,
+        # The SAIC API incorrectly reports modelYear='2024' for the MGS6 EV.
+        # The MGS6 launched globally to dealerships in November 2025 — there is
+        # no 2024 model year variant.  Override to the correct value.
+        "model_year_override": "2025",
     },
     "AS33P": {  # MG HS PHEV (2025/2026 Super Hybrid)
         # Series string from API: 'AS33P S'
@@ -236,6 +240,8 @@ DEFAULT_VEHICLE_PROFILE = {
     "reliable_fuel_range_elec": True,
     # Default: no capacity correction needed (API value is correct for most models).
     "charging_capacity_correction": None,
+    # Default: no model year override (API value is correct for most models).
+    "model_year_override": None,
 }
 
 # Base update intervals
