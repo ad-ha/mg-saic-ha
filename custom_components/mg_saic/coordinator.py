@@ -276,6 +276,75 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         )
         await self.async_request_refresh()
 
+    def hint_vehicle_started(self, started_at: datetime) -> None:
+        """Pre-apply powered-on state from a vehicle-start alarm message timestamp.
+
+        Called by SAICMGAccountPoller when it receives a type-323 (vehicle
+        start) message, *before* the confirming vehicle-status poll arrives.
+        This pre-sets:
+
+        - ``is_powered_on = True``
+        - ``last_powered_on_time = started_at``   (message timestamp, not poll time)
+        - Immediately switches ``update_interval`` to ``powered_update_interval``
+
+        so that the coordinator begins rapid polling right away rather than
+        waiting up to one full default interval (which could be hours for
+        users with long idle intervals).
+
+        The confirming poll in ``_update_state`` will still run normally —
+        if it sees ``powerMode=2`` it keeps the hint state; if it sees
+        ``powerMode`` as something else (e.g. the message was spurious), it
+        corrects the state as usual.
+
+        Guards:
+        - If ``is_powered_on`` is already ``True`` and ``last_powered_on_time``
+          is *newer* than ``started_at``, the hint is a no-op (a confirmed poll
+          already has more accurate data).
+        - If an action-interval sequence is active, ``_adjust_update_interval``
+          will skip the reschedule as usual.
+
+        Args:
+            started_at: timezone-aware datetime derived from the vehicle-start
+                        message.  Callers must ensure UTC-aware before passing.
+        """
+        # Guard: don't regress a more-recent confirmed power-on timestamp
+        if (
+            self.is_powered_on
+            and self.last_powered_on_time is not None
+            and self.last_powered_on_time >= started_at
+        ):
+            LOGGER.debug(
+                "hint_vehicle_started: VIN %s already powered on with newer "
+                "timestamp (%s >= %s) — no-op",
+                self.vin,
+                self.last_powered_on_time,
+                started_at,
+            )
+            return
+
+        LOGGER.info(
+            "hint_vehicle_started: VIN %s — pre-setting powered-on from "
+            "message timestamp %s (was: is_powered_on=%s, last_powered_on=%s)",
+            self.vin,
+            started_at,
+            self.is_powered_on,
+            self.last_powered_on_time,
+        )
+
+        self.is_powered_on = True
+        self.last_powered_on_time = started_at
+
+        # Immediately switch to the powered interval so the next scheduled
+        # poll fires at the rapid powered-on cadence, not the slow idle cadence.
+        # _adjust_update_interval is the single source of truth for interval
+        # selection and scheduling — call it rather than setting update_interval
+        # directly, so all action-interval / grace-period guards apply correctly.
+        self._adjust_update_interval()
+
+        # Notify listeners so the last_powered_on sensor updates immediately
+        # (before the poll confirms it), giving users an accurate start time.
+        self.async_update_listeners()
+
     # Update Options
     async def async_update_options(self, options):
         """Update options and reschedule refresh."""
