@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta, timezone
 import asyncio
 from contextlib import suppress
+from homeassistant.config_entries import ConfigEntryNotReady
 from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util.dt import utcnow
@@ -41,6 +42,7 @@ from .const import (
     LOGGER,
     RETRY_BACKOFF_FACTOR,
     RETRY_LIMIT,
+    STARTUP_API_TIMEOUT,
     STATUS_TIMESTAMP_FUTURE_TOLERANCE,
     STATUS_TIMESTAMP_MAX_AGE,
     UPDATE_INTERVAL,
@@ -540,11 +542,20 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             self.last_powered_on_time = datetime.now(timezone.utc) - timedelta(hours=24)
 
         try:
-            await self.async_config_entry_first_refresh()
+            await asyncio.wait_for(
+                self.async_config_entry_first_refresh(),
+                timeout=STARTUP_API_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            raise ConfigEntryNotReady(
+                f"MG SAIC API did not respond within {STARTUP_API_TIMEOUT}s at "
+                f"startup for VIN {vin} — HA will retry automatically in the background."
+            )
         except Exception as e:
-            LOGGER.error("First data update failed: %s", e)
-            # Proceed anyway, set data to empty dict
-            self.data = {}
+            raise ConfigEntryNotReady(
+                f"MG SAIC API unavailable at startup for VIN {vin}: {e} "
+                f"— HA will retry automatically in the background."
+            )
 
         if "info" in self.data and self.data["info"]:
             # Find the vehicle info matching the current VIN
@@ -653,7 +664,10 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             )
         else:
             LOGGER.error(f"No 'info' data found for VIN: {vin}")
-            raise UpdateFailed("No 'info' data found for VIN.")
+            raise ConfigEntryNotReady(
+                f"No vehicle info returned by SAIC API for VIN {vin}. "
+                f"HA will retry automatically."
+            )
 
         # Update capabilities from options
         self.has_sunroof = self.config_entry.options.get(
