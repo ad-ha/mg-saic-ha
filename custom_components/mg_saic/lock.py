@@ -24,7 +24,6 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
     lock_entities = [
         SAICMGLockEntity(coordinator, client, entry, vin_info, vin),
-        SAICMGBootLockEntity(coordinator, client, entry, vin_info, vin),
     ]
 
     async_add_entities(lock_entities)
@@ -107,19 +106,20 @@ class SAICMGLockEntity(CoordinatorEntity, LockEntity):
             self.coordinator.record_command_error("Error unlocking vehicle", e)
 
 
-class SAICMGBootLockEntity(CoordinatorEntity, LockEntity):
-    """Representation of the vehicle's boot as a lock."""
+
+class SAICMGLockEntity(CoordinatorEntity, LockEntity):
+    """Representation of the vehicle's lock."""
 
     def __init__(self, coordinator, client, entry, vin_info, vin):
-        """Initialize the boot lock entity."""
+        """Initialize the lock entity."""
         super().__init__(coordinator)
         self._client = client
         self._vin = vin
         self._vin_info = vin_info
 
-        self._attr_name = f"{vin_info.brandName} {vin_info.modelName} Boot"
-        self._attr_unique_id = f"{entry.entry_id}_{vin}_boot_lock"
-        self._attr_icon = "mdi:car-back"
+        self._attr_name = f"{vin_info.brandName} {vin_info.modelName} Lock"
+        self._attr_unique_id = f"{entry.entry_id}_{vin}_lock"
+        self._attr_icon = "mdi:car-door-lock"
 
         self._device_info = create_device_info(coordinator, entry.entry_id)
 
@@ -130,11 +130,11 @@ class SAICMGBootLockEntity(CoordinatorEntity, LockEntity):
 
     @property
     def is_locked(self):
-        """Return true if the boot is closed (locked)."""
+        """Return true if the vehicle is locked."""
         status = self.coordinator.data.get("status")
         if status:
-            boot_status = getattr(status.basicVehicleStatus, "bootStatus", None)
-            return boot_status == 0
+            lock_status = getattr(status.basicVehicleStatus, "lockStatus", None)
+            return lock_status == 1
         return None
 
     @property
@@ -146,18 +146,13 @@ class SAICMGBootLockEntity(CoordinatorEntity, LockEntity):
         )
 
     async def async_lock(self, **kwargs):
-        """Lock (close) the boot."""
-        # Since we can only open the boot, we log that closing is manual
-        LOGGER.warning("Closing the boot must be done manually.")
-
-    async def async_unlock(self, **kwargs):
-        """Unlock (open) the boot."""
+        """Lock the vehicle."""
         try:
             immediate_interval = self.coordinator.after_action_delay
-            long_interval = self.coordinator.tailgate_long_interval
+            long_interval = self.coordinator.lock_unlock_long_interval
 
-            await self._client.open_tailgate(self._vin)
-            LOGGER.info("Boot opened for VIN: %s", self._vin)
+            await self._client.lock_vehicle(self._vin)
+            LOGGER.info("Vehicle locked for VIN: %s", self._vin)
             await self.coordinator.schedule_action_refresh(
                 self._vin,
                 immediate_interval,
@@ -166,5 +161,24 @@ class SAICMGBootLockEntity(CoordinatorEntity, LockEntity):
         except CommandsLimitReachedException:
             await self.coordinator.notify_command_limit_reached(self._vin)
         except Exception as e:
-            LOGGER.error("Error opening boot for VIN %s: %s", self._vin, e)
-            self.coordinator.record_command_error("Error opening boot", e)
+            LOGGER.error("Error locking vehicle for VIN %s: %s", self._vin, e)
+            self.coordinator.record_command_error("Error locking vehicle", e)
+
+    async def async_unlock(self, **kwargs):
+        """Unlock the vehicle."""
+        try:
+            immediate_interval = self.coordinator.after_action_delay
+            long_interval = self.coordinator.lock_unlock_long_interval
+
+            await self._client.unlock_vehicle(self._vin)
+            LOGGER.info("Vehicle unlocked for VIN: %s", self._vin)
+            await self.coordinator.schedule_action_refresh(
+                self._vin,
+                immediate_interval,
+                long_interval,
+            )
+        except CommandsLimitReachedException:
+            await self.coordinator.notify_command_limit_reached(self._vin)
+        except Exception as e:
+            LOGGER.error("Error unlocking vehicle for VIN %s: %s", self._vin, e)
+            self.coordinator.record_command_error("Error unlocking vehicle", e)
