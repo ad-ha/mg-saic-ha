@@ -177,6 +177,31 @@ VEHICLE_PROFILES = {
         # no 2024 model year variant.  Override to the correct value.
         "model_year_override": "2025",
     },
+    "EC32": {  # MG Cyberster (2-door BEV roadster/convertible)
+        # The Cyberster has no rear doors or rear windows — these are suppressed
+        # automatically via the DOOR/WINDOW bitmask in vehicleModelConfiguration
+        # (DOOR='1100', WINDOW='0000'), so no profile flag is needed for that.
+        #
+        # fuelRangeElec: the log shows -128 (sentinel value) when parked, same
+        # pattern as the HS PHEV.  Fall back to bmsEstdElecRng instead.
+        #
+        # Battery: API reports totalBatteryCapacity=725 → 72.5 kWh with ×0.1
+        # factor.  MG spec quotes 77 kWh gross / ~72.5 kWh usable — plausible,
+        # so no override needed.
+        "min_temp": 16,
+        "max_temp": 28,
+        "temp_offset": 2,
+        "battery_capacity_kwh": None,
+        "climate_status_cool": {3},
+        "climate_status_fan_only": {2},
+        "fan_speed_low": 1,
+        "fan_speed_medium": 3,
+        "fan_speed_high": 5,
+        "temp_idx_inverted": False,
+        "supports_target_soc": True,
+        "reliable_fuel_range_elec": False,
+        "supports_charging_current_limit": True,
+    },
     "AS33P": {  # MG HS PHEV (2025/2026 Super Hybrid)
         # Series string from API: 'AS33P S'
         # Battery capacity: API reports totalBatteryCapacity=725 (→ 72.5 kWh with
