@@ -235,6 +235,14 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             config_entry.data.get("has_steering_wheel_heat", False),
         )
 
+        # Derived from vehicleModelConfiguration on first data fetch.
+        # The DOOR bitmask (positions: FL, FR, RL, RR) tells us whether the car
+        # has rear doors. The WINDOW bitmask uses the same layout.
+        # Default True so that pre-existing installations without a data fetch
+        # yet don't suddenly lose entities; corrected on first _update_state.
+        self.has_rear_doors = True
+        self.has_rear_windows = True
+
         # Post-shutdown refresh sequence — enabled by default, opt-out via options.
         # When enabled, the coordinator fires a rapid series of refreshes after
         # detecting engine-off or door-lock, to catch plug-in within 1-3 minutes
@@ -606,6 +614,43 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                     self.vehicle_series,
                     self.known_battery_capacity_kwh,
                 )
+
+            # Parse vehicleModelConfiguration bitmasks to determine which
+            # physical features the car actually has.
+            #
+            # DOOR: 4-char bitmask "FLFRRLRR" — '1' = door present.
+            #   e.g. "1100" → front doors only (no rear doors) = Cyberster.
+            #   e.g. "1111" → all four doors.
+            # WINDOW: same 4-position layout as DOOR.
+            #   e.g. "0000" → no tracked windows (Cyberster soft-top).
+            #   e.g. "1111" → all windows.
+            #
+            # These are read from the API's own vehicle config, so no profile
+            # entry is needed — any car reports its own physical spec.
+            door_value = None
+            window_value = None
+            for config_item in vin_info.vehicleModelConfiguration:
+                if config_item.itemCode == "DOOR":
+                    door_value = config_item.itemValue
+                elif config_item.itemCode == "WINDOW":
+                    window_value = config_item.itemValue
+
+            # Positions 2 and 3 (0-indexed) = rear-left and rear-right.
+            # If the bitmask is shorter than expected, default to True (safe).
+            if door_value is not None and len(door_value) >= 4:
+                self.has_rear_doors = door_value[2] == "1" or door_value[3] == "1"
+            if window_value is not None and len(window_value) >= 4:
+                self.has_rear_windows = window_value[2] == "1" or window_value[3] == "1"
+
+            LOGGER.debug(
+                "Vehicle body config for series %s: DOOR=%s → has_rear_doors=%s, "
+                "WINDOW=%s → has_rear_windows=%s",
+                self.vehicle_series,
+                door_value,
+                self.has_rear_doors,
+                window_value,
+                self.has_rear_windows,
+            )
         else:
             LOGGER.error(f"No 'info' data found for VIN: {vin}")
             raise UpdateFailed("No 'info' data found for VIN.")
