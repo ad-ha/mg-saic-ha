@@ -195,11 +195,11 @@ VEHICLE_PROFILES = {
         "fan_speed_medium": 3,
         "fan_speed_high": 5,
         "temp_idx_inverted": False,
-        # iSmart app does not expose Target SOC control on some variants of the
-        # HS PHEV.  However, other AS33P owners report it does work on their car,
-        # so we cannot suppress the entity at the profile level.  The entity will
-        # show Unknown/unavailable on cars where the API does not support it.
-        "supports_target_soc": True,
+        # iSmart app does not expose Target SOC control for the HS PHEV —
+        # bmsOnBdChrgTrgtSOCDspCmd is always 0 (unmapped) so the slider would
+        # permanently show Unknown.  Confirmed by Harry (issue #198, 2026 HS PHEV).
+        # Suppress both the slider and the status sensor for this model.
+        "supports_target_soc": False,
         # iSmart app does not expose Charging Current Limit for the HS PHEV —
         # attempting to set it returns a "Target SOC could not be found" error.
         # Suppress both the status sensor and the select control for this model.
@@ -315,6 +315,7 @@ PLATFORMS = [
     "binary_sensor",
     "button",
     "climate",
+    "cover",
     "device_tracker",
     "event",
     "lock",
