@@ -1,434 +1,297 @@
-# File: const.py
+# File: __init__.py
 
-import logging
-import voluptuous as vol
-from homeassistant.helpers import config_validation as cv
-from datetime import timedelta
-from enum import Enum
-from typing import Union
+import asyncio
+from contextlib import suppress
 
-LOGGER = logging.getLogger(__package__)
+from homeassistant.config_entries import ConfigEntry, ConfigEntryNotReady
+from homeassistant.core import HomeAssistant
 
-DOMAIN = "mg_saic"
+from .api import SAICMGAPIClient
+from .coordinator import SAICMGDataUpdateCoordinator
+from .message_poller import SAICMGAccountPoller
+from .const import DOMAIN, LOGGER, PLATFORMS
+from .services import async_setup_services, async_unload_services
 
-# API Base Urls
-REGION_BASE_URIS = {
-    "EU": "https://gateway-mg-eu.soimt.com/api.app/v1/",
-    "China": "https://tap-cn.soimt.com/api.app/v1/",
-    "Australia": "https://gateway-mg-au.soimt.com/api.app/v1/",
-    "Israel": "https://gateway-mg-il.soimt.com/api.app/v1/",
-    "Turkey": "https://gateway-mg-tr.soimt.com/api.app/v1/",
-    "India": "https://gateway-mg-in.soimt.com/api.app/v1/",
-    "Rest of World": "https://gateway-mg-eu.soimt.com/api.app/v1/",
-}
-
-# List of regions for selection in the config flow
-REGION_CHOICES = list(REGION_BASE_URIS.keys())
-
-# Phone Login Country Codes
-COUNTRY_CODES = [
-    {"code": "+1", "country": "USA"},
-    {"code": "+7", "country": "Russia"},
-    {"code": "+20", "country": "Egypt"},
-    {"code": "+27", "country": "South Africa"},
-    {"code": "+30", "country": "Greece"},
-    {"code": "+31", "country": "Netherlands"},
-    {"code": "+32", "country": "Belgium"},
-    {"code": "+33", "country": "France"},
-    {"code": "+34", "country": "Spain"},
-    {"code": "+36", "country": "Hungary"},
-    {"code": "+39", "country": "Italy"},
-    {"code": "+40", "country": "Romania"},
-    {"code": "+41", "country": "Switzerland"},
-    {"code": "+43", "country": "Austria"},
-    {"code": "+44", "country": "United Kingdom"},
-    {"code": "+45", "country": "Denmark"},
-    {"code": "+46", "country": "Sweden"},
-    {"code": "+47", "country": "Norway"},
-    {"code": "+48", "country": "Poland"},
-    {"code": "+49", "country": "Germany"},
-    {"code": "+52", "country": "Mexico"},
-    {"code": "+53", "country": "Cuba"},
-    {"code": "+54", "country": "Argentina"},
-    {"code": "+55", "country": "Brazil"},
-    {"code": "+56", "country": "Chile"},
-    {"code": "+57", "country": "Colombia"},
-    {"code": "+58", "country": "Venezuela"},
-    {"code": "+60", "country": "Malaysia"},
-    {"code": "+61", "country": "Australia"},
-    {"code": "+62", "country": "Indonesia"},
-    {"code": "+63", "country": "Philippines"},
-    {"code": "+64", "country": "New Zealand"},
-    {"code": "+65", "country": "Singapore"},
-    {"code": "+66", "country": "Thailand"},
-    {"code": "+81", "country": "Japan"},
-    {"code": "+82", "country": "South Korea"},
-    {"code": "+86", "country": "China"},
-    {"code": "+90", "country": "Turkey"},
-    {"code": "+91", "country": "India"},
-    {"code": "+351", "country": "Portugal"},
-    {"code": "+355", "country": "Albania"},
-    {"code": "+357", "country": "Cyprus"},
-    {"code": "+358", "country": "Finland"},
-    {"code": "+359", "country": "Bulgaria"},
-    {"code": "+370", "country": "Lithuania"},
-    {"code": "+371", "country": "Latvia"},
-    {"code": "+372", "country": "Estonia"},
-    {"code": "+373", "country": "Moldova"},
-    {"code": "+385", "country": "Croatia"},
-    {"code": "+386", "country": "Slovenia"},
-    {"code": "+387", "country": "Bosnia and Herzegovina"},
-    {"code": "+389", "country": "North Macedonia"},
-    {"code": "+420", "country": "Czech Republic"},
-    {"code": "+421", "country": "Slovakia"},
-    {"code": "+381", "country": "Serbia"},
-    {"code": "+382", "country": "Montenegro"},
-    {"code": "+354", "country": "Iceland"},
-    {"code": "+353", "country": "Ireland"},
-    {"code": "+380", "country": "Ukraine"},
-    {"code": "+596", "country": "Martinique"},
-    {"code": "+852", "country": "Hong Kong"},
-    {"code": "+966", "country": "Saudi Arabia"},
-    {"code": "+971", "country": "United Arab Emirates"},
-    {"code": "+972", "country": "Israel"},
-]
-
-# Conversion factors
-PRESSURE_TO_BAR = 0.04
-DATA_DECIMAL_CORRECTION = 0.1
-DATA_DECIMAL_CORRECTION_SOC = 0.1
-DATA_100_DECIMAL_CORRECTION = 0.01
-
-# Conversion factors for charging data
-CHARGING_CURRENT_FACTOR = 0.05
-CHARGING_VOLTAGE_FACTOR = 0.25
-
-# Per-vehicle-series profiles.
+# ── Domain-level hass.data structure ─────────────────────────────────────────
 #
-# The SAIC API exposes some values (notably AC temperature index scale and
-# totalBatteryCapacity) inconsistently or unreliably across models, so these
-# are tracked here per series rather than trusted from the API response.
-# Series codes come from VinInfo.series (e.g. "EH32SP3", "MIS3E S") and are
-# matched as a substring, consistent with the existing detection pattern.
+# hass.data[DOMAIN] = {
+#   # Per-entry references (keyed by entry.entry_id)
+#   "<entry_id>":             SAICMGAPIClient  ← shared client for the account
+#   "<entry_id>_coordinator": SAICMGDataUpdateCoordinator
 #
-# Fields:
-#   min_temp / max_temp / temp_offset: AC temperature index mapping. See
-#       MGSAICDataUpdateCoordinator.get_ac_temperature_idx for usage.
-#   battery_capacity_kwh: known-good usable battery capacity in kWh, used to
-#       override the API's totalBatteryCapacity field when it is known to be
-#       inaccurate. None means "trust the API value" (no override).
+#   # Global VIN → resource maps (for service resolution)
+#   "clients_by_vin":         { vin: SAICMGAPIClient }
+#   "coordinators_by_vin":    { vin: SAICMGDataUpdateCoordinator }
 #
-# Sources: EH32 (MG4 Electric) values were already present in this codebase
-# prior to this table's introduction. MIS3E (MGS6 EV) values confirmed
-# against MG UK's official spec sheet and cross-referenced with EV Database,
-# electrive.com, and Carwow (77 kWh gross / 74.3 kWh usable, same across
-# single-motor Long Range and Dual Motor variants).
-VEHICLE_PROFILES = {
-    "EH32": {  # MG4 Electric
-        "min_temp": 17,
-        "max_temp": 33,
-        "temp_offset": 3,
-        "battery_capacity_kwh": None,
-        # remoteClimateStatus values that indicate AC is running in cooling mode.
-        # On MG4, status=3 is confirmed cooling and status=2 is fan-only blowing.
-        "climate_status_cool": {3},
-        "climate_status_fan_only": {2},
-        # Fan speed values for cooling mode (1=low, 2=med, 3=high).
-        # On MG4 values 4 and 5 trigger heating/defrost — avoid them.
-        "fan_speed_low": 1,
-        "fan_speed_medium": 3,
-        "fan_speed_high": 5,
-        # Temperature index direction: False = forward (low temp -> low idx)
-        "temp_idx_inverted": False,
-        # Whether the car supports setting a Target SOC via the SAIC API.
-        # True for most BEV/PHEV models; set False for models where the iSmart
-        # app does not expose this control (prevents an always-Unknown entity).
-        "supports_target_soc": True,
-        # Whether the fuelRangeElec field in basicVehicleStatus is reliable for
-        # this model.  When False the electric range sensor falls back to
-        # bmsEstdElecRng from chrgMgmtData (estimated range after full charge)
-        # instead of the per-second live value, which the API returns as -128.
-        "reliable_fuel_range_elec": True,
-    },
-    "MIS3E": {  # MGS6 EV (Long Range and Dual Motor)
-        "min_temp": 16,
-        "max_temp": 28,
-        "temp_offset": 2,
-        "battery_capacity_kwh": 74.3,
-        # On MGS6, remoteClimateStatus reflects fan speed during cooling:
-        #   1 = cooling low fan (assumed, not yet tested)
-        #   2 = cooling medium fan (confirmed)
-        #   3 = cooling high fan (confirmed)
-        #   4 = heating/defrost, 6 = driving ventilation (both shown as OFF)
-        "climate_status_cool": {1, 2, 3},
-        "climate_status_fan_only": set(),  # MGS6 does not expose fan-only via status
-        # On MGS6, fan speeds 4 and 5 trigger heating and defrost respectively.
-        # Cooling fan speeds are 1 (low), 2 (medium), 3 (high).
-        "fan_speed_low": 1,
-        "fan_speed_medium": 2,
-        "fan_speed_high": 3,
-        # Temperature index direction: True = inverted (low temp -> high idx)
-        # Confirmed: idx=14 at 16°C correctly cooled the MGS6.
-        "temp_idx_inverted": True,
-        "supports_target_soc": True,
-        "reliable_fuel_range_elec": True,
-        # The SAIC API incorrectly reports modelYear='2024' for the MGS6 EV.
-        # The MGS6 launched globally to dealerships in November 2025 — there is
-        # no 2024 model year variant.  Override to the correct value.
-        "model_year_override": "2025",
-    },
-    "EC32": {  # MG Cyberster (2-door BEV roadster/convertible)
-        # The Cyberster has no rear doors or rear windows — these are suppressed
-        # automatically via the DOOR/WINDOW bitmask in vehicleModelConfiguration
-        # (DOOR='1100', WINDOW='0000'), so no profile flag is needed for that.
-        #
-        # fuelRangeElec: the log shows -128 (sentinel value) when parked, same
-        # pattern as the HS PHEV.  Fall back to bmsEstdElecRng instead.
-        #
-        # Battery: API reports totalBatteryCapacity=725 → 72.5 kWh with ×0.1
-        # factor.  MG spec quotes 77 kWh gross / ~72.5 kWh usable — plausible,
-        # so no override needed.
-        "min_temp": 16,
-        "max_temp": 28,
-        "temp_offset": 2,
-        "battery_capacity_kwh": None,
-        "climate_status_cool": {3},
-        "climate_status_fan_only": {2},
-        "fan_speed_low": 1,
-        "fan_speed_medium": 3,
-        "fan_speed_high": 5,
-        "temp_idx_inverted": False,
-        "supports_target_soc": True,
-        "reliable_fuel_range_elec": False,
-        "supports_charging_current_limit": True,
-    },
-    "AS33P": {  # MG HS PHEV (2025/2026 Super Hybrid)
-        # Series string from API: 'AS33P S'
-        # Battery capacity: API reports totalBatteryCapacity=725 (→ 72.5 kWh with
-        # ×0.1 factor), which is incorrect by a factor of ~3.  The HS PHEV has a
-        # 24.7 kWh usable PHEV battery; override here so the sensor shows correctly.
-        # lastChargeEndingPower similarly reports 724 (÷10 = 72.4 kWh) — the profile
-        # battery_capacity_kwh override covers totalBatteryCapacity; lastChargeEndingPower
-        # is corrected via PHEV_BATTERY_CAPACITY_CORRECTION_FACTOR in the profile.
-        "min_temp": 16,
-        "max_temp": 28,
-        "temp_offset": 2,
-        "battery_capacity_kwh": 24.7,
-        "climate_status_cool": {3},
-        "climate_status_fan_only": {2},
-        "fan_speed_low": 1,
-        "fan_speed_medium": 3,
-        "fan_speed_high": 5,
-        "temp_idx_inverted": False,
-        # iSmart app does not expose Target SOC control for the HS PHEV —
-        # bmsOnBdChrgTrgtSOCDspCmd is always 0 (unmapped) so the slider would
-        # permanently show Unknown.  Confirmed by Harry (issue #198, 2026 HS PHEV).
-        # Suppress both the slider and the status sensor for this model.
-        "supports_target_soc": False,
-        # iSmart app does not expose Charging Current Limit for the HS PHEV —
-        # attempting to set it returns a "Target SOC could not be found" error.
-        # Suppress both the status sensor and the select control for this model.
-        "supports_charging_current_limit": False,
-        # The API returns fuelRangeElec=-128 (sentinel) for this model when the car
-        # is parked — the live electric range field is not populated.  Fall back to
-        # bmsEstdElecRng (estimated range after full charge) from chrgMgmtData.
-        "reliable_fuel_range_elec": False,
-        # Correction factor for energy-based fields that the API reports inflated
-        # by approximately ×3 (totalBatteryCapacity, lastChargeEndingPower).
-        # 24.7 kWh / 72.5 kWh (API) ≈ 0.3407; applying ×0.1 factor then ×(1/3)
-        # is equivalent to using the raw value ÷ 30 rather than ÷ 10.
-        # This is stored as a divisor multiplier applied on top of the standard
-        # DATA_DECIMAL_CORRECTION — see SAICMGChargingSensor for usage.
-        "charging_capacity_correction": 1 / 3,
-    },
-}
-
-# Fallback profile used when the vehicle's series does not match any entry
-# in VEHICLE_PROFILES above (e.g. MG5, ZS EV, or any model not yet profiled).
-# Values match the original integration behaviour so existing users are unaffected.
-DEFAULT_VEHICLE_PROFILE = {
-    "min_temp": 16,
-    "max_temp": 28,
-    "temp_offset": 2,
-    "battery_capacity_kwh": None,
-    "climate_status_cool": {3},
-    "climate_status_fan_only": {2},
-    "fan_speed_low": 1,
-    "fan_speed_medium": 3,
-    "fan_speed_high": 5,
-    "temp_idx_inverted": False,
-    # Default: assume Target SOC is supported (safe for BEV/PHEV unless known otherwise).
-    "supports_target_soc": True,
-    # Default: assume Charging Current Limit is supported (correct for most BEV/PHEV).
-    "supports_charging_current_limit": True,
-    # Default: assume the fuelRangeElec field is reliable (correct for most BEVs).
-    "reliable_fuel_range_elec": True,
-    # Default: no capacity correction needed (API value is correct for most models).
-    "charging_capacity_correction": None,
-    # Default: no model year override (API value is correct for most models).
-    "model_year_override": None,
-}
-
-# Base update intervals
-# UPDATE_INTERVAL is the idle/parked background refresh — a safety net to keep
-# data from going completely stale.  Now that the SAICMGAccountPoller triggers
-# an immediate refresh on engine-start, shutdown, and charging events, this
-# interval only matters when the car is genuinely sitting idle with nothing
-# happening.  30 minutes is a good balance: fresh enough to be useful, infrequent
-# enough not to drain the 12V battery or hit API rate limits.
-# Users can still override this lower via the integration options if they prefer.
-UPDATE_INTERVAL = timedelta(minutes=30)
-UPDATE_INTERVAL_CHARGING = timedelta(minutes=5)
-UPDATE_INTERVAL_POWERED = timedelta(minutes=15)
-
-# Additional Update Intervals
-UPDATE_INTERVAL_AFTER_SHUTDOWN = timedelta(minutes=2)
-UPDATE_INTERVAL_GRACE_PERIOD = timedelta(minutes=10)
-
-# After action immediate and refresh intervals
-AFTER_ACTION_UPDATE_INTERVAL_DELAY = timedelta(seconds=15)
-
-# Default additional long-interval updates after actions
-DEFAULT_ALARM_LONG_INTERVAL = timedelta(minutes=5)
-DEFAULT_AC_LONG_INTERVAL = timedelta(minutes=15)
-DEFAULT_FRONT_DEFROST_LONG_INTERVAL = timedelta(minutes=15)
-DEFAULT_REAR_WINDOW_HEAT_LONG_INTERVAL = timedelta(minutes=15)
-DEFAULT_LOCK_UNLOCK_LONG_INTERVAL = timedelta(minutes=5)
-DEFAULT_CHARGING_PORT_LOCK_LONG_INTERVAL = timedelta(minutes=5)
-DEFAULT_HEATED_SEATS_LONG_INTERVAL = timedelta(minutes=15)
-DEFAULT_BATTERY_HEATING_LONG_INTERVAL = timedelta(minutes=15)
-DEFAULT_CHARGING_LONG_INTERVAL = timedelta(minutes=5)
-DEFAULT_SUNROOF_LONG_INTERVAL = timedelta(minutes=5)
-DEFAULT_TAILGATE_LONG_INTERVAL = timedelta(minutes=5)
-DEFAULT_TARGET_SOC_LONG_INTERVAL = timedelta(minutes=5)
-DEFAULT_CHARGING_CURRENT_LONG_INTERVAL = timedelta(minutes=5)
-
-# Configuration Options
-CONF_HAS_SUNROOF = "has_sunroof"
-CONF_HAS_HEATED_SEATS = "has_heated_seats"
-CONF_HAS_BATTERY_HEATING = "has_battery_heating"
-CONF_HAS_STEERING_WHEEL_HEAT = "has_steering_wheel_heat"
-
-# Generic response tresholds
-GENERIC_RESPONSE_SOC_THRESHOLD = 1000
-GENERIC_RESPONSE_STATUS_THRESHOLD = 0
-GENERIC_RESPONSE_TEMPERATURE = -40
-GENERIC_RESPONSE_EXTREME_TEMPERATURE = -128
-
-# Sanity bounds for the API's statusTime field. A response whose timestamp
-# falls outside these bounds relative to "now" is treated as untrustworthy
-# and discarded (see SAICMGDataUpdateCoordinator._is_status_timestamp_valid).
-STATUS_TIMESTAMP_FUTURE_TOLERANCE = timedelta(minutes=5)
-STATUS_TIMESTAMP_MAX_AGE = timedelta(hours=24)
-
-# Retry configuration
-RETRY_LIMIT = 5
-RETRY_BACKOFF_FACTOR = 15
-
-# Maximum seconds to wait for the very first API fetch during HA startup.
-# If the SAIC server is unreachable and we exceed this, we raise
-# ConfigEntryNotReady so HA can finish booting and retry in the background
-# rather than blocking startup for up to RETRY_LIMIT × RETRY_BACKOFF_FACTOR
-# seconds (75 s) before failing.
-# 5 s is enough for a healthy SAIC API call (typically 2-5 s) while keeping
-# startup impact minimal. HA retries automatically with exponential backoff.
-STARTUP_API_TIMEOUT = 5
-
-# Charging status codes indicating that the vehicle is actively using the
-# charging/discharging system.  Used by the coordinator to select the
-# charging update interval and keep the session alive.
-# 13 = V2X_DISCHARGING — included so V2X export sessions get the same
-# frequent refresh cadence as AC/DC charging sessions.
-CHARGING_STATUS_CODES = {1, 3, 10, 12, 13}
-
-# Charging Current Limit options
-CHARGING_CURRENT_OPTIONS = ["0A (Ignore)", "6A", "8A", "16A", "Max"]
-
-# Platforms
-PLATFORMS = [
-    "binary_sensor",
-    "button",
-    "climate",
-    "device_tracker",
-    "event",
-    "lock",
-    "number",
-    "select",
-    "sensor",
-    "switch",
-]
+#   # Account-level singletons keyed by (username, region)
+#   "account_clients":        { account_key: SAICMGAPIClient }   ← THE shared client
+#   "account_pollers":        { account_key: SAICMGAccountPoller }
+#   "account_locks":          { account_key: asyncio.Lock }
+#   "account_login_locks":    { account_key: asyncio.Lock }
+#
+#   "services_registered":    bool
+# }
+#
+# KEY DESIGN: one SAICMGAPIClient per (username, region) account, shared by all
+# config entries (VINs) on that account.  The SAIC server maintains a single
+# session per account — concurrent logins from two client instances invalidate
+# each other's tokens, causing the cascading 401/re-auth races reported in #147
+# and #195.  By sharing one client, all VINs on the same account use the same
+# session token, eliminating these races entirely.
+#
+# The account_lock serialises all API calls that share the same session,
+# preventing concurrent requests from different coordinators/the poller from
+# interleaving and confusing the server.
+#
+# The account_login_lock serialises the initial login so that if two entries
+# for the same account start simultaneously (HA startup), only one login
+# attempt is made.
 
 
-# Battery SOC
-class BatterySoc(Enum):
-    """Enum for Battery SOC identification"""
-
-    SOC_40 = 1
-    SOC_50 = 2
-    SOC_60 = 3
-    SOC_70 = 4
-    SOC_80 = 5
-    SOC_90 = 6
-    SOC_100 = 7
+def _account_key(entry: ConfigEntry) -> tuple[str, str]:
+    """Return a hashable identifier for the SAIC account behind *entry*."""
+    return (entry.data["username"], entry.data.get("region", ""))
 
 
-# Charge Current Limit
-class ChargeCurrentLimitOption(Enum):
-    C_IGNORE = 0
-    C_6A = 1
-    C_8A = 2
-    C_16A = 3
-    C_MAX = 4
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up MG SAIC from a config entry."""
+    hass.data.setdefault(DOMAIN, {})
+    domain = hass.data[DOMAIN]
+    domain.setdefault("clients_by_vin", {})
+    domain.setdefault("coordinators_by_vin", {})
+    domain.setdefault("account_clients", {})
+    domain.setdefault("account_pollers", {})
+    domain.setdefault("account_locks", {})
+    domain.setdefault("account_login_locks", {})
+    domain.setdefault("services_registered", False)
 
-    @staticmethod
-    def to_code(limit: Union[str, "ChargeCurrentLimitOption"]):
-        LOGGER.debug(f"Converting limit: {limit} (type: {type(limit)}) to code")
-        if isinstance(limit, ChargeCurrentLimitOption):
-            return limit
-        if isinstance(limit, str):
-            limit_upper = limit.upper()
-            match limit_upper:
-                case "6A":
-                    return ChargeCurrentLimitOption.C_6A
-                case "8A":
-                    return ChargeCurrentLimitOption.C_8A
-                case "16A":
-                    return ChargeCurrentLimitOption.C_16A
-                case "MAX":
-                    return ChargeCurrentLimitOption.C_MAX
-                case "0A (IGNORE)":
-                    return ChargeCurrentLimitOption.C_IGNORE
-                case "0A":
-                    return ChargeCurrentLimitOption.C_IGNORE
-                case _:
-                    LOGGER.error(f"Unknown charge current limit: {limit}")
-                    raise ValueError(f"Unknown charge current limit: {limit}")
-        LOGGER.error(f"Invalid type for limit: {type(limit)}")
-        raise TypeError(f"Invalid type for limit: {type(limit)}")
+    username = entry.data["username"]
+    password = entry.data["password"]
+    vin = entry.data.get("vin")
+    region = entry.data.get("region")
+    username_is_email = entry.data.get("country_code") is None
+    acct_key = _account_key(entry)
 
-    @property
-    def limit(self) -> str:
-        match self:
-            case ChargeCurrentLimitOption.C_6A:
-                return "6A"
-            case ChargeCurrentLimitOption.C_8A:
-                return "8A"
-            case ChargeCurrentLimitOption.C_16A:
-                return "16A"
-            case ChargeCurrentLimitOption.C_MAX:
-                return "Max"
-            case ChargeCurrentLimitOption.C_IGNORE:
-                return "0A (Ignore)"
-            case _:
-                raise ValueError(f"Unknown charge current limit code: {self}")
+    # ── Ensure per-account singletons exist ──────────────────────────────────
+    if acct_key not in domain["account_locks"]:
+        domain["account_locks"][acct_key] = asyncio.Lock()
+    if acct_key not in domain["account_login_locks"]:
+        domain["account_login_locks"][acct_key] = asyncio.Lock()
+
+    api_lock = domain["account_locks"][acct_key]
+    login_lock = domain["account_login_locks"][acct_key]
+
+    # ── Get or create the shared account client ───────────────────────────────
+    # One SAICMGAPIClient per (username, region).  The SAIC backend maintains a
+    # single session per account — two concurrent client instances logging in
+    # independently will invalidate each other's tokens (the root cause of #147
+    # and #195).  All VINs on the same account share this one client object so
+    # there is exactly one live session at all times.
+    async with login_lock:
+        if acct_key not in domain["account_clients"]:
+            LOGGER.debug(
+                "Creating shared client for account %s (first VIN: %s)",
+                acct_key,
+                vin,
+            )
+            client = SAICMGAPIClient(
+                username,
+                password,
+                vin,
+                username_is_email,
+                region,
+                entry.data.get("country_code"),
+            )
+            try:
+                await client.login()
+            except Exception as exc:
+                LOGGER.error(
+                    "Failed to log in to MG SAIC for account %s (VIN %s): %s",
+                    acct_key,
+                    vin,
+                    exc,
+                )
+                return False
+            domain["account_clients"][acct_key] = client
+            LOGGER.debug("Login successful for account %s", acct_key)
+        else:
+            LOGGER.debug(
+                "Reusing existing shared client for account %s (adding VIN: %s)",
+                acct_key,
+                vin,
+            )
+            client = domain["account_clients"][acct_key]
+
+    if not vin:
+        LOGGER.error("No VIN specified in Config Entry")
+        return False
+
+    try:
+        vehicles = await client.get_vehicle_info()
+        if not any(v.vin == vin for v in vehicles):
+            LOGGER.error("VIN %s not found in account vehicles", vin)
+            return False
+    except Exception as exc:
+        LOGGER.error("Failed to verify VIN %s: %s", vin, exc)
+        return False
+
+    # Store a reference to the shared client under this entry's key so that
+    # platform files (button.py, climate.py, …) can fetch it as normal via
+    # hass.data[DOMAIN][entry.entry_id].  They all get the same object.
+    domain[entry.entry_id] = client
+
+    # ── Build and wire up the coordinator ────────────────────────────────────
+    coordinator = SAICMGDataUpdateCoordinator(hass, client, entry)
+    coordinator.set_api_lock(api_lock)
+
+    try:
+        await coordinator.async_setup()
+    except ConfigEntryNotReady:
+        # Propagate so HA marks the entry as "Retrying" and retries automatically.
+        raise
+    except Exception as exc:
+        LOGGER.error("Coordinator setup failed for VIN %s: %s", vin, exc)
+        return False
+
+    domain[f"{entry.entry_id}_coordinator"] = coordinator
+    domain["clients_by_vin"][vin] = client
+    domain["coordinators_by_vin"][vin] = coordinator
+
+    # ── Account-level message poller ─────────────────────────────────────────
+    # One SAICMGAccountPoller per (username, region) regardless of VIN count.
+    # It uses the shared account client to poll get_alarm_messages once per
+    # minute and routes events to the correct per-VIN coordinator.
+    if acct_key not in domain["account_pollers"]:
+        LOGGER.debug(
+            "Creating new AccountPoller for account %s (first VIN: %s)",
+            acct_key,
+            vin,
+        )
+        poller = SAICMGAccountPoller(hass, client, acct_key, api_lock)
+        domain["account_pollers"][acct_key] = poller
+    else:
+        LOGGER.debug(
+            "Reusing existing AccountPoller for account %s (adding VIN: %s)",
+            acct_key,
+            vin,
+        )
+        poller = domain["account_pollers"][acct_key]
+
+    poller.register_coordinator(vin, coordinator)
+
+    # Start (or no-op if already running) the poller background task.
+    poller.start(entry)
+
+    # ── Register alarm switches for this VIN ─────────────────────────────────
+    # Tells the SAIC server to queue event messages for us.  Each VIN needs its
+    # own registration.  Calls are serialised under the api_lock so they cannot
+    # race against concurrent data fetches or each other on multi-VIN accounts.
+    try:
+        async with api_lock:
+            await asyncio.wait_for(
+                client.set_alarm_switches(vin=vin),
+                timeout=30,
+            )
+    except asyncio.TimeoutError:
+        LOGGER.warning(
+            "set_alarm_switches timed out for VIN %s — "
+            "message-driven updates may not function until next restart",
+            vin,
+        )
+    except Exception as exc:
+        LOGGER.warning(
+            "set_alarm_switches failed for VIN %s: %s — "
+            "message-driven updates may not function until next restart",
+            vin,
+            exc,
+        )
+
+    # ── Finalise ─────────────────────────────────────────────────────────────
+    entry.async_on_unload(entry.add_update_listener(update_listener))
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    if not domain["services_registered"]:
+        await async_setup_services(hass)
+        domain["services_registered"] = True
+
+    LOGGER.info(
+        "MG SAIC integration setup completed for VIN %s (account %s, %d VIN(s) on poller)",
+        vin,
+        acct_key,
+        len(poller._coordinators),
+    )
+    return True
 
 
-# Windows List
-class VehicleWindowId(Enum):
-    """Enum for identifying vehicle windows."""
+async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Handle options update."""
+    coordinator = hass.data[DOMAIN][f"{entry.entry_id}_coordinator"]
+    await coordinator.async_update_options(entry.options)
 
-    DRIVER = "driver"
-    WINDOW_2 = "window_2"
-    WINDOW_3 = "window_3"
-    WINDOW_4 = "window_4"
-    SUNROOF = "sunroof"
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a config entry."""
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if not unload_ok:
+        return False
+
+    domain = hass.data[DOMAIN]
+    vin = entry.data.get("vin")
+    acct_key = _account_key(entry)
+
+    # ── Coordinator shutdown ──────────────────────────────────────────────────
+    coordinator = domain.pop(f"{entry.entry_id}_coordinator", None)
+    # Remove the per-entry client reference (it's a shared object; don't close it yet)
+    domain.pop(entry.entry_id, None)
+
+    if vin:
+        domain.get("clients_by_vin", {}).pop(vin, None)
+        domain.get("coordinators_by_vin", {}).pop(vin, None)
+
+    if coordinator is not None:
+        await coordinator.async_shutdown()
+
+    # ── Poller VIN deregistration ─────────────────────────────────────────────
+    poller = domain.get("account_pollers", {}).get(acct_key)
+    if poller is not None and vin:
+        poller.unregister_coordinator(vin)
+        LOGGER.debug(
+            "VIN %s unregistered from AccountPoller %s (%d remaining)",
+            vin,
+            acct_key,
+            len(poller._coordinators),
+        )
+        if not poller.has_coordinators:
+            LOGGER.info(
+                "Last VIN unloaded for account %s — stopping AccountPoller and closing session",
+                acct_key,
+            )
+            await poller.async_stop()
+            domain["account_pollers"].pop(acct_key, None)
+            domain["account_locks"].pop(acct_key, None)
+            domain["account_login_locks"].pop(acct_key, None)
+
+            # Close the shared client session only when the last VIN is gone
+            shared_client = domain.get("account_clients", {}).pop(acct_key, None)
+            if shared_client is not None:
+                with suppress(Exception):
+                    await shared_client.close()
+
+    # ── Global cleanup when no entries remain ─────────────────────────────────
+    if not domain.get("clients_by_vin"):
+        await async_unload_services(hass)
+        for key in (
+            "clients_by_vin",
+            "coordinators_by_vin",
+            "account_clients",
+            "account_pollers",
+            "account_locks",
+            "account_login_locks",
+            "services_registered",
+        ):
+            domain.pop(key, None)
+
+    if not domain:
+        hass.data.pop(DOMAIN, None)
+
+    return True
