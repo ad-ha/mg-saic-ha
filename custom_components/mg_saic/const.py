@@ -325,6 +325,15 @@ STATUS_TIMESTAMP_MAX_AGE = timedelta(hours=24)
 RETRY_LIMIT = 5
 RETRY_BACKOFF_FACTOR = 15
 
+# Maximum seconds to wait for the very first API fetch during HA startup.
+# If the SAIC server is unreachable and we exceed this, we raise
+# ConfigEntryNotReady so HA can finish booting and retry in the background
+# rather than blocking startup for up to RETRY_LIMIT × RETRY_BACKOFF_FACTOR
+# seconds (75 s) before failing.
+# 5 s is enough for a healthy SAIC API call (typically 2-5 s) while keeping
+# startup impact minimal. HA retries automatically with exponential backoff.
+STARTUP_API_TIMEOUT = 5
+
 # Charging status codes indicating that the vehicle is actively using the
 # charging/discharging system.  Used by the coordinator to select the
 # charging update interval and keep the session alive.
