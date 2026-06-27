@@ -349,7 +349,6 @@ PLATFORMS = [
     "binary_sensor",
     "button",
     "climate",
-    "cover",
     "device_tracker",
     "event",
     "lock",
