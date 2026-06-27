@@ -185,6 +185,49 @@ class SAICMGAPIClient:
             LOGGER.warning("Error retrieving alarm messages: %s", e)
             return None
 
+    async def delete_message(self, message_id: "str | int") -> None:
+        """Delete a single alarm message by ID from the SAIC message queue.
+
+        Removing processed messages (particularly vehicle-start type 323)
+        prevents unbounded queue growth on the SAIC server and avoids
+        re-processing stale events after an HA restart.
+
+        The SAIC backend accepts either str or int message IDs; pass through
+        whatever was returned on the MessageEntity.messageId field.
+
+        Mirrors the deletion pattern from saic-python-mqtt-gateway
+        src/handlers/message.py — delete_message is called for each consumed
+        vehicle-start message except the most-recent (watermark) one.
+
+        Args:
+            message_id: the messageId value from the MessageEntity.
+        """
+        try:
+            await self._make_api_call(
+                self.saic_api.delete_message,
+                message_id=message_id,
+            )
+            LOGGER.debug("Deleted alarm message ID %s", message_id)
+        except Exception as e:
+            # Non-fatal: a failed delete just means the message stays in the
+            # queue.  It will be deduplicated by the watermark logic on the
+            # next poll, so polling correctness is unaffected.
+            LOGGER.warning(
+                "Could not delete alarm message ID %s: %s", message_id, e
+            )
+
+    async def delete_all_alarms(self) -> None:
+        """Delete all alarm messages for this account from the SAIC queue.
+
+        Use sparingly — intended for maintenance / queue-clear scenarios, not
+        for routine per-message cleanup (use delete_message for that).
+        """
+        try:
+            await self._make_api_call(self.saic_api.delete_all_alarms)
+            LOGGER.info("Deleted all alarm messages for account")
+        except Exception as e:
+            LOGGER.warning("Could not delete all alarm messages: %s", e)
+
     async def set_alarm_switches(self, vin: str) -> None:
         """Register alarm switch subscriptions with the SAIC API.
 
