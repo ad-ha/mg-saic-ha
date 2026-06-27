@@ -3,7 +3,7 @@
 import asyncio
 from contextlib import suppress
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryNotReady
 from homeassistant.core import HomeAssistant
 
 from .api import SAICMGAPIClient
@@ -146,6 +146,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     try:
         await coordinator.async_setup()
+    except ConfigEntryNotReady:
+        # Propagate so HA marks the entry as "Retrying" and retries automatically.
+        raise
     except Exception as exc:
         LOGGER.error("Coordinator setup failed for VIN %s: %s", vin, exc)
         return False
