@@ -562,7 +562,12 @@ class SAICMGAPIClient:
             return
 
         try:
-            await self.saic_api.close()
-            LOGGER.info("Closed MG SAIC API session.")
+            if hasattr(self.saic_api, "close"):
+                await self.saic_api.close()
+                LOGGER.info("Closed MG SAIC API session.")
+            else:
+                LOGGER.debug(
+                    "MG SAIC API session has no close method — nothing to close."
+                )
         except Exception as e:
             LOGGER.error("Error closing MG SAIC API session: %s", e)
