@@ -735,10 +735,15 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             data["info"] = filtered_info
             self.vin_info = filtered_info[0]
 
-            # Fetch vehicle status with retries
+            # Fetch vehicle status with retries.
+            # Pass self.vin explicitly — the client is shared across all VINs
+            # on the same account, so without an explicit vin it would always
+            # fetch status for whichever VIN the client was first constructed
+            # with, causing all cars on the account to show the same data.
+            vin = self.vin
             try:
                 data["status"] = await self._fetch_with_retries(
-                    self.client.get_vehicle_status,
+                    lambda: self.client.get_vehicle_status(vin),
                     self._is_generic_response_vehicle_status,
                     "vehicle status",
                 )
@@ -764,11 +769,12 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                 else:
                     raise
 
-            # Fetch charging info with retries
+            # Fetch charging info with retries.
+            # Same explicit-vin pattern as above.
             if self.vehicle_type in ["BEV", "PHEV"]:
                 try:
                     data["charging"] = await self._fetch_with_retries(
-                        self.client.get_charging_info,
+                        lambda: self.client.get_charging_info(vin),
                         self._is_generic_response_charging,
                         "charging info",
                     )
