@@ -115,15 +115,25 @@ class SAICMGAPIClient:
             raise
 
     # GET VEHICLE DATA
-    async def get_charging_info(self):
-        """Retrieve charging information."""
+
+    async def get_charging_info(self, vin: str | None = None):
+        """Retrieve charging information for *vin* (defaults to self.vin).
+
+        Accepts an explicit vin so that a shared client instance (one per
+        account, shared across all VINs on that account) can fetch data for
+        any of the account's vehicles rather than always using the VIN it was
+        originally constructed with.  Coordinators must pass their own VIN
+        explicitly to avoid all cars on the same account returning the same
+        data.
+        """
+        target_vin = vin or self.vin
         try:
             charging_status = await self._make_api_call(
-                self.saic_api.get_vehicle_charging_management_data, self.vin
+                self.saic_api.get_vehicle_charging_management_data, target_vin
             )
             return charging_status
         except Exception as e:
-            LOGGER.error("Error retrieving charging information: %s", e)
+            LOGGER.error("Error retrieving charging information for VIN %s: %s", target_vin, e)
             return None
 
     async def get_vehicle_info(self):
@@ -135,15 +145,24 @@ class SAICMGAPIClient:
             LOGGER.error("Error retrieving vehicle info: %s", e)
             return None
 
-    async def get_vehicle_status(self):
-        """Retrieve vehicle status."""
+    async def get_vehicle_status(self, vin: str | None = None):
+        """Retrieve vehicle status for *vin* (defaults to self.vin).
+
+        Accepts an explicit vin so that a shared client instance (one per
+        account, shared across all VINs on that account) can fetch data for
+        any of the account's vehicles rather than always using the VIN it was
+        originally constructed with.  Coordinators must pass their own VIN
+        explicitly to avoid all cars on the same account returning the same
+        data.
+        """
+        target_vin = vin or self.vin
         try:
             vehicle_status = await self._make_api_call(
-                self.saic_api.get_vehicle_status, self.vin
+                self.saic_api.get_vehicle_status, target_vin
             )
             return vehicle_status
         except Exception as e:
-            LOGGER.error("Error retrieving vehicle status: %s", e)
+            LOGGER.error("Error retrieving vehicle status for VIN %s: %s", target_vin, e)
             return None
 
     # ACTIONS
