@@ -647,6 +647,10 @@ class SAICMGMileageSensor(CoordinatorEntity, SensorEntity):
         The sensor remains available as long as we have a last known value,
         even if the current API poll failed — this prevents utility meters and
         other helpers that depend on this sensor from resetting to 0.
+
+        For HEV vehicles, charging data is never fetched (the coordinator only
+        fetches it for BEV/PHEV), so availability must not depend on it.
+        Mileage for HEV comes from basicVehicleStatus which is always present.
         """
         if self._last_valid_mileage is not None:
             return True
@@ -656,7 +660,14 @@ class SAICMGMileageSensor(CoordinatorEntity, SensorEntity):
                 self.coordinator.last_update_success
                 and self.coordinator.data.get("status") is not None
             )
-        elif self._vehicle_type in ["PHEV", "HEV", "BEV"]:
+        elif self._vehicle_type == "HEV":
+            # HEV mileage comes from status only — charging data is not fetched
+            # for HEV vehicles so must not be required here.
+            return (
+                self.coordinator.last_update_success
+                and self.coordinator.data.get("status") is not None
+            )
+        elif self._vehicle_type in ["PHEV", "BEV"]:
             return (
                 self.coordinator.last_update_success
                 and self.coordinator.data.get("status") is not None
