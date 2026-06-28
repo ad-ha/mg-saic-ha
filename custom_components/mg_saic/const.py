@@ -202,6 +202,37 @@ VEHICLE_PROFILES = {
         "reliable_fuel_range_elec": False,
         "supports_charging_current_limit": True,
     },
+    "IS31P": {  # MG S9 PHEV (2025)
+        # Series string from API: 'IS31P L'
+        # Confirmed by eladrichi (issue #204), modelYear='2025', PHEV.
+        #
+        # Fan speed behaviour confirmed from log testing (all at 16°C cool mode):
+        #   fan_speed=1 → remoteClimateStatus=1 (fan only, AC not on) ✗
+        #   fan_speed=3 → remoteClimateStatus=3 (AC on, main vents)   ✓
+        #   fan_speed=5 → remoteClimateStatus=5 (AC on, defog vents)  ✗
+        #
+        # SL='1_2_5' declares native fan speeds but speed 3 is also accepted.
+        # Speed 1 must be avoided (fan-only). Speed 5 must be avoided (defog).
+        # Low is remapped to 2 to avoid the fan-only issue.
+        # High is kept at 3 (confirmed working) until higher speeds are tested.
+        # Fan speed 2 has not been tested — update this profile when confirmed.
+        #
+        # climate_status_cool: 3 confirmed (remoteClimateStatus=3 = AC on, main vents).
+        # temp_idx_inverted: unconfirmed, defaulting to False.
+        "min_temp": 16,
+        "max_temp": 28,
+        "temp_offset": 2,
+        "battery_capacity_kwh": None,
+        "climate_status_cool": {3},
+        "climate_status_fan_only": {2},
+        "fan_speed_low": 2,
+        "fan_speed_medium": 3,
+        "fan_speed_high": 3,
+        "temp_idx_inverted": False,
+        "supports_target_soc": True,
+        "reliable_fuel_range_elec": True,
+        "supports_charging_current_limit": True,
+    },
     "AS33P": {  # MG HS PHEV (2025/2026 Super Hybrid)
         # Series string from API: 'AS33P S'
         # Battery capacity: API reports totalBatteryCapacity=725 (→ 72.5 kWh with
