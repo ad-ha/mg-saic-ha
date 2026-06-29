@@ -323,6 +323,14 @@ class SAICMGAccountPoller:
             )
             return
 
+        # Capture the current watermark BEFORE advancing it.
+        # The handler uses this to decide which type-323 messages to delete —
+        # we keep the one that becomes the new watermark, delete the rest.
+        # If we advance first (as was the case before this fix), the new
+        # watermark ID matches the message being processed, so the deletion
+        # guard incorrectly skips it and nothing ever gets deleted.
+        pre_advance_watermark_id = self._last_seen_message_id
+
         # Advance the watermark to the newest message we fetched
         latest = new_messages[0]
         self._last_seen_message_id = latest.messageId
@@ -371,21 +379,28 @@ class SAICMGAccountPoller:
                     )
                     continue
 
-            await self._handle_messages_for_coordinator(coordinator, msgs, msg_vin)
+            await self._handle_messages_for_coordinator(
+                coordinator, msgs, msg_vin, pre_advance_watermark_id
+            )
 
     async def _handle_messages_for_coordinator(
         self,
         coordinator,
         messages: list,
         vin: str | None,
+        pre_advance_watermark_id: "str | int | None" = None,
     ) -> None:
         """Classify messages for one VIN, hint the coordinator, trigger a refresh,
         then delete processed vehicle-start messages from the SAIC queue.
 
         Deletion strategy (mirrors saic-python-mqtt-gateway message.py):
         - After processing, collect all type-323 (vehicle start) messages that
-          are NOT the account-level watermark (i.e. not the most-recently-seen
-          message ID stored in self._last_seen_message_id).
+          are NOT the pre-advance watermark ID (i.e. not the most-recently-seen
+          message ID from the PREVIOUS poll cycle).
+        - The pre-advance watermark must be used here — by the time this handler
+          runs, self._last_seen_message_id has already been advanced to the
+          newest message in this batch, which would incorrectly match the message
+          we're trying to delete and prevent deletion entirely.
         - Delete each of those older start messages individually.
         - This prevents unbounded queue growth on the SAIC server and avoids
           re-processing stale engine-start events after an HA restart.
@@ -497,10 +512,17 @@ class SAICMGAccountPoller:
                         vin,
                     )
 
-                # ── Queue for deletion (if not the watermark) ────────────────
+                # ── Queue for deletion ───────────────────────────────────────
+                # Delete ALL type-323 messages we process, including the one
+                # that became the watermark.  The watermark prevents
+                # re-processing even if deletion fails (the deduplication check
+                # runs before deletion), so there is no risk of double-acting
+                # on a message.  Excluding the watermark message was the
+                # original design but in practice only one message arrives per
+                # poll cycle, making that exclusion always True and deletion
+                # never happening.
                 if msg_type == MESSAGE_TYPE_VEHICLE_START and msg_id is not None:
-                    if msg_id != self._last_seen_message_id:
-                        vehicle_start_messages_to_delete.append(msg)
+                    vehicle_start_messages_to_delete.append(msg)
 
                 # Engine start is the highest-priority event; no need to
                 # inspect the remaining messages — break immediately.
@@ -544,14 +566,16 @@ class SAICMGAccountPoller:
             await coordinator.async_trigger_refresh(reason_str)
 
         # ── Delete consumed vehicle-start messages ────────────────────────────
-        # Mirrors saic-python-mqtt-gateway: delete all type-323 messages except
-        # the current watermark (newest).  This keeps the SAIC server queue
-        # clean and prevents stale start events from triggering spurious
-        # refreshes after an HA restart.
+        # Delete all type-323 messages processed this cycle.  The watermark
+        # (self._last_seen_message_id) already prevents re-processing on the
+        # next poll even if deletion fails, so it is safe to delete the message
+        # that became the watermark too.  Previously we excluded the watermark
+        # message from deletion, but since typically only one message arrives
+        # per 60-second poll cycle that exclusion meant nothing was ever deleted.
         #
-        # We do this AFTER async_trigger_refresh so the refresh is never blocked
-        # by a delete error.  Each delete is individually suppressed so one bad
-        # message ID doesn't prevent the rest from being cleaned up.
+        # Deletion runs AFTER async_trigger_refresh so a delete error never
+        # blocks the refresh.  Each delete is individually suppressed so one
+        # bad message ID doesn't prevent the rest from being cleaned up.
         if vehicle_start_messages_to_delete:
             LOGGER.debug(
                 "AccountPoller %s: deleting %d consumed vehicle-start message(s) "
