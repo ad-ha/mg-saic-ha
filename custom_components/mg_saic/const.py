@@ -311,6 +311,7 @@ DEFAULT_VEHICLE_PROFILE = {
 # Users can still override this lower via the integration options if they prefer.
 UPDATE_INTERVAL = timedelta(minutes=30)
 UPDATE_INTERVAL_CHARGING = timedelta(minutes=5)
+UPDATE_INTERVAL_DC_CHARGING = timedelta(minutes=5)
 UPDATE_INTERVAL_POWERED = timedelta(minutes=15)
 
 # Additional Update Intervals
