@@ -1059,7 +1059,8 @@ class SAICMGVINSensor(CoordinatorEntity, SensorEntity):
         return self._device_info
 
 
-
+# STATUS SENSORS
+class SAICMGHeatedSeatLevelSensor(CoordinatorEntity, SensorEntity):
     """Sensor to monitor the current heating level of a heated seat.
 
     Retention note: 0 maps to "Off" which IS a valid/expected state, so we
