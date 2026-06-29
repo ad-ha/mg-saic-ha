@@ -207,27 +207,27 @@ VEHICLE_PROFILES = {
         # Series string from API: 'IS31P L'
         # Confirmed by eladrichi (issue #204), modelYear='2025', PHEV.
         #
-        # Fan speed behaviour confirmed from log testing (all at 16°C cool mode):
-        #   fan_speed=1 → remoteClimateStatus=1 (fan only, AC not on) ✗
-        #   fan_speed=3 → remoteClimateStatus=3 (AC on, main vents)   ✓
-        #   fan_speed=5 → remoteClimateStatus=5 (AC on, defog vents)  ✗
+        # remoteClimateStatus mappings confirmed by physical testing:
+        #   1 → fan only, no AC compressor (original beta7 tests)
+        #   2 → AC on, main vents, lower fan speed  ✓ (Test 1, beta11)
+        #   3 → AC on, main vents, higher fan speed ✓ (Test 2/3, beta11)
+        #   5 → AC on, defog/windscreen vents        ✗ (original beta7 tests)
         #
-        # SL='1_2_5' declares native fan speeds but speed 3 is also accepted.
-        # Speed 1 must be avoided (fan-only). Speed 5 must be avoided (defog).
-        # Low is remapped to 2 to avoid the fan-only issue.
-        # High is kept at 3 (confirmed working) until higher speeds are tested.
-        # Fan speed 2 has not been tested — update this profile when confirmed.
+        # Fan speed mappings (SL='1_2_5', but 3 also accepted):
+        #   fan_speed_low=2  → remoteClimateStatus=2 (AC on, main vents)
+        #   fan_speed_high=3 → remoteClimateStatus=3 (AC on, main vents, more powerful)
+        #   Speed 1 avoided (fan only), speed 5 avoided (defog vents).
         #
-        # climate_status_cool: 3 confirmed (remoteClimateStatus=3 = AC on, main vents).
-        # temp_idx_inverted: unconfirmed, defaulting to False.
+        # Temperature index confirmed correct (temp_idx_inverted=False):
+        #   16°C → index 2, 22°C → index 8 (matches temp_offset=2 formula).
         "min_temp": 16,
         "max_temp": 28,
         "temp_offset": 2,
         "battery_capacity_kwh": None,
-        "climate_status_cool": {3},
-        "climate_status_fan_only": {2},
+        "climate_status_cool": {2, 3},
+        "climate_status_fan_only": {1},
         "fan_speed_low": 2,
-        "fan_speed_medium": 3,
+        "fan_speed_medium": 2,
         "fan_speed_high": 3,
         "temp_idx_inverted": False,
         "supports_target_soc": True,
