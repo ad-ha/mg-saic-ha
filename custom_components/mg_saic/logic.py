@@ -25,17 +25,31 @@ def select_update_interval(
     *,
     is_powered_on,
     is_charging,
+    is_dc_charging=False,
     idle_duration,
     activity_duration,
     default_update_interval,
     powered_update_interval,
     charging_update_interval,
+    dc_charging_update_interval=None,
     grace_period_update_interval,
     after_shutdown_update_interval,
 ):
-    """Return the interval that should be used for the current state."""
+    """Return the interval that should be used for the current state.
+
+    Priority order (highest to lowest):
+    1. Powered on — always use powered interval
+    2. DC charging — use dc_charging_update_interval (typically shorter than AC)
+    3. AC charging — use charging_update_interval
+    4. Grace period — recent activity but not powered/charging
+    5. After shutdown window
+    6. Default idle interval
+    """
     if is_powered_on:
         return powered_update_interval
+
+    if is_dc_charging and dc_charging_update_interval is not None:
+        return dc_charging_update_interval
 
     if is_charging:
         return charging_update_interval
