@@ -48,6 +48,7 @@ from .const import (
     UPDATE_INTERVAL,
     UPDATE_INTERVAL_AFTER_SHUTDOWN,
     UPDATE_INTERVAL_CHARGING,
+    UPDATE_INTERVAL_DC_CHARGING,
     UPDATE_INTERVAL_GRACE_PERIOD,
     UPDATE_INTERVAL_POWERED,
     VEHICLE_PROFILES,
@@ -72,6 +73,7 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
 
         # State Variables
         self.is_charging = False
+        self.is_dc_charging = False
         self.is_powered_on = False
         self.is_initial_setup = False
         self.after_shutdown_active = False
@@ -150,6 +152,9 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         self.update_interval = self.default_update_interval
         self.charging_update_interval = get_interval(
             "charging_update_interval", UPDATE_INTERVAL_CHARGING
+        )
+        self.dc_charging_update_interval = get_interval(
+            "dc_charging_update_interval", UPDATE_INTERVAL_DC_CHARGING
         )
         self.powered_update_interval = get_interval(
             "powered_update_interval", UPDATE_INTERVAL_POWERED
@@ -379,6 +384,9 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         self.update_interval = self.default_update_interval
         self.charging_update_interval = get_interval(
             "charging_update_interval", UPDATE_INTERVAL_CHARGING
+        )
+        self.dc_charging_update_interval = get_interval(
+            "dc_charging_update_interval", UPDATE_INTERVAL_DC_CHARGING
         )
         self.powered_update_interval = get_interval(
             "powered_update_interval", UPDATE_INTERVAL_POWERED
@@ -795,11 +803,14 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
 
         # Determine charging status
         self.is_charging = False
+        self.is_dc_charging = False
         if data.get("charging") is not None:
             chrg_data = getattr(data["charging"], "chrgMgmtData", None)
             if chrg_data is not None:
                 bms_chrg_sts = getattr(chrg_data, "bmsChrgSts", None)
                 self.is_charging = bms_chrg_sts in CHARGING_STATUS_CODES
+                # bmsChrgSts 10 = DC charging, 11 = super offboard DC charging
+                self.is_dc_charging = bms_chrg_sts in {10, 11}
         else:
             LOGGER.debug("Charging data not available.")
 
@@ -1059,19 +1070,23 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         self.update_interval = select_update_interval(
             is_powered_on=self.is_powered_on,
             is_charging=self.is_charging,
+            is_dc_charging=self.is_dc_charging,
             idle_duration=idle_duration,
             activity_duration=activity_duration,
             default_update_interval=self.default_update_interval,
             powered_update_interval=self.powered_update_interval,
             charging_update_interval=self.charging_update_interval,
+            dc_charging_update_interval=self.dc_charging_update_interval,
             grace_period_update_interval=self.grace_period_update_interval,
             after_shutdown_update_interval=self.after_shutdown_update_interval,
         )
 
         if self.is_powered_on:
             LOGGER.debug("Vehicle is powered on. Using powered update interval.")
+        elif self.is_dc_charging:
+            LOGGER.debug("Vehicle is DC charging. Using DC charging update interval.")
         elif self.is_charging:
-            LOGGER.debug("Vehicle is charging. Using charging update interval.")
+            LOGGER.debug("Vehicle is AC charging. Using charging update interval.")
         elif self.update_interval == self.grace_period_update_interval:
             LOGGER.debug("Within grace period. Using grace period interval.")
         elif self.update_interval == self.after_shutdown_update_interval:
