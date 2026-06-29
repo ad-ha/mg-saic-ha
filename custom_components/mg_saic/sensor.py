@@ -167,6 +167,10 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "modelYear",
                 "info",
             ),
+            SAICMGVINSensor(
+                coordinator,
+                entry,
+            ),
             SAICMGVehicleSensor(
                 coordinator,
                 entry,
@@ -990,7 +994,72 @@ class SAICMGVehicleDetailSensor(CoordinatorEntity, SensorEntity):
 
 
 # STATUS SENSORS
-class SAICMGHeatedSeatLevelSensor(CoordinatorEntity, SensorEntity):
+class SAICMGVINSensor(CoordinatorEntity, SensorEntity):
+    """Sensor exposing the vehicle VIN.
+
+    State: masked VIN — first 2 characters visible, middle 10 replaced with
+    asterisks, last 5 visible. e.g. ``LS**********46986``.
+    This keeps the manufacturer/region prefix and the unique suffix visible
+    (enough to identify a specific car) without exposing the full VIN in
+    dashboard screenshots, logs, or voice assistants.
+
+    Extra state attribute ``vin_full``: the complete unmasked VIN for use
+    in automations and HA services that require it as a parameter.
+    """
+
+    _attr_icon = "mdi:card-account-details"
+
+    def __init__(self, coordinator, entry):
+        """Initialise the VIN sensor."""
+        super().__init__(coordinator)
+        vin_info = coordinator.vin_info
+        self._vin = vin_info.vin
+        self._attr_unique_id = f"{entry.entry_id}_{vin_info.vin}_vin"
+        self._device_info = create_device_info(coordinator, entry.entry_id)
+
+    @property
+    def name(self):
+        """Return the sensor name."""
+        vin_info = self.coordinator.vin_info
+        return f"{vin_info.brandName} {vin_info.modelName} VIN"
+
+    @property
+    def native_value(self) -> str:
+        """Return masked VIN as the sensor state.
+
+        Format: first 2 chars + 10 asterisks + last 5 chars = 17 chars.
+        Falls back to full VIN if the VIN is shorter than 17 characters
+        (should never happen in practice but handled gracefully).
+        """
+        vin = self._vin
+        if len(vin) == 17:
+            return f"{vin[:2]}{'*' * 10}{vin[-5:]}"
+        # Non-standard length — mask everything except last 4
+        if len(vin) > 4:
+            return f"{'*' * (len(vin) - 4)}{vin[-4:]}"
+        return vin
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Expose the full unmasked VIN as an attribute.
+
+        Use ``{{ state_attr('sensor.<name>_vin', 'vin_full') }}`` in
+        automations and scripts that need to pass the VIN to HA services.
+        """
+        return {"vin_full": self._vin}
+
+    @property
+    def available(self) -> bool:
+        """Always available — VIN is static metadata set at startup."""
+        return True
+
+    @property
+    def device_info(self):
+        """Return device info."""
+        return self._device_info
+
+
+
     """Sensor to monitor the current heating level of a heated seat.
 
     Retention note: 0 maps to "Off" which IS a valid/expected state, so we
