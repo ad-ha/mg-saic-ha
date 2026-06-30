@@ -145,8 +145,7 @@ class SAICMGOpenBootButton(CoordinatorEntity, ButtonEntity):
     Uses a ButtonEntity rather than a cover action so that the control is
     always pressable regardless of current boot state. The SAIC API performs
     a one-shot latch release — it does not support remote closing — so a
-    momentary button is the correct UX. Boot open/closed state is reflected
-    separately by the cover entity (cover.<brand>_<model>_boot).
+    momentary button is the correct UX.
     """
 
     def __init__(self, coordinator, client, entry, vin_info, vin):
