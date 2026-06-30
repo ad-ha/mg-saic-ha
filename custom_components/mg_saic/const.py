@@ -214,9 +214,16 @@ VEHICLE_PROFILES = {
         #   5 → AC on, defog/windscreen vents        ✗ (original beta7 tests)
         #
         # Fan speed mappings (SL='1_2_5', but 3 also accepted):
-        #   fan_speed_low=2  → remoteClimateStatus=2 (AC on, main vents)
-        #   fan_speed_high=3 → remoteClimateStatus=3 (AC on, main vents, more powerful)
-        #   Speed 1 avoided (fan only), speed 5 avoided (defog vents).
+        #   fan_speed_low=2    → remoteClimateStatus=2 (AC on, main vents)
+        #   fan_speed_medium=4 → UNCONFIRMED. beta12 had this duplicated with
+        #     fan_speed_low (both =2), which made HA's Low and Medium fan
+        #     settings send an identical command (issue #204, beta12 feedback).
+        #     4 has never been tested — it's the only untested value between
+        #     the two confirmed-safe ones (2 and 3) and the avoided ones
+        #     (1=fan only, 5=defog vents). Needs confirmation from eladrichi
+        #     before being trusted; if 4 turns out to behave like 1 or 5, this
+        #     should fall back to matching fan_speed_high (3) instead.
+        #   fan_speed_high=3   → remoteClimateStatus=3 (AC on, main vents, more powerful)
         #
         # Temperature index confirmed correct (temp_idx_inverted=False):
         #   16°C → index 2, 22°C → index 8 (matches temp_offset=2 formula).
@@ -227,7 +234,7 @@ VEHICLE_PROFILES = {
         "climate_status_cool": {2, 3},
         "climate_status_fan_only": {1},
         "fan_speed_low": 2,
-        "fan_speed_medium": 2,
+        "fan_speed_medium": 4,
         "fan_speed_high": 3,
         "temp_idx_inverted": False,
         "supports_target_soc": True,
@@ -262,7 +269,7 @@ VEHICLE_PROFILES = {
         # Suppress both the status sensor and the select control for this model.
         "supports_charging_current_limit": False,
         # The API returns fuelRangeElec=-128 (sentinel) for this model when the car
-        # is parked — the live electric range field is not populated.  Fall back to
+        # is parked — the live electric range field is not populated. Fall back to
         # bmsEstdElecRng (estimated range after full charge) from chrgMgmtData.
         "reliable_fuel_range_elec": False,
         # Correction factor for energy-based fields that the API reports inflated
