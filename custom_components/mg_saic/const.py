@@ -16,6 +16,7 @@ REGION_BASE_URIS = {
     "EU": "https://gateway-mg-eu.soimt.com/api.app/v1/",
     "China": "https://tap-cn.soimt.com/api.app/v1/",
     "Australia": "https://gateway-mg-au.soimt.com/api.app/v1/",
+    "Brazil": "https://gateway-mg-br.soimt.com/api.app/v1/",
     "Israel": "https://gateway-mg-il.soimt.com/api.app/v1/",
     "Turkey": "https://gateway-mg-tr.soimt.com/api.app/v1/",
     "India": "https://gateway-mg-in.soimt.com/api.app/v1/",
@@ -172,6 +173,66 @@ VEHICLE_PROFILES = {
         "temp_idx_inverted": True,
         "supports_target_soc": True,
         "reliable_fuel_range_elec": True,
+        # The SAIC API incorrectly reports modelYear='2024' for the MGS6 EV.
+        # The MGS6 launched globally to dealerships in November 2025 — there is
+        # no 2024 model year variant.  Override to the correct value.
+        "model_year_override": "2025",
+    },
+    "EC32": {  # MG Cyberster (2-door BEV roadster/convertible)
+        # The Cyberster has no rear doors or rear windows — these are suppressed
+        # automatically via the DOOR/WINDOW bitmask in vehicleModelConfiguration
+        # (DOOR='1100', WINDOW='0000'), so no profile flag is needed for that.
+        #
+        # fuelRangeElec: the log shows -128 (sentinel value) when parked, same
+        # pattern as the HS PHEV.  Fall back to bmsEstdElecRng instead.
+        #
+        # Battery: API reports totalBatteryCapacity=725 → 72.5 kWh with ×0.1
+        # factor.  MG spec quotes 77 kWh gross / ~72.5 kWh usable — plausible,
+        # so no override needed.
+        "min_temp": 16,
+        "max_temp": 28,
+        "temp_offset": 2,
+        "battery_capacity_kwh": None,
+        "climate_status_cool": {3},
+        "climate_status_fan_only": {2},
+        "fan_speed_low": 1,
+        "fan_speed_medium": 3,
+        "fan_speed_high": 5,
+        "temp_idx_inverted": False,
+        "supports_target_soc": True,
+        "reliable_fuel_range_elec": False,
+        "supports_charging_current_limit": True,
+    },
+    "IS31P": {  # MG S9 PHEV (2025)
+        # Series string from API: 'IS31P L'
+        # Confirmed by eladrichi (issue #204), modelYear='2025', PHEV.
+        #
+        # remoteClimateStatus mappings confirmed by physical testing:
+        #   1 → fan only, no AC compressor (original beta7 tests)
+        #   2 → AC on, main vents, lower fan speed  ✓ (Test 1, beta11)
+        #   3 → AC on, main vents, higher fan speed ✓ (Test 2/3, beta11)
+        #   5 → AC on, defog/windscreen vents        ✗ (original beta7 tests)
+        #
+        # Fan speed mappings (SL='1_2_5', but 3 also accepted):
+        #   fan_speed_low=2  → remoteClimateStatus=2 (AC on, main vents)
+        #   fan_speed_high=3 → remoteClimateStatus=3 (AC on, main vents, more powerful)
+        #   Speed 1 avoided (fan only), speed 5 avoided (defog vents).
+        #
+        # Temperature index confirmed correct (temp_idx_inverted=False):
+        #   16°C → index 2, 22°C → index 8 (matches temp_offset=2 formula).
+        "min_temp": 16,
+        "max_temp": 28,
+        "temp_offset": 2,
+        "battery_capacity_kwh": None,
+        "climate_status_cool": {2, 3},
+        "climate_status_fan_only": {1},
+        "fan_speed_low": 2,
+        "fan_speed_medium": 2,
+        "fan_speed_high": 3,
+        "temp_idx_inverted": False,
+        "supports_target_soc": True,
+        "reliable_fuel_range_elec": True,
+        "supports_charging_current_limit": True,
     },
     "AS33P": {  # MG HS PHEV (2025/2026 Super Hybrid)
         # Series string from API: 'AS33P S'
@@ -191,11 +252,11 @@ VEHICLE_PROFILES = {
         "fan_speed_medium": 3,
         "fan_speed_high": 5,
         "temp_idx_inverted": False,
-        # iSmart app does not expose Target SOC control on some variants of the
-        # HS PHEV.  However, other AS33P owners report it does work on their car,
-        # so we cannot suppress the entity at the profile level.  The entity will
-        # show Unknown/unavailable on cars where the API does not support it.
-        "supports_target_soc": True,
+        # iSmart app does not expose Target SOC control for the HS PHEV —
+        # bmsOnBdChrgTrgtSOCDspCmd is always 0 (unmapped) so the slider would
+        # permanently show Unknown.  Confirmed by Harry (issue #198, 2026 HS PHEV).
+        # Suppress both the slider and the status sensor for this model.
+        "supports_target_soc": False,
         # iSmart app does not expose Charging Current Limit for the HS PHEV —
         # attempting to set it returns a "Target SOC could not be found" error.
         # Suppress both the status sensor and the select control for this model.
@@ -236,6 +297,8 @@ DEFAULT_VEHICLE_PROFILE = {
     "reliable_fuel_range_elec": True,
     # Default: no capacity correction needed (API value is correct for most models).
     "charging_capacity_correction": None,
+    # Default: no model year override (API value is correct for most models).
+    "model_year_override": None,
 }
 
 # Base update intervals
@@ -248,6 +311,7 @@ DEFAULT_VEHICLE_PROFILE = {
 # Users can still override this lower via the integration options if they prefer.
 UPDATE_INTERVAL = timedelta(minutes=30)
 UPDATE_INTERVAL_CHARGING = timedelta(minutes=5)
+UPDATE_INTERVAL_DC_CHARGING = timedelta(minutes=5)
 UPDATE_INTERVAL_POWERED = timedelta(minutes=15)
 
 # Additional Update Intervals
@@ -293,6 +357,18 @@ STATUS_TIMESTAMP_MAX_AGE = timedelta(hours=24)
 # Retry configuration
 RETRY_LIMIT = 5
 RETRY_BACKOFF_FACTOR = 15
+
+# Maximum seconds to wait for the very first API fetch during HA startup.
+# If the SAIC server is unreachable and we exceed this, we raise
+# ConfigEntryNotReady so HA can finish booting and retry in the background
+# rather than blocking startup for up to RETRY_LIMIT × RETRY_BACKOFF_FACTOR
+# seconds (75 s) before failing.
+# 15 s balances giving the SAIC library enough time to complete its internal
+# event-id polling loop on a healthy connection (typically 2–15 s) against
+# keeping HA startup snappy when SAIC is down.
+# HA retries automatically with exponential backoff once ConfigEntryNotReady
+# is raised.
+STARTUP_API_TIMEOUT = 15
 
 # Charging status codes indicating that the vehicle is actively using the
 # charging/discharging system.  Used by the coordinator to select the

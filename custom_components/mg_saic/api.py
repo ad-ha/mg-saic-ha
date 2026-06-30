@@ -115,15 +115,25 @@ class SAICMGAPIClient:
             raise
 
     # GET VEHICLE DATA
-    async def get_charging_info(self):
-        """Retrieve charging information."""
+
+    async def get_charging_info(self, vin: str | None = None):
+        """Retrieve charging information for *vin* (defaults to self.vin).
+
+        Accepts an explicit vin so that a shared client instance (one per
+        account, shared across all VINs on that account) can fetch data for
+        any of the account's vehicles rather than always using the VIN it was
+        originally constructed with.  Coordinators must pass their own VIN
+        explicitly to avoid all cars on the same account returning the same
+        data.
+        """
+        target_vin = vin or self.vin
         try:
             charging_status = await self._make_api_call(
-                self.saic_api.get_vehicle_charging_management_data, self.vin
+                self.saic_api.get_vehicle_charging_management_data, target_vin
             )
             return charging_status
         except Exception as e:
-            LOGGER.error("Error retrieving charging information: %s", e)
+            LOGGER.error("Error retrieving charging information for VIN %s: %s", target_vin, e)
             return None
 
     async def get_vehicle_info(self):
@@ -135,15 +145,24 @@ class SAICMGAPIClient:
             LOGGER.error("Error retrieving vehicle info: %s", e)
             return None
 
-    async def get_vehicle_status(self):
-        """Retrieve vehicle status."""
+    async def get_vehicle_status(self, vin: str | None = None):
+        """Retrieve vehicle status for *vin* (defaults to self.vin).
+
+        Accepts an explicit vin so that a shared client instance (one per
+        account, shared across all VINs on that account) can fetch data for
+        any of the account's vehicles rather than always using the VIN it was
+        originally constructed with.  Coordinators must pass their own VIN
+        explicitly to avoid all cars on the same account returning the same
+        data.
+        """
+        target_vin = vin or self.vin
         try:
             vehicle_status = await self._make_api_call(
-                self.saic_api.get_vehicle_status, self.vin
+                self.saic_api.get_vehicle_status, target_vin
             )
             return vehicle_status
         except Exception as e:
-            LOGGER.error("Error retrieving vehicle status: %s", e)
+            LOGGER.error("Error retrieving vehicle status for VIN %s: %s", target_vin, e)
             return None
 
     # ACTIONS
@@ -184,6 +203,49 @@ class SAICMGAPIClient:
         except Exception as e:
             LOGGER.warning("Error retrieving alarm messages: %s", e)
             return None
+
+    async def delete_message(self, message_id: "str | int") -> None:
+        """Delete a single alarm message by ID from the SAIC message queue.
+
+        Removing processed messages (particularly vehicle-start type 323)
+        prevents unbounded queue growth on the SAIC server and avoids
+        re-processing stale events after an HA restart.
+
+        The SAIC backend accepts either str or int message IDs; pass through
+        whatever was returned on the MessageEntity.messageId field.
+
+        Mirrors the deletion pattern from saic-python-mqtt-gateway
+        src/handlers/message.py — delete_message is called for each consumed
+        vehicle-start message except the most-recent (watermark) one.
+
+        Args:
+            message_id: the messageId value from the MessageEntity.
+        """
+        try:
+            await self._make_api_call(
+                self.saic_api.delete_message,
+                message_id=message_id,
+            )
+            LOGGER.debug("Deleted alarm message ID %s", message_id)
+        except Exception as e:
+            # Non-fatal: a failed delete just means the message stays in the
+            # queue.  It will be deduplicated by the watermark logic on the
+            # next poll, so polling correctness is unaffected.
+            LOGGER.warning(
+                "Could not delete alarm message ID %s: %s", message_id, e
+            )
+
+    async def delete_all_alarms(self) -> None:
+        """Delete all alarm messages for this account from the SAIC queue.
+
+        Use sparingly — intended for maintenance / queue-clear scenarios, not
+        for routine per-message cleanup (use delete_message for that).
+        """
+        try:
+            await self._make_api_call(self.saic_api.delete_all_alarms)
+            LOGGER.info("Deleted all alarm messages for account")
+        except Exception as e:
+            LOGGER.warning("Could not delete all alarm messages: %s", e)
 
     async def set_alarm_switches(self, vin: str) -> None:
         """Register alarm switch subscriptions with the SAIC API.
@@ -519,7 +581,12 @@ class SAICMGAPIClient:
             return
 
         try:
-            await self.saic_api.close()
-            LOGGER.info("Closed MG SAIC API session.")
+            if hasattr(self.saic_api, "close"):
+                await self.saic_api.close()
+                LOGGER.info("Closed MG SAIC API session.")
+            else:
+                LOGGER.debug(
+                    "MG SAIC API session has no close method — nothing to close."
+                )
         except Exception as e:
             LOGGER.error("Error closing MG SAIC API session: %s", e)

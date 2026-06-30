@@ -323,6 +323,14 @@ class SAICMGAccountPoller:
             )
             return
 
+        # Capture the current watermark BEFORE advancing it.
+        # The handler uses this to decide which type-323 messages to delete —
+        # we keep the one that becomes the new watermark, delete the rest.
+        # If we advance first (as was the case before this fix), the new
+        # watermark ID matches the message being processed, so the deletion
+        # guard incorrectly skips it and nothing ever gets deleted.
+        pre_advance_watermark_id = self._last_seen_message_id
+
         # Advance the watermark to the newest message we fetched
         latest = new_messages[0]
         self._last_seen_message_id = latest.messageId
@@ -371,29 +379,65 @@ class SAICMGAccountPoller:
                     )
                     continue
 
-            await self._handle_messages_for_coordinator(coordinator, msgs, msg_vin)
+            await self._handle_messages_for_coordinator(
+                coordinator, msgs, msg_vin, pre_advance_watermark_id
+            )
 
     async def _handle_messages_for_coordinator(
         self,
         coordinator,
         messages: list,
         vin: str | None,
+        pre_advance_watermark_id: "str | int | None" = None,
     ) -> None:
-        """Classify messages for one VIN and trigger a refresh if needed."""
+        """Classify messages for one VIN, hint the coordinator, trigger a refresh,
+        then delete processed vehicle-start messages from the SAIC queue.
+
+        Deletion strategy (mirrors saic-python-mqtt-gateway message.py):
+        - After processing, collect all type-323 (vehicle start) messages that
+          are NOT the pre-advance watermark ID (i.e. not the most-recently-seen
+          message ID from the PREVIOUS poll cycle).
+        - The pre-advance watermark must be used here — by the time this handler
+          runs, self._last_seen_message_id has already been advanced to the
+          newest message in this batch, which would incorrectly match the message
+          we're trying to delete and prevent deletion entirely.
+        - Delete each of those older start messages individually.
+        - This prevents unbounded queue growth on the SAIC server and avoids
+          re-processing stale engine-start events after an HA restart.
+        - Delete is best-effort: failures are logged at WARNING level and never
+          block polling or refresh logic.
+
+        Hint strategy (feature/account-level-message-poller improvement):
+        - When a type-323 message is detected, extract its timestamp from
+          ``createTime`` (Unix ms, timezone-unambiguous) and call
+          ``coordinator.hint_vehicle_started(started_at)`` *before* requesting
+          the confirming refresh.
+        - This pre-sets ``is_powered_on=True``, stamps ``last_powered_on_time``
+          with the actual vehicle start time (not the poll time), and immediately
+          switches the coordinator to ``powered_update_interval``.
+        - For users with long idle intervals (e.g. 12 h), this is the difference
+          between switching to rapid polling within seconds vs. waiting hours.
+        """
         should_refresh = False
         refresh_reason: list[str] = []
+
+        # Collect type-323 messages seen this cycle so we can delete them after
+        # processing.  We delete all EXCEPT the one that became the watermark
+        # (self._last_seen_message_id), mirroring the MQTT gateway pattern.
+        vehicle_start_messages_to_delete: list = []
 
         for msg in messages:
             title = (getattr(msg, "title", None) or "").lower()
             content = (getattr(msg, "content", None) or "").lower()
             msg_type = getattr(msg, "messageType", None) or ""
+            msg_id = getattr(msg, "messageId", None)
 
             LOGGER.debug(
                 "AccountPoller %s: processing message type=%s id=%s title='%s' "
                 "for VIN %s",
                 self._account_key,
                 msg_type,
-                getattr(msg, "messageId", None),
+                msg_id,
                 getattr(msg, "title", None),
                 vin,
             )
@@ -412,6 +456,74 @@ class SAICMGAccountPoller:
                 )
                 should_refresh = True
                 refresh_reason.append("engine start")
+
+                # ── Hint the coordinator immediately ─────────────────────────
+                # Extract start time from createTime (Unix ms) if available —
+                # it is timezone-unambiguous.  Fall back to the message_time
+                # property (naive string, treated as UTC) if createTime is None.
+                started_at: datetime | None = None
+                create_time_ms = getattr(msg, "createTime", None)
+                if create_time_ms is not None:
+                    try:
+                        started_at = datetime.fromtimestamp(
+                            create_time_ms / 1000.0, tz=timezone.utc
+                        )
+                    except (OSError, OverflowError, ValueError) as exc:
+                        LOGGER.debug(
+                            "AccountPoller %s: could not parse createTime %s: %s",
+                            self._account_key,
+                            create_time_ms,
+                            exc,
+                        )
+
+                if started_at is None:
+                    # Fallback: message_time is naive (SAIC server local time,
+                    # empirically close to UTC for EU region).  Attach UTC to
+                    # avoid comparison errors — this is a best-effort hint.
+                    raw_mt = getattr(msg, "message_time", None)
+                    if raw_mt is not None:
+                        try:
+                            if raw_mt.tzinfo is None:
+                                started_at = raw_mt.replace(tzinfo=timezone.utc)
+                            else:
+                                started_at = raw_mt
+                        except Exception as exc:
+                            LOGGER.debug(
+                                "AccountPoller %s: could not attach tz to "
+                                "message_time: %s",
+                                self._account_key,
+                                exc,
+                            )
+
+                if started_at is not None and hasattr(coordinator, "hint_vehicle_started"):
+                    LOGGER.info(
+                        "AccountPoller %s: hinting VIN %s started at %s "
+                        "(from %s)",
+                        self._account_key,
+                        vin,
+                        started_at,
+                        "createTime" if create_time_ms is not None else "message_time",
+                    )
+                    coordinator.hint_vehicle_started(started_at)
+                else:
+                    LOGGER.debug(
+                        "AccountPoller %s: no usable timestamp for hint (VIN %s)",
+                        self._account_key,
+                        vin,
+                    )
+
+                # ── Queue for deletion ───────────────────────────────────────
+                # Delete ALL type-323 messages we process, including the one
+                # that became the watermark.  The watermark prevents
+                # re-processing even if deletion fails (the deduplication check
+                # runs before deletion), so there is no risk of double-acting
+                # on a message.  Excluding the watermark message was the
+                # original design but in practice only one message arrives per
+                # poll cycle, making that exclusion always True and deletion
+                # never happening.
+                if msg_type == MESSAGE_TYPE_VEHICLE_START and msg_id is not None:
+                    vehicle_start_messages_to_delete.append(msg)
+
                 # Engine start is the highest-priority event; no need to
                 # inspect the remaining messages — break immediately.
                 break
@@ -452,3 +564,37 @@ class SAICMGAccountPoller:
                 reason_str,
             )
             await coordinator.async_trigger_refresh(reason_str)
+
+        # ── Delete consumed vehicle-start messages ────────────────────────────
+        # Delete all type-323 messages processed this cycle.  The watermark
+        # (self._last_seen_message_id) already prevents re-processing on the
+        # next poll even if deletion fails, so it is safe to delete the message
+        # that became the watermark too.  Previously we excluded the watermark
+        # message from deletion, but since typically only one message arrives
+        # per 60-second poll cycle that exclusion meant nothing was ever deleted.
+        #
+        # Deletion runs AFTER async_trigger_refresh so a delete error never
+        # blocks the refresh.  Each delete is individually suppressed so one
+        # bad message ID doesn't prevent the rest from being cleaned up.
+        if vehicle_start_messages_to_delete:
+            LOGGER.debug(
+                "AccountPoller %s: deleting %d consumed vehicle-start message(s) "
+                "for VIN %s",
+                self._account_key,
+                len(vehicle_start_messages_to_delete),
+                vin,
+            )
+            for msg in vehicle_start_messages_to_delete:
+                msg_id = getattr(msg, "messageId", None)
+                if msg_id is None:
+                    continue
+                async with self._api_lock:
+                    with suppress(Exception):
+                        await self._client.delete_message(msg_id)
+                        LOGGER.debug(
+                            "AccountPoller %s: deleted vehicle-start message "
+                            "id=%s for VIN %s",
+                            self._account_key,
+                            msg_id,
+                            vin,
+                        )

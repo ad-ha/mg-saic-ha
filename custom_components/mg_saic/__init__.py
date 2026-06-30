@@ -3,7 +3,7 @@
 import asyncio
 from contextlib import suppress
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryNotReady
 from homeassistant.core import HomeAssistant
 
 from .api import SAICMGAPIClient
@@ -144,8 +144,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = SAICMGDataUpdateCoordinator(hass, client, entry)
     coordinator.set_api_lock(api_lock)
 
+    # If this is a second (or later) VIN on the same account, stagger startup
+    # by a few seconds so both coordinators don't race to hit the SAIC API
+    # simultaneously through the shared client at HA boot time.  Without this,
+    # the second coordinator's async_config_entry_first_refresh frequently times
+    # out waiting for the api_lock while the first coordinator holds it.
+    if acct_key in domain["coordinators_by_vin"] or any(
+        _account_key(e) == acct_key
+        for e in hass.config_entries.async_entries(DOMAIN)
+        if e.entry_id != entry.entry_id and e.entry_id in domain
+    ):
+        LOGGER.debug(
+            "VIN %s is a secondary VIN on account %s — staggering startup by 5s",
+            vin,
+            acct_key,
+        )
+        await asyncio.sleep(5)
+
     try:
         await coordinator.async_setup()
+    except ConfigEntryNotReady:
+        # Propagate so HA marks the entry as "Retrying" and retries automatically.
+        raise
     except Exception as exc:
         LOGGER.error("Coordinator setup failed for VIN %s: %s", vin, exc)
         return False

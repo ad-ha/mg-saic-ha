@@ -86,24 +86,6 @@ async def async_setup_entry(hass, entry, async_add_entities):
             SAICMGBinarySensor(
                 coordinator,
                 entry,
-                "Door Rear Left",
-                "rearLeftDoor",
-                BinarySensorDeviceClass.DOOR,
-                "mdi:car-door",
-                "status",
-            ),
-            SAICMGBinarySensor(
-                coordinator,
-                entry,
-                "Door Rear Right",
-                "rearRightDoor",
-                BinarySensorDeviceClass.DOOR,
-                "mdi:car-door",
-                "status",
-            ),
-            SAICMGBinarySensor(
-                coordinator,
-                entry,
                 "Engine Status",
                 "engineStatus",
                 BinarySensorDeviceClass.POWER,
@@ -173,25 +155,55 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "mdi:car-door",
                 "status",
             ),
-            SAICMGBinarySensor(
-                coordinator,
-                entry,
-                "Window Rear Left",
-                "rearLeftWindow",
-                BinarySensorDeviceClass.WINDOW,
-                "mdi:car-door",
-                "status",
-            ),
-            SAICMGBinarySensor(
-                coordinator,
-                entry,
-                "Window Rear Right",
-                "rearRightWindow",
-                BinarySensorDeviceClass.WINDOW,
-                "mdi:car-door",
-                "status",
-            ),
         ]
+
+        # Rear doors — only present on 4-door vehicles (not e.g. Cyberster EC32).
+        # Derived from the DOOR bitmask in vehicleModelConfiguration by the coordinator.
+        if coordinator.has_rear_doors:
+            binary_sensors.extend([
+                SAICMGBinarySensor(
+                    coordinator,
+                    entry,
+                    "Door Rear Left",
+                    "rearLeftDoor",
+                    BinarySensorDeviceClass.DOOR,
+                    "mdi:car-door",
+                    "status",
+                ),
+                SAICMGBinarySensor(
+                    coordinator,
+                    entry,
+                    "Door Rear Right",
+                    "rearRightDoor",
+                    BinarySensorDeviceClass.DOOR,
+                    "mdi:car-door",
+                    "status",
+                ),
+            ])
+
+        # Rear windows — only present when the car has tracked rear windows.
+        # Convertibles (e.g. Cyberster) report WINDOW='0000' — no glass windows.
+        if coordinator.has_rear_windows:
+            binary_sensors.extend([
+                SAICMGBinarySensor(
+                    coordinator,
+                    entry,
+                    "Window Rear Left",
+                    "rearLeftWindow",
+                    BinarySensorDeviceClass.WINDOW,
+                    "mdi:car-door",
+                    "status",
+                ),
+                SAICMGBinarySensor(
+                    coordinator,
+                    entry,
+                    "Window Rear Right",
+                    "rearRightWindow",
+                    BinarySensorDeviceClass.WINDOW,
+                    "mdi:car-door",
+                    "status",
+                ),
+            ])
 
         # Add charging-related binary sensors
         if coordinator.vehicle_type in ["BEV", "PHEV"]:

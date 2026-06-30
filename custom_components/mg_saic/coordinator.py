@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta, timezone
 import asyncio
 from contextlib import suppress
+from homeassistant.config_entries import ConfigEntryNotReady
 from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util.dt import utcnow
@@ -41,11 +42,13 @@ from .const import (
     LOGGER,
     RETRY_BACKOFF_FACTOR,
     RETRY_LIMIT,
+    STARTUP_API_TIMEOUT,
     STATUS_TIMESTAMP_FUTURE_TOLERANCE,
     STATUS_TIMESTAMP_MAX_AGE,
     UPDATE_INTERVAL,
     UPDATE_INTERVAL_AFTER_SHUTDOWN,
     UPDATE_INTERVAL_CHARGING,
+    UPDATE_INTERVAL_DC_CHARGING,
     UPDATE_INTERVAL_GRACE_PERIOD,
     UPDATE_INTERVAL_POWERED,
     VEHICLE_PROFILES,
@@ -70,6 +73,7 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
 
         # State Variables
         self.is_charging = False
+        self.is_dc_charging = False
         self.is_powered_on = False
         self.is_initial_setup = False
         self.after_shutdown_active = False
@@ -118,6 +122,7 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         self.reliable_fuel_range_elec: bool = True
         self.charging_capacity_correction: float | None = None
         self.supports_charging_current_limit: bool = True
+        self.model_year_override: str | None = None
 
         # Reference to the command-error Event entity (event.py), set once it
         # registers itself via register_command_error_event_entity. May be
@@ -147,6 +152,9 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         self.update_interval = self.default_update_interval
         self.charging_update_interval = get_interval(
             "charging_update_interval", UPDATE_INTERVAL_CHARGING
+        )
+        self.dc_charging_update_interval = get_interval(
+            "dc_charging_update_interval", UPDATE_INTERVAL_DC_CHARGING
         )
         self.powered_update_interval = get_interval(
             "powered_update_interval", UPDATE_INTERVAL_POWERED
@@ -234,6 +242,14 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             config_entry.data.get("has_steering_wheel_heat", False),
         )
 
+        # Derived from vehicleModelConfiguration on first data fetch.
+        # The DOOR bitmask (positions: FL, FR, RL, RR) tells us whether the car
+        # has rear doors. The WINDOW bitmask uses the same layout.
+        # Default True so that pre-existing installations without a data fetch
+        # yet don't suddenly lose entities; corrected on first _update_state.
+        self.has_rear_doors = True
+        self.has_rear_windows = True
+
         # Post-shutdown refresh sequence — enabled by default, opt-out via options.
         # When enabled, the coordinator fires a rapid series of refreshes after
         # detecting engine-off or door-lock, to catch plug-in within 1-3 minutes
@@ -275,6 +291,75 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         )
         await self.async_request_refresh()
 
+    def hint_vehicle_started(self, started_at: datetime) -> None:
+        """Pre-apply powered-on state from a vehicle-start alarm message timestamp.
+
+        Called by SAICMGAccountPoller when it receives a type-323 (vehicle
+        start) message, *before* the confirming vehicle-status poll arrives.
+        This pre-sets:
+
+        - ``is_powered_on = True``
+        - ``last_powered_on_time = started_at``   (message timestamp, not poll time)
+        - Immediately switches ``update_interval`` to ``powered_update_interval``
+
+        so that the coordinator begins rapid polling right away rather than
+        waiting up to one full default interval (which could be hours for
+        users with long idle intervals).
+
+        The confirming poll in ``_update_state`` will still run normally —
+        if it sees ``powerMode=2`` it keeps the hint state; if it sees
+        ``powerMode`` as something else (e.g. the message was spurious), it
+        corrects the state as usual.
+
+        Guards:
+        - If ``is_powered_on`` is already ``True`` and ``last_powered_on_time``
+          is *newer* than ``started_at``, the hint is a no-op (a confirmed poll
+          already has more accurate data).
+        - If an action-interval sequence is active, ``_adjust_update_interval``
+          will skip the reschedule as usual.
+
+        Args:
+            started_at: timezone-aware datetime derived from the vehicle-start
+                        message.  Callers must ensure UTC-aware before passing.
+        """
+        # Guard: don't regress a more-recent confirmed power-on timestamp
+        if (
+            self.is_powered_on
+            and self.last_powered_on_time is not None
+            and self.last_powered_on_time >= started_at
+        ):
+            LOGGER.debug(
+                "hint_vehicle_started: VIN %s already powered on with newer "
+                "timestamp (%s >= %s) — no-op",
+                self.vin,
+                self.last_powered_on_time,
+                started_at,
+            )
+            return
+
+        LOGGER.info(
+            "hint_vehicle_started: VIN %s — pre-setting powered-on from "
+            "message timestamp %s (was: is_powered_on=%s, last_powered_on=%s)",
+            self.vin,
+            started_at,
+            self.is_powered_on,
+            self.last_powered_on_time,
+        )
+
+        self.is_powered_on = True
+        self.last_powered_on_time = started_at
+
+        # Immediately switch to the powered interval so the next scheduled
+        # poll fires at the rapid powered-on cadence, not the slow idle cadence.
+        # _adjust_update_interval is the single source of truth for interval
+        # selection and scheduling — call it rather than setting update_interval
+        # directly, so all action-interval / grace-period guards apply correctly.
+        self._adjust_update_interval()
+
+        # Notify listeners so the last_powered_on sensor updates immediately
+        # (before the poll confirms it), giving users an accurate start time.
+        self.async_update_listeners()
+
     # Update Options
     async def async_update_options(self, options):
         """Update options and reschedule refresh."""
@@ -299,6 +384,9 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         self.update_interval = self.default_update_interval
         self.charging_update_interval = get_interval(
             "charging_update_interval", UPDATE_INTERVAL_CHARGING
+        )
+        self.dc_charging_update_interval = get_interval(
+            "dc_charging_update_interval", UPDATE_INTERVAL_DC_CHARGING
         )
         self.powered_update_interval = get_interval(
             "powered_update_interval", UPDATE_INTERVAL_POWERED
@@ -462,11 +550,20 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             self.last_powered_on_time = datetime.now(timezone.utc) - timedelta(hours=24)
 
         try:
-            await self.async_config_entry_first_refresh()
+            await asyncio.wait_for(
+                self.async_config_entry_first_refresh(),
+                timeout=STARTUP_API_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            raise ConfigEntryNotReady(
+                f"MG SAIC API did not respond within {STARTUP_API_TIMEOUT}s at "
+                f"startup for VIN {vin} — HA will retry automatically in the background."
+            )
         except Exception as e:
-            LOGGER.error("First data update failed: %s", e)
-            # Proceed anyway, set data to empty dict
-            self.data = {}
+            raise ConfigEntryNotReady(
+                f"MG SAIC API unavailable at startup for VIN {vin}: {e} "
+                f"— HA will retry automatically in the background."
+            )
 
         if "info" in self.data and self.data["info"]:
             # Find the vehicle info matching the current VIN
@@ -510,6 +607,7 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             self.reliable_fuel_range_elec = profile.get("reliable_fuel_range_elec", True)
             self.charging_capacity_correction = profile.get("charging_capacity_correction", None)
             self.supports_charging_current_limit = profile.get("supports_charging_current_limit", True)
+            self.model_year_override = profile.get("model_year_override", None)
 
             LOGGER.debug(
                 "Vehicle series detected: %s (profile: %s). "
@@ -535,9 +633,49 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                     self.vehicle_series,
                     self.known_battery_capacity_kwh,
                 )
+
+            # Parse vehicleModelConfiguration bitmasks to determine which
+            # physical features the car actually has.
+            #
+            # DOOR: 4-char bitmask "FLFRRLRR" — '1' = door present.
+            #   e.g. "1100" → front doors only (no rear doors) = Cyberster.
+            #   e.g. "1111" → all four doors.
+            # WINDOW: same 4-position layout as DOOR.
+            #   e.g. "0000" → no tracked windows (Cyberster soft-top).
+            #   e.g. "1111" → all windows.
+            #
+            # These are read from the API's own vehicle config, so no profile
+            # entry is needed — any car reports its own physical spec.
+            door_value = None
+            window_value = None
+            for config_item in vin_info.vehicleModelConfiguration:
+                if config_item.itemCode == "DOOR":
+                    door_value = config_item.itemValue
+                elif config_item.itemCode == "WINDOW":
+                    window_value = config_item.itemValue
+
+            # Positions 2 and 3 (0-indexed) = rear-left and rear-right.
+            # If the bitmask is shorter than expected, default to True (safe).
+            if door_value is not None and len(door_value) >= 4:
+                self.has_rear_doors = door_value[2] == "1" or door_value[3] == "1"
+            if window_value is not None and len(window_value) >= 4:
+                self.has_rear_windows = window_value[2] == "1" or window_value[3] == "1"
+
+            LOGGER.debug(
+                "Vehicle body config for series %s: DOOR=%s → has_rear_doors=%s, "
+                "WINDOW=%s → has_rear_windows=%s",
+                self.vehicle_series,
+                door_value,
+                self.has_rear_doors,
+                window_value,
+                self.has_rear_windows,
+            )
         else:
             LOGGER.error(f"No 'info' data found for VIN: {vin}")
-            raise UpdateFailed("No 'info' data found for VIN.")
+            raise ConfigEntryNotReady(
+                f"No vehicle info returned by SAIC API for VIN {vin}. "
+                f"HA will retry automatically."
+            )
 
         # Update capabilities from options
         self.has_sunroof = self.config_entry.options.get(
@@ -605,10 +743,15 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             data["info"] = filtered_info
             self.vin_info = filtered_info[0]
 
-            # Fetch vehicle status with retries
+            # Fetch vehicle status with retries.
+            # Pass self.vin explicitly — the client is shared across all VINs
+            # on the same account, so without an explicit vin it would always
+            # fetch status for whichever VIN the client was first constructed
+            # with, causing all cars on the account to show the same data.
+            vin = self.vin
             try:
                 data["status"] = await self._fetch_with_retries(
-                    self.client.get_vehicle_status,
+                    lambda: self.client.get_vehicle_status(vin),
                     self._is_generic_response_vehicle_status,
                     "vehicle status",
                 )
@@ -634,11 +777,12 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                 else:
                     raise
 
-            # Fetch charging info with retries
+            # Fetch charging info with retries.
+            # Same explicit-vin pattern as above.
             if self.vehicle_type in ["BEV", "PHEV"]:
                 try:
                     data["charging"] = await self._fetch_with_retries(
-                        self.client.get_charging_info,
+                        lambda: self.client.get_charging_info(vin),
                         self._is_generic_response_charging,
                         "charging info",
                     )
@@ -659,11 +803,14 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
 
         # Determine charging status
         self.is_charging = False
+        self.is_dc_charging = False
         if data.get("charging") is not None:
             chrg_data = getattr(data["charging"], "chrgMgmtData", None)
             if chrg_data is not None:
                 bms_chrg_sts = getattr(chrg_data, "bmsChrgSts", None)
                 self.is_charging = bms_chrg_sts in CHARGING_STATUS_CODES
+                # bmsChrgSts 10 = DC charging, 11 = super offboard DC charging
+                self.is_dc_charging = bms_chrg_sts in {10, 11}
         else:
             LOGGER.debug("Charging data not available.")
 
@@ -923,19 +1070,23 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         self.update_interval = select_update_interval(
             is_powered_on=self.is_powered_on,
             is_charging=self.is_charging,
+            is_dc_charging=self.is_dc_charging,
             idle_duration=idle_duration,
             activity_duration=activity_duration,
             default_update_interval=self.default_update_interval,
             powered_update_interval=self.powered_update_interval,
             charging_update_interval=self.charging_update_interval,
+            dc_charging_update_interval=self.dc_charging_update_interval,
             grace_period_update_interval=self.grace_period_update_interval,
             after_shutdown_update_interval=self.after_shutdown_update_interval,
         )
 
         if self.is_powered_on:
             LOGGER.debug("Vehicle is powered on. Using powered update interval.")
+        elif self.is_dc_charging:
+            LOGGER.debug("Vehicle is DC charging. Using DC charging update interval.")
         elif self.is_charging:
-            LOGGER.debug("Vehicle is charging. Using charging update interval.")
+            LOGGER.debug("Vehicle is AC charging. Using charging update interval.")
         elif self.update_interval == self.grace_period_update_interval:
             LOGGER.debug("Within grace period. Using grace period interval.")
         elif self.update_interval == self.after_shutdown_update_interval:
