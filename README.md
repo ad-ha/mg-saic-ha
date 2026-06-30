@@ -1,11 +1,11 @@
-[![GitHub license](https://img.shields.io/github/license/ad-ha/mg-saic-ha)](https://github.com/ad-ha/mg-saic-ha/blob/main/LICENSE)
-![GitHub Release (latest SemVer including pre-releases)](https://img.shields.io/github/v/release/ad-ha/mg-saic-ha?include_prereleases)
-![GitHub Downloads (all assets, latest release)](https://img.shields.io/github/downloads/ad-ha/mg-saic-ha/latest/total)
-[![GitHub stars](https://img.shields.io/github/stars/ad-ha/mg-saic-ha?style=flat)](https://github.com/ad-ha/mg-saic-ha/stargazers)
+[![GitHub license](https://img.shields.io/github/license/townsmcp/mg-saic-ha)](https://github.com/townsmcp/mg-saic-ha/blob/main/LICENSE)
+![GitHub Release (latest SemVer including pre-releases)](https://img.shields.io/github/v/release/townsmcp/mg-saic-ha?include_prereleases)
+![GitHub Downloads (all assets, latest release)](https://img.shields.io/github/downloads/townsmcp/mg-saic-ha/latest/total)
+[![GitHub stars](https://img.shields.io/github/stars/townsmcp/mg-saic-ha?style=flat)](https://github.com/townsmcp/mg-saic-ha/stargazers)
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Default-green.svg)](https://github.com/hacs/default)
-[![HACS Action](https://github.com/ad-ha/mg-saic-ha/actions/workflows/validate.yaml/badge.svg)](https://github.com/ad-ha/mg-saic-ha/actions/workflows/validate.yaml)
-[![Hassfest](https://github.com/ad-ha/mg-saic-ha/actions/workflows/hassfest.yaml/badge.svg)](https://github.com/ad-ha/mg-saic-ha/actions/workflows/hassfest.yaml)
+[![HACS Action](https://github.com/townsmcp/mg-saic-ha/actions/workflows/validate.yaml/badge.svg)](https://github.com/townsmcp/mg-saic-ha/actions/workflows/validate.yaml)
+[![Hassfest](https://github.com/townsmcp/mg-saic-ha/actions/workflows/hassfest.yaml/badge.svg)](https://github.com/townsmcp/mg-saic-ha/actions/workflows/hassfest.yaml)
 [![Integration Usage](https://img.shields.io/badge/dynamic/json?color=41BDF5&logo=home-assistant&label=integration%20usage&suffix=%20installs&cacheSeconds=15600&url=https://analytics.home-assistant.io/custom_integrations.json&query=$.mg_saic.total)](https://analytics.home-assistant.io/)
 
 ![Logo](brand/icon.png)
@@ -35,7 +35,7 @@
 
 ### Manual Installation
 
-1. Download the latest release from the [MG SAIC Custom Integration GitHub repository](https://github.com/ad-ha/mg-saic-ha/releases).
+1. Download the latest release from the [MG SAIC Custom Integration GitHub repository](https://github.com/townsmcp/mg-saic-ha/releases).
 2. Unzip the release and copy the `mg_saic` directory to `custom_components` in your Home Assistant configuration directory.
 3. Restart Home Assistant.
 
@@ -43,7 +43,7 @@
 
 To add the integration to your local Home Assistant, click here:
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=ad-ha&repository=mg-saic-ha&category=integration)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=townsmcp&repository=mg-saic-ha&category=integration)
 
 Install the integration, restart Home Assistant and then add the integration, either:
 
@@ -271,11 +271,13 @@ Models not listed above use safe default values and should work normally. If you
 
 ## Contributing
 
-Contributions are welcome! If you have any suggestions or find any issues, please open an [issue](https://github.com/ad-ha/mg-saic-ha/issues) or a [pull request](https://github.com/ad-ha/mg-saic-ha/pulls).
+Contributions are welcome! If you have any suggestions or find any issues, please open an [issue](https://github.com/townsmcp/mg-saic-ha/issues) or a [pull request](https://github.com/townsmcp/mg-saic-ha/pulls).
 
 ## Credits
 
 This integration was made possible thanks to the [saic-ismart-client-ng](https://github.com/SAIC-iSmart-API/saic-python-client-ng) repository and its developers/contributors.
+
+Special thanks to ad-ha for creating the original integration and for the hard work put into building and maintaining it in its previous stages. This repository continues that work.
 
 ## License
 
