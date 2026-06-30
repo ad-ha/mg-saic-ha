@@ -152,11 +152,15 @@ class SAICMGClimateEntity(CoordinatorEntity, ClimateEntity):
                 # confirms (next coordinator refresh).
                 return self._attr_hvac_mode
             else:
-                # Unknown/unhandled status (e.g. 4=heat, 6=driving ventilation)
-                # — show as Off in HA; do not override local state.
-                if self._attr_hvac_mode in (HVACMode.OFF, None):
-                    return HVACMode.OFF
-                return self._attr_hvac_mode
+                # Unknown/unhandled status (e.g. 4=heat, 6=driving ventilation,
+                # or the car's own AC auto-shutoff timer firing). These mean
+                # the car is no longer actively cooling/fanning under our
+                # control, so trust the status and show Off — do not preserve
+                # stale local state here, or the climate entity gets stuck
+                # showing "Cool" indefinitely after the car shuts its AC off
+                # on its own (confirmed by eladrichi, issue #204, beta12).
+                self._attr_hvac_mode = HVACMode.OFF
+                return HVACMode.OFF
 
         # No API data available — fall back to last known local state
         return self._attr_hvac_mode if self._attr_hvac_mode is not None else HVACMode.OFF
