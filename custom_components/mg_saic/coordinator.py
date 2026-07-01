@@ -117,6 +117,31 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         self.fan_speed_medium: int = 3
         self.fan_speed_high: int = 5
         self.temp_idx_inverted: bool = False
+        # Climate control scheme (see VEHICLE_PROFILES in const.py):
+        #   "fan_speed"   — the classic model: HA exposes a Low/Med/High fan
+        #                   slider, and the selected fan value is sent with each
+        #                   AC command. This is the default for all models.
+        #   "mode_select" — for cars (e.g. IS31P / MG S9 PHEV) where the API's
+        #                   "fan_speed" byte is really a climate MODE selector,
+        #                   not a linear fan speed. HA instead exposes hvac_mode
+        #                   (off/fan_only/cool/heat) + preset_mode (Max Cool /
+        #                   Defrost), each mapping to a fixed mode value. No fan
+        #                   slider is shown for these models.
+        self.climate_control_scheme: str = "fan_speed"
+        # mode_select value map (only used when scheme == "mode_select").
+        # Maps each logical climate action to the integer sent via the API's
+        # fan_speed parameter. Defaults are the IS31P-confirmed values but are
+        # always overridden per-profile when the scheme is mode_select.
+        self.climate_mode_fan_only: int = 1   # HVACMode.FAN_ONLY
+        self.climate_mode_cool: int = 2       # HVACMode.COOL (auto fan, follows temp)
+        self.climate_mode_heat: int = 4       # HVACMode.HEAT
+        self.climate_mode_max_cool: int = 3   # preset "Max Cool" (fixed strong fan)
+        self.climate_mode_defrost: int = 5    # preset "Defrost"
+        # Reverse map: remoteClimateStatus values that mean "heating".
+        # (cool/fan_only reverse maps already exist as climate_status_cool /
+        # climate_status_fan_only above.)
+        self.climate_status_heat: set = set()
+        self.climate_status_defrost: set = set()
         # Per-model feature flags — set from VEHICLE_PROFILES on first data fetch.
         self.supports_target_soc: bool = True
         self.reliable_fuel_range_elec: bool = True
@@ -242,11 +267,15 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             config_entry.data.get("has_steering_wheel_heat", False),
         )
 
-        # Derived from vehicleModelConfiguration on first data fetch.
-        # The DOOR bitmask (positions: FL, FR, RL, RR) tells us whether the car
-        # has rear doors. The WINDOW bitmask uses the same layout.
-        # Default True so that pre-existing installations without a data fetch
-        # yet don't suddenly lose entities; corrected on first _update_state.
+        # Whether the car has rear doors/windows — driven by the per-model
+        # VEHICLE_PROFILES entry (see const.py), not the SAIC API's own
+        # DOOR/WINDOW vehicleModelConfiguration bitmask. That API data proved
+        # unreliable: it reported WINDOW='0000' for 4-door/4-window cars
+        # (MG4, MGS5) exactly the same way it does for the 2-door Cyberster,
+        # which suppressed valid rear window entities for those cars.
+        # See issue #203. Default True until the profile is loaded on first
+        # data fetch, so pre-existing installations don't lose entities
+        # before _update_state runs.
         self.has_rear_doors = True
         self.has_rear_windows = True
 
@@ -603,18 +632,35 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             self.fan_speed_medium = profile.get("fan_speed_medium", 3)
             self.fan_speed_high = profile.get("fan_speed_high", 5)
             self.temp_idx_inverted = profile.get("temp_idx_inverted", False)
+            # Climate control scheme + mode_select value map (see const.py).
+            self.climate_control_scheme = profile.get("climate_control_scheme", "fan_speed")
+            self.climate_mode_fan_only = profile.get("climate_mode_fan_only", 1)
+            self.climate_mode_cool = profile.get("climate_mode_cool", 2)
+            self.climate_mode_heat = profile.get("climate_mode_heat", 4)
+            self.climate_mode_max_cool = profile.get("climate_mode_max_cool", 3)
+            self.climate_mode_defrost = profile.get("climate_mode_defrost", 5)
+            self.climate_status_heat = profile.get("climate_status_heat", set())
+            self.climate_status_defrost = profile.get("climate_status_defrost", set())
             self.supports_target_soc = profile.get("supports_target_soc", True)
             self.reliable_fuel_range_elec = profile.get("reliable_fuel_range_elec", True)
             self.charging_capacity_correction = profile.get("charging_capacity_correction", None)
             self.supports_charging_current_limit = profile.get("supports_charging_current_limit", True)
             self.model_year_override = profile.get("model_year_override", None)
+            # Rear door/window presence — from the vehicle profile, not the
+            # API's DOOR/WINDOW bitmask (see issue #203; that bitmask data is
+            # unreliable for WINDOW across models). Defaults to True (has
+            # rear doors/windows) for any unprofiled or 4-door/4-window car.
+            self.has_rear_doors = profile.get("has_rear_doors", True)
+            self.has_rear_windows = profile.get("has_rear_windows", True)
 
             LOGGER.debug(
                 "Vehicle series detected: %s (profile: %s). "
                 "Temperature range: %d-%d°C, Offset: %d, "
                 "Temp index inverted: %s, "
                 "Fan speeds: low=%d mid=%d high=%d, "
-                "Cool status codes: %s",
+                "Cool status codes: %s, "
+                "Climate scheme: %s, "
+                "Rear doors: %s, Rear windows: %s",
                 self.vehicle_series,
                 matched_series_key or "default/unprofiled",
                 self.min_temp,
@@ -625,6 +671,9 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                 self.fan_speed_medium,
                 self.fan_speed_high,
                 self.climate_status_cool,
+                self.climate_control_scheme,
+                self.has_rear_doors,
+                self.has_rear_windows,
             )
             if self.known_battery_capacity_kwh is not None:
                 LOGGER.debug(
@@ -634,42 +683,15 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                     self.known_battery_capacity_kwh,
                 )
 
-            # Parse vehicleModelConfiguration bitmasks to determine which
-            # physical features the car actually has.
-            #
-            # DOOR: 4-char bitmask "FLFRRLRR" — '1' = door present.
-            #   e.g. "1100" → front doors only (no rear doors) = Cyberster.
-            #   e.g. "1111" → all four doors.
-            # WINDOW: same 4-position layout as DOOR.
-            #   e.g. "0000" → no tracked windows (Cyberster soft-top).
-            #   e.g. "1111" → all windows.
-            #
-            # These are read from the API's own vehicle config, so no profile
-            # entry is needed — any car reports its own physical spec.
-            door_value = None
-            window_value = None
-            for config_item in vin_info.vehicleModelConfiguration:
-                if config_item.itemCode == "DOOR":
-                    door_value = config_item.itemValue
-                elif config_item.itemCode == "WINDOW":
-                    window_value = config_item.itemValue
+            # NOTE: rear door/window presence is no longer derived from the
+            # API's DOOR/WINDOW vehicleModelConfiguration bitmask. That data
+            # proved unreliable — MG4 and MGS5 (both 4-door, 4-window cars)
+            # report WINDOW='0000' identically to the 2-door Cyberster, which
+            # incorrectly suppressed valid rear window entities for them
+            # (issue #203). has_rear_doors/has_rear_windows are now set from
+            # the VEHICLE_PROFILES entry above instead (see EC32 for the
+            # Cyberster override).
 
-            # Positions 2 and 3 (0-indexed) = rear-left and rear-right.
-            # If the bitmask is shorter than expected, default to True (safe).
-            if door_value is not None and len(door_value) >= 4:
-                self.has_rear_doors = door_value[2] == "1" or door_value[3] == "1"
-            if window_value is not None and len(window_value) >= 4:
-                self.has_rear_windows = window_value[2] == "1" or window_value[3] == "1"
-
-            LOGGER.debug(
-                "Vehicle body config for series %s: DOOR=%s → has_rear_doors=%s, "
-                "WINDOW=%s → has_rear_windows=%s",
-                self.vehicle_series,
-                door_value,
-                self.has_rear_doors,
-                window_value,
-                self.has_rear_windows,
-            )
         else:
             LOGGER.error(f"No 'info' data found for VIN: {vin}")
             raise ConfigEntryNotReady(

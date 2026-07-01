@@ -156,18 +156,6 @@ VEHICLE_PROFILES = {
         "max_temp": 28,
         "temp_offset": 2,
         "battery_capacity_kwh": 74.3,
-        # On MGS6, remoteClimateStatus reflects fan speed during cooling:
-        #   1 = cooling low fan (assumed, not yet tested)
-        #   2 = cooling medium fan (confirmed)
-        #   3 = cooling high fan (confirmed)
-        #   4 = heating/defrost, 6 = driving ventilation (both shown as OFF)
-        "climate_status_cool": {1, 2, 3},
-        "climate_status_fan_only": set(),  # MGS6 does not expose fan-only via status
-        # On MGS6, fan speeds 4 and 5 trigger heating and defrost respectively.
-        # Cooling fan speeds are 1 (low), 2 (medium), 3 (high).
-        "fan_speed_low": 1,
-        "fan_speed_medium": 2,
-        "fan_speed_high": 3,
         # Temperature index direction: True = inverted (low temp -> high idx)
         # Confirmed: idx=14 at 16°C correctly cooled the MGS6.
         "temp_idx_inverted": True,
@@ -177,11 +165,39 @@ VEHICLE_PROFILES = {
         # The MGS6 launched globally to dealerships in November 2025 — there is
         # no 2024 model year variant.  Override to the correct value.
         "model_year_override": "2025",
+        # --- mode_select climate scheme (PROVISIONAL) ---
+        # Switched to mode_select alongside IS31P. Only the cool value (2) is
+        # confirmed for the MGS6 so far: a 2026-07-01 mitmproxy capture showed
+        # AC-on sends a command that returns remoteClimateStatus=2, respects the
+        # HA target temperature, and returns cleanly to 0 on shutdown — matching
+        # the S9's "2 = auto cool" behaviour.
+        #
+        # The remaining values (heat/max_cool/defrost/fan_only) are INHERITED
+        # from the IS31P defaults below and are NOT yet confirmed for this car.
+        # They will be verified and corrected during the full A–M test suite
+        # (planned Friday). NOTE: the MGS6's own iSmart app DOES show a fan
+        # slider (unlike the S9), so it is possible this model genuinely
+        # supports linear fan control and should revert to the "fan_speed"
+        # scheme after testing — this mode_select assignment is deliberately
+        # provisional pending those results.
+        "climate_control_scheme": "mode_select",
+        "climate_mode_cool": 2,        # CONFIRMED (mitmproxy, 2026-07-01)
+        "climate_mode_fan_only": 1,    # provisional — verify Friday
+        "climate_mode_heat": 4,        # provisional — verify Friday
+        "climate_mode_max_cool": 3,    # provisional — verify Friday
+        "climate_mode_defrost": 5,     # provisional — verify Friday
+        "climate_status_cool": {2, 3},     # provisional
+        "climate_status_fan_only": {1},    # provisional
+        "climate_status_heat": {4},        # provisional
+        "climate_status_defrost": {5},     # provisional
     },
     "EC32": {  # MG Cyberster (2-door BEV roadster/convertible)
-        # The Cyberster has no rear doors or rear windows — these are suppressed
-        # automatically via the DOOR/WINDOW bitmask in vehicleModelConfiguration
-        # (DOOR='1100', WINDOW='0000'), so no profile flag is needed for that.
+        # The Cyberster has no rear doors or rear windows — see the
+        # has_rear_doors/has_rear_windows override at the bottom of this
+        # profile. Originally this was inferred automatically from the
+        # DOOR/WINDOW bitmask in vehicleModelConfiguration, but that field
+        # proved unreliable across other models (issue #203) so it's now an
+        # explicit profile flag instead.
         #
         # fuelRangeElec: the log shows -128 (sentinel value) when parked, same
         # pattern as the HS PHEV.  Fall back to bmsEstdElecRng instead.
@@ -202,21 +218,40 @@ VEHICLE_PROFILES = {
         "supports_target_soc": True,
         "reliable_fuel_range_elec": False,
         "supports_charging_current_limit": True,
+        # The Cyberster is a 2-door convertible with no rear doors or rear
+        # glass windows. Previously this was inferred from the API's own
+        # DOOR/WINDOW vehicleModelConfiguration bitmask, but that data proved
+        # unreliable: MG4 and MGS5 (genuine 4-door/4-window cars) report
+        # WINDOW='0000' identically to the Cyberster, which incorrectly
+        # suppressed their rear window entities (issue #203). This is now an
+        # explicit per-model override instead of trusting the API field.
+        "has_rear_doors": False,
+        "has_rear_windows": False,
     },
     "IS31P": {  # MG S9 PHEV (2025)
         # Series string from API: 'IS31P L'
         # Confirmed by eladrichi (issue #204), modelYear='2025', PHEV.
         #
-        # remoteClimateStatus mappings confirmed by physical testing:
-        #   1 → fan only, no AC compressor (original beta7 tests)
-        #   2 → AC on, main vents, lower fan speed  ✓ (Test 1, beta11)
-        #   3 → AC on, main vents, higher fan speed ✓ (Test 2/3, beta11)
-        #   5 → AC on, defog/windscreen vents        ✗ (original beta7 tests)
+        # IMPORTANT — this model uses the "mode_select" climate scheme, NOT a
+        # fan speed slider. Extensive testing by eladrichi (issue #204) plus
+        # independent analysis established that the API's "fan_speed" byte is
+        # actually a climate MODE selector: the car echoes it back verbatim as
+        # remoteClimateStatus, and each value selects a fixed operating mode,
+        # NOT a linear fan intensity. The car manages its own fan speed.
         #
-        # Fan speed mappings (SL='1_2_5', but 3 also accepted):
-        #   fan_speed_low=2  → remoteClimateStatus=2 (AC on, main vents)
-        #   fan_speed_high=3 → remoteClimateStatus=3 (AC on, main vents, more powerful)
-        #   Speed 1 avoided (fan only), speed 5 avoided (defog vents).
+        # Confirmed value → behaviour map (value sent == remoteClimateStatus):
+        #   1 → fan only, AC compressor off
+        #   2 → AC cooling, AUTO fan, follows the HA target temperature, main
+        #       vents. This is the sensible default "cool" mode.
+        #   3 → AC cooling, fixed strong fan (~6/11), main vents, temp forced
+        #       low. Exposed as the "Max Cool" preset (fast cool-down / boost).
+        #   4 → heat: max temp, ~3/11 fan, leg vents. Exposed as HVAC "heat".
+        #   5 → defrost: upper/windscreen vents. Exposed as "Defrost" preset.
+        #
+        # HA presents this as:
+        #   hvac_modes:   off / fan_only / cool / heat
+        #   preset_modes: Max Cool / Defrost
+        #   (no fan-speed slider — it would misrepresent a mode selector)
         #
         # Temperature index confirmed correct (temp_idx_inverted=False):
         #   16°C → index 2, 22°C → index 8 (matches temp_offset=2 formula).
@@ -224,15 +259,24 @@ VEHICLE_PROFILES = {
         "max_temp": 28,
         "temp_offset": 2,
         "battery_capacity_kwh": None,
-        "climate_status_cool": {2, 3},
-        "climate_status_fan_only": {1},
-        "fan_speed_low": 2,
-        "fan_speed_medium": 2,
-        "fan_speed_high": 3,
         "temp_idx_inverted": False,
         "supports_target_soc": True,
         "reliable_fuel_range_elec": True,
         "supports_charging_current_limit": True,
+        # --- mode_select climate scheme ---
+        "climate_control_scheme": "mode_select",
+        "climate_mode_fan_only": 1,
+        "climate_mode_cool": 2,
+        "climate_mode_heat": 4,
+        "climate_mode_max_cool": 3,
+        "climate_mode_defrost": 5,
+        # Reverse maps: remoteClimateStatus value → HA state.
+        #   cool covers both the auto-cool (2) and Max-Cool boost (3) values,
+        #   so a running boost still shows as "cool" in HA.
+        "climate_status_cool": {2, 3},
+        "climate_status_fan_only": {1},
+        "climate_status_heat": {4},
+        "climate_status_defrost": {5},
     },
     "AS33P": {  # MG HS PHEV (2025/2026 Super Hybrid)
         # Series string from API: 'AS33P S'
@@ -299,6 +343,19 @@ DEFAULT_VEHICLE_PROFILE = {
     "charging_capacity_correction": None,
     # Default: no model year override (API value is correct for most models).
     "model_year_override": None,
+    # Default: assume the car has rear doors and rear windows (true for the
+    # vast majority of models — 4-door cars). Only override to False for
+    # models confirmed to genuinely lack them, e.g. EC32 (Cyberster).
+    # See issue #203 for why this is a profile flag rather than read from
+    # the API's own DOOR/WINDOW vehicleModelConfiguration bitmask.
+    "has_rear_doors": True,
+    "has_rear_windows": True,
+    # Default climate control scheme: "fan_speed" — HA shows a Low/Med/High
+    # fan slider. Only override to "mode_select" for models where the API's
+    # fan_speed byte is really a mode selector (see IS31P). The mode_select
+    # value keys (climate_mode_*, climate_status_heat/defrost) are only read
+    # when the scheme is "mode_select", so they don't need to appear here.
+    "climate_control_scheme": "fan_speed",
 }
 
 # Base update intervals

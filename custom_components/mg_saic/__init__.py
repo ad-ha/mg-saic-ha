@@ -128,12 +128,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     try:
         vehicles = await client.get_vehicle_info()
+        # A transient SAIC server error (e.g. HTTP 500 on /vehicle/list) can
+        # return None or an empty list rather than raising. Treat that as
+        # "not ready yet" and let HA retry with backoff, rather than a
+        # permanent setup failure that requires a manual reload once SAIC
+        # recovers. Guarding here also avoids "'NoneType' object is not
+        # iterable" when vehicles is None (reported by Johndowne, issue #203;
+        # root cause was a SAIC-side 500, not the integration).
+        if not vehicles:
+            raise ConfigEntryNotReady(
+                "SAIC API returned no vehicle list (likely a temporary "
+                "server-side error) — HA will retry automatically."
+            )
         if not any(v.vin == vin for v in vehicles):
             LOGGER.error("VIN %s not found in account vehicles", vin)
             return False
+    except ConfigEntryNotReady:
+        # Propagate so HA schedules an automatic retry.
+        raise
     except Exception as exc:
-        LOGGER.error("Failed to verify VIN %s: %s", vin, exc)
-        return False
+        # Any other error verifying the VIN (network blip, transient API
+        # failure) is also treated as "not ready" so HA retries rather than
+        # permanently failing setup.
+        raise ConfigEntryNotReady(
+            f"Could not verify VIN {vin} yet: {exc}"
+        ) from exc
 
     # Store a reference to the shared client under this entry's key so that
     # platform files (button.py, climate.py, …) can fetch it as normal via
