@@ -158,7 +158,10 @@ async def async_setup_entry(hass, entry, async_add_entities):
         ]
 
         # Rear doors — only present on 4-door vehicles (not e.g. Cyberster EC32).
-        # Derived from the DOOR bitmask in vehicleModelConfiguration by the coordinator.
+        # coordinator.has_rear_doors comes from the per-model VEHICLE_PROFILES
+        # entry in const.py, not the SAIC API's own DOOR bitmask — that field
+        # proved unreliable for the related WINDOW bitmask (issue #203), so
+        # both are now handled the same, explicit, way.
         if coordinator.has_rear_doors:
             binary_sensors.extend([
                 SAICMGBinarySensor(
@@ -182,7 +185,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
             ])
 
         # Rear windows — only present when the car has tracked rear windows.
-        # Convertibles (e.g. Cyberster) report WINDOW='0000' — no glass windows.
+        # coordinator.has_rear_windows comes from the per-model VEHICLE_PROFILES
+        # entry (const.py), not the SAIC API's WINDOW bitmask. That API field
+        # was found to be unreliable: MG4 and MGS5 (genuine 4-window cars)
+        # report WINDOW='0000' identically to the Cyberster's soft-top, which
+        # incorrectly suppressed their rear window entities (issue #203).
         if coordinator.has_rear_windows:
             binary_sensors.extend([
                 SAICMGBinarySensor(
