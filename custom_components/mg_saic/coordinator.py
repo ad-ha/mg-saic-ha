@@ -117,6 +117,31 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
         self.fan_speed_medium: int = 3
         self.fan_speed_high: int = 5
         self.temp_idx_inverted: bool = False
+        # Climate control scheme (see VEHICLE_PROFILES in const.py):
+        #   "fan_speed"   — the classic model: HA exposes a Low/Med/High fan
+        #                   slider, and the selected fan value is sent with each
+        #                   AC command. This is the default for all models.
+        #   "mode_select" — for cars (e.g. IS31P / MG S9 PHEV) where the API's
+        #                   "fan_speed" byte is really a climate MODE selector,
+        #                   not a linear fan speed. HA instead exposes hvac_mode
+        #                   (off/fan_only/cool/heat) + preset_mode (Max Cool /
+        #                   Defrost), each mapping to a fixed mode value. No fan
+        #                   slider is shown for these models.
+        self.climate_control_scheme: str = "fan_speed"
+        # mode_select value map (only used when scheme == "mode_select").
+        # Maps each logical climate action to the integer sent via the API's
+        # fan_speed parameter. Defaults are the IS31P-confirmed values but are
+        # always overridden per-profile when the scheme is mode_select.
+        self.climate_mode_fan_only: int = 1   # HVACMode.FAN_ONLY
+        self.climate_mode_cool: int = 2       # HVACMode.COOL (auto fan, follows temp)
+        self.climate_mode_heat: int = 4       # HVACMode.HEAT
+        self.climate_mode_max_cool: int = 3   # preset "Max Cool" (fixed strong fan)
+        self.climate_mode_defrost: int = 5    # preset "Defrost"
+        # Reverse map: remoteClimateStatus values that mean "heating".
+        # (cool/fan_only reverse maps already exist as climate_status_cool /
+        # climate_status_fan_only above.)
+        self.climate_status_heat: set = set()
+        self.climate_status_defrost: set = set()
         # Per-model feature flags — set from VEHICLE_PROFILES on first data fetch.
         self.supports_target_soc: bool = True
         self.reliable_fuel_range_elec: bool = True
@@ -607,6 +632,15 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
             self.fan_speed_medium = profile.get("fan_speed_medium", 3)
             self.fan_speed_high = profile.get("fan_speed_high", 5)
             self.temp_idx_inverted = profile.get("temp_idx_inverted", False)
+            # Climate control scheme + mode_select value map (see const.py).
+            self.climate_control_scheme = profile.get("climate_control_scheme", "fan_speed")
+            self.climate_mode_fan_only = profile.get("climate_mode_fan_only", 1)
+            self.climate_mode_cool = profile.get("climate_mode_cool", 2)
+            self.climate_mode_heat = profile.get("climate_mode_heat", 4)
+            self.climate_mode_max_cool = profile.get("climate_mode_max_cool", 3)
+            self.climate_mode_defrost = profile.get("climate_mode_defrost", 5)
+            self.climate_status_heat = profile.get("climate_status_heat", set())
+            self.climate_status_defrost = profile.get("climate_status_defrost", set())
             self.supports_target_soc = profile.get("supports_target_soc", True)
             self.reliable_fuel_range_elec = profile.get("reliable_fuel_range_elec", True)
             self.charging_capacity_correction = profile.get("charging_capacity_correction", None)
@@ -625,6 +659,7 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                 "Temp index inverted: %s, "
                 "Fan speeds: low=%d mid=%d high=%d, "
                 "Cool status codes: %s, "
+                "Climate scheme: %s, "
                 "Rear doors: %s, Rear windows: %s",
                 self.vehicle_series,
                 matched_series_key or "default/unprofiled",
@@ -636,6 +671,7 @@ class SAICMGDataUpdateCoordinator(DataUpdateCoordinator):
                 self.fan_speed_medium,
                 self.fan_speed_high,
                 self.climate_status_cool,
+                self.climate_control_scheme,
                 self.has_rear_doors,
                 self.has_rear_windows,
             )
