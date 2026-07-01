@@ -171,8 +171,8 @@ The MG/SAIC Custom Integration provides the following sensors, binary sensors, a
 ### CLIMATE
 - AC Control Climate entity
   * Temperature
-  * Fan Speed
-  * HVAC mode (Cool / Fan Only / Off)
+  * Fan Speed *(most models)* **or** HVAC mode + Preset *(mode-select models, e.g. MG S9 PHEV — see [Climate Control](#climate-control))*
+  * HVAC mode (Cool / Fan Only / Off, plus Heat on mode-select models)
 ### SLIDERS
 - Target SOC *(shown only on models where the iSmart app supports it)*
 ### SELECT
@@ -186,24 +186,34 @@ The MG/SAIC Custom Integration provides the following sensors, binary sensors, a
  
 The MG SAIC integration exposes a climate entity for remote control of the vehicle's air conditioning. Because SAIC limits remote commands to **3 per cycle between starting the car with a key**, the integration is designed to use commands as efficiently as possible.
  
+### Two control schemes
+ 
+Not all MG models expose climate control the same way, so the integration uses one of two schemes depending on your vehicle:
+ 
+- **Fan-speed models (most cars):** a Low / Medium / High fan slider plus `Cool` / `Fan Only` / `Off` HVAC modes. This is the default and covers the MG4, MGS5, Cyberster, HS PHEV, and any model not specifically profiled.
+- **Mode-select models (e.g. MG S9 PHEV):** on some cars the SAIC API's "fan speed" value is not a fan speed at all — it is a fixed climate *mode* selector, and the car chooses its own fan speed. On these models a Low/Med/High slider is misleading, so instead the integration exposes HVAC modes and presets that map to the car's actual modes (see below). The correct scheme is selected automatically based on your vehicle.
+ 
 ### How commands are used
  
-The SAIC API counts each instruction sent to the car as one command. To avoid wasting your allowance, only explicit HVAC mode changes send a command. Adjusting fan speed or temperature on their own does not.
+The SAIC API counts each instruction sent to the car as one command. To avoid wasting your allowance, only explicit HVAC mode or preset changes send a command. Adjusting fan speed or temperature on their own does not.
  
 **Uses a command:**
-- Turning the AC on (HVAC mode set to `Cool` or `Fan Only`)
+- Turning the AC on (HVAC mode set to `Cool`, `Fan Only`, or `Heat`)
 - Turning the AC off (HVAC mode set to `Off`)
-- Switching between `Cool` and `Fan Only`
+- Switching between HVAC modes
+- Selecting a preset (`Max Cool` / `Defrost`) on mode-select models
 **Does NOT use a command:**
-- Changing fan speed (`Low`, `Medium`, `High`)
+- Changing fan speed (`Low`, `Medium`, `High`) on fan-speed models
 - Changing target temperature
 ### Recommended usage
  
-Set your preferred temperature and fan speed **first**, then turn the AC on. The command sent to the car will include whatever fan speed and temperature you have already set in HA. A complete remote pre-conditioning session uses exactly **2 commands** — one to turn on, one to turn off — leaving one spare for a lock or unlock action.
+Set your preferred temperature (and fan speed, on fan-speed models) **first**, then turn the AC on. The command sent to the car will include whatever settings you have already applied in HA. A complete remote pre-conditioning session uses exactly **2 commands** — one to turn on, one to turn off — leaving one spare for a lock or unlock action.
  
-If you want to change temperature or fan speed while the AC is already running, update the values in HA first, then turn the AC off and back on. This applies your new settings using 2 commands.
+If you want to change settings while the AC is already running, update the values in HA first, then turn the AC off and back on. This applies your new settings using 2 commands.
  
-### Fan speeds
+### Fan-speed models
+ 
+**Fan speeds**
  
 | HA setting | Behaviour |
 |---|---|
@@ -213,13 +223,28 @@ If you want to change temperature or fan speed while the AC is already running, 
  
 > **Note:** Fan speed values used internally vary by vehicle model. The integration automatically selects the correct values for your car based on its series. The Front Defrost command uses a separate API speed value and is never accidentally triggered by fan speed changes.
  
-### HVAC modes
+**HVAC modes**
  
 | Mode | Behaviour |
 |---|---|
 | `Cool` | Runs the compressor with your chosen temperature and fan speed |
 | `Fan Only` | Runs the fan without the compressor (blowing only) |
 | `Off` | Stops all climate activity |
+ 
+### Mode-select models (e.g. MG S9 PHEV)
+ 
+On these models there is **no fan-speed slider** — the car manages its own fan. Control is via HVAC modes and presets instead:
+ 
+| Mode / Preset | Behaviour |
+|---|---|
+| HVAC `Cool` | AC on, automatic fan, follows your target temperature |
+| HVAC `Heat` | Heating |
+| HVAC `Fan Only` | Fan without the compressor |
+| HVAC `Off` | Stops all climate activity |
+| Preset `Max Cool` | Strong fixed-fan fast cool-down |
+| Preset `Defrost` | Windscreen / upper-vent defrost |
+ 
+> **⚠️ Note for MG S9 PHEV owners:** from **1.1.2** this model uses the mode-select scheme. The previous Low/Med/High fan control has been replaced by the HVAC modes and presets above. If you have automations or scripts that called `climate.set_fan_mode` on your S9 PHEV, update them to use `climate.set_hvac_mode` (`cool` / `heat` / `fan_only`) or `climate.set_preset_mode` (`Max Cool` / `Defrost`) instead.
  
  
 ## Event-Driven Updates
