@@ -226,15 +226,19 @@ VEHICLE_PROFILES = {
         #   5 → AC on, defog/windscreen vents        ✗ (original beta7 tests)
         #
         # Fan speed mappings (SL='1_2_5', but 3 also accepted):
-        #   fan_speed_low=2    → remoteClimateStatus=2 (AC on, main vents)
-        #   fan_speed_medium=4 → UNCONFIRMED. beta12 had this duplicated with
-        #     fan_speed_low (both =2), which made HA's Low and Medium fan
-        #     settings send an identical command (issue #204, beta12 feedback).
-        #     4 has never been tested — it's the only untested value between
-        #     the two confirmed-safe ones (2 and 3) and the avoided ones
-        #     (1=fan only, 5=defog vents). Needs confirmation from eladrichi
-        #     before being trusted; if 4 turns out to behave like 1 or 5, this
-        #     should fall back to matching fan_speed_high (3) instead.
+        #   fan_speed_low=2    → remoteClimateStatus=2 (AC on, main vents, lower fan)
+        #   fan_speed_medium=3 → remoteClimateStatus=3 (AC on, main vents, higher fan)
+        #     Duplicates fan_speed_high. beta1 tried 4 here, but eladrichi
+        #     confirmed (issue #204, 2026-07-01) that 4 is NOT a third cooling
+        #     tier — it triggers heat mode (max temp, leg vents), matching the
+        #     "4 = heating/defrost" pattern already seen on MG4/MGS6. Combined
+        #     with the car's own supported fan-speed list (SL='1_2_5'), the
+        #     full command map is almost certainly: 1=fan only, 2=cool low,
+        #     3=cool high, 4=heat, 5=defog — i.e. only two genuine cooling fan
+        #     levels exist via this API, so Medium and High cannot be made
+        #     distinct without further discovery. Duplicating High (3) here
+        #     rather than Low (2) at least keeps Low distinguishable, which
+        #     was the original beta12 complaint.
         #   fan_speed_high=3   → remoteClimateStatus=3 (AC on, main vents, more powerful)
         #
         # Temperature index confirmed correct (temp_idx_inverted=False):
@@ -246,7 +250,7 @@ VEHICLE_PROFILES = {
         "climate_status_cool": {2, 3},
         "climate_status_fan_only": {1},
         "fan_speed_low": 2,
-        "fan_speed_medium": 4,
+        "fan_speed_medium": 3,
         "fan_speed_high": 3,
         "temp_idx_inverted": False,
         "supports_target_soc": True,
