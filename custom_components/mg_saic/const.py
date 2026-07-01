@@ -179,9 +179,12 @@ VEHICLE_PROFILES = {
         "model_year_override": "2025",
     },
     "EC32": {  # MG Cyberster (2-door BEV roadster/convertible)
-        # The Cyberster has no rear doors or rear windows — these are suppressed
-        # automatically via the DOOR/WINDOW bitmask in vehicleModelConfiguration
-        # (DOOR='1100', WINDOW='0000'), so no profile flag is needed for that.
+        # The Cyberster has no rear doors or rear windows — see the
+        # has_rear_doors/has_rear_windows override at the bottom of this
+        # profile. Originally this was inferred automatically from the
+        # DOOR/WINDOW bitmask in vehicleModelConfiguration, but that field
+        # proved unreliable across other models (issue #203) so it's now an
+        # explicit profile flag instead.
         #
         # fuelRangeElec: the log shows -128 (sentinel value) when parked, same
         # pattern as the HS PHEV.  Fall back to bmsEstdElecRng instead.
@@ -202,6 +205,15 @@ VEHICLE_PROFILES = {
         "supports_target_soc": True,
         "reliable_fuel_range_elec": False,
         "supports_charging_current_limit": True,
+        # The Cyberster is a 2-door convertible with no rear doors or rear
+        # glass windows. Previously this was inferred from the API's own
+        # DOOR/WINDOW vehicleModelConfiguration bitmask, but that data proved
+        # unreliable: MG4 and MGS5 (genuine 4-door/4-window cars) report
+        # WINDOW='0000' identically to the Cyberster, which incorrectly
+        # suppressed their rear window entities (issue #203). This is now an
+        # explicit per-model override instead of trusting the API field.
+        "has_rear_doors": False,
+        "has_rear_windows": False,
     },
     "IS31P": {  # MG S9 PHEV (2025)
         # Series string from API: 'IS31P L'
@@ -269,7 +281,7 @@ VEHICLE_PROFILES = {
         # Suppress both the status sensor and the select control for this model.
         "supports_charging_current_limit": False,
         # The API returns fuelRangeElec=-128 (sentinel) for this model when the car
-        # is parked — the live electric range field is not populated. Fall back to
+        # is parked — the live electric range field is not populated.  Fall back to
         # bmsEstdElecRng (estimated range after full charge) from chrgMgmtData.
         "reliable_fuel_range_elec": False,
         # Correction factor for energy-based fields that the API reports inflated
@@ -306,6 +318,13 @@ DEFAULT_VEHICLE_PROFILE = {
     "charging_capacity_correction": None,
     # Default: no model year override (API value is correct for most models).
     "model_year_override": None,
+    # Default: assume the car has rear doors and rear windows (true for the
+    # vast majority of models — 4-door cars). Only override to False for
+    # models confirmed to genuinely lack them, e.g. EC32 (Cyberster).
+    # See issue #203 for why this is a profile flag rather than read from
+    # the API's own DOOR/WINDOW vehicleModelConfiguration bitmask.
+    "has_rear_doors": True,
+    "has_rear_windows": True,
 }
 
 # Base update intervals
