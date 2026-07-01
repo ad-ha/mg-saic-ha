@@ -15,7 +15,7 @@
 # MG/SAIC CUSTOM INTEGRATION
 
 <a href="https://buymeacoffee.com/Townsmcp" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="41" width="174"></a>
-
+ 
 **Important Notes:** 
 - **Using this integration causes the MG/SAIC mobile app to shut down if the same account is used, as per API requirements.**
 - **To avoid issues, make sure to setup a Secondary Account on iSmart App.**
@@ -23,42 +23,36 @@
 **Requirements:**
 - Home Assistant 2024.06 or later.
 - Confirmed compatible with Python 3.14, the runtime used by current Home Assistant core releases (2026.3+). No action needed on your part this is handled automatically by Home Assistant on supported installation methods.
-
 ## INSTALLATION
-
+ 
 ### HACS (Home Assistant Community Store)
-
+ 
 1. Ensure that HACS is installed.
 2. Go to HACS
 3. Search for "MG SAIC" and download the repository.
 4. Restart Home Assistant.
-
 ### Manual Installation
-
+ 
 1. Download the latest release from the [MG SAIC Custom Integration GitHub repository](https://github.com/townsmcp/mg-saic-ha/releases).
 2. Unzip the release and copy the `mg_saic` directory to `custom_components` in your Home Assistant configuration directory.
 3. Restart Home Assistant.
-
 ## CONFIGURATION
-
+ 
 To add the integration to your local Home Assistant, click here:
-
+ 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=townsmcp&repository=mg-saic-ha&category=integration)
-
+ 
 Install the integration, restart Home Assistant and then add the integration, either:
-
+ 
 [<img src="https://github.com/user-attachments/assets/36459daa-a780-448a-82a5-19ee07ccd3f6">](https://my.home-assistant.io/redirect/config_flow_start?domain=mg_saic)
-
+ 
 Or manually by:
-
+ 
 1. Go to Configuration -> Integrations.
 2. Click on the "+ Add Integration" button.
 3. Search for "MG SAIC" and follow the instructions to set up the integration.
 4. Select your type of account (email or phone), enter the details and select your region (EU, China, Australia, Turkey, Rest of World)
 5. Once connected to the API, a list of available VINs associated with your account will be shown. Select the vehicle that you want to integrate and finish the process.
-
-
-
 You may add additional vehicles by following the same steps as above.
  
 ### Multiple Vehicles
@@ -66,11 +60,13 @@ You may add additional vehicles by following the same steps as above.
 If you have more than one MG/SAIC vehicle, you can add each one as a separate integration entry. Vehicles on the **same SAIC account** are fully supported — the integration uses a single shared API session per account, so adding a second vehicle does not interfere with the first.
  
 If your vehicles are on different SAIC accounts, add each account separately in the same way.
-
-
+ 
+ 
 ## SENSORS AVAILABLE
  
 The MG/SAIC Custom Integration provides the following sensors, binary sensors, and controls. Not all entities are available on every vehicle — availability depends on vehicle type (BEV, PHEV, HEV, ICE) and optional equipment.
+ 
+> **Looking for what "on"/"off" or a particular sensor value actually means?** See the [Entity States Reference](#entity-states-reference) section below — it lists every possible state for every status and control entity.
  
 ### SENSORS
  
@@ -78,10 +74,11 @@ The MG/SAIC Custom Integration provides the following sensors, binary sensors, a
 - Brand
 - Model
 - Model Year
+- VIN *(displayed masked, e.g. `LS**********46986`; the full VIN is available as the `vin_full` attribute for use in automations/services)*
 - Mileage
 - Interior Temperature
 - Exterior Temperature
-- Battery Voltage (12V)
+- Ancillary Battery Voltage *(12V battery)*
 - Speed
 - Power Mode
 - Last Key Seen *(raw key fob identifier; shown as Unknown when key is not present)*
@@ -91,21 +88,21 @@ The MG/SAIC Custom Integration provides the following sensors, binary sensors, a
 - Last Update Time
 - Next Update Time
 #### Tyre Pressure
-- Front Left Tyre Pressure
-- Front Right Tyre Pressure
-- Rear Left Tyre Pressure
-- Rear Right Tyre Pressure
+- Tyre Pressure Front Left
+- Tyre Pressure Front Right
+- Tyre Pressure Rear Left
+- Tyre Pressure Rear Right
 #### Electric / Hybrid
-- EV State of Charge (SOC)
+- State of Charge (SOC)
 - Electric Range
 - Instant Power *(kW draw/regen while driving; negative = traction, positive = regen/charge)*
 - Fuel Level *(PHEV/HEV/ICE only)*
 - Fuel Range *(PHEV/HEV/ICE only)*
 #### Climate
-- HVAC Status
 - Front Left Heated Seat Level *(if equipped)*
 - Front Right Heated Seat Level *(if equipped)*
 - Steering Wheel Heat *(if equipped)*
+  *(Note: the AC/HVAC running state itself is a **binary sensor**, not a sensor — see "HVAC Status" below.)*
 #### Charging Data *(BEV/PHEV)*
 - Charging Status *(Unplugged / Charging (AC) / Charging (DC) / V2X Discharging / …)*
 - Charging Voltage
@@ -113,57 +110,64 @@ The MG/SAIC Custom Integration provides the following sensors, binary sensors, a
 - Charging Current Limit
 - Charging Power
 - Estimated Range After Charging
-- Charging Target SOC *(shown only on models where the iSmart app supports it)*
+- Target SOC *(read-only mirror of the Target SOC slider — shown only on models where the iSmart app supports it)*
 - Charging Duration
 - Remaining Charging Time
 - Added Electric Range
 - Power Usage Since Last Charge
 - Mileage Since Last Charge
 - Total Battery Capacity *(kWh; corrected for models where the API reports an inaccurate value)*
-- Last Charge Ending Power *(kWh; corrected for models where the API reports an inaccurate value)*
+- Battery Heating Status *(if equipped)*
 ### BINARY SENSORS
  
 #### Doors
-- Driver Door
-- Passenger Door
-- Rear Left Door
-- Rear Right Door
+- Door Front Left / Door Front Right *(named "Driver"/"Passenger" logically, but labelled by physical side — automatically swapped for RHD vs LHD vehicles)*
+- Door Rear Left / Door Rear Right *(not present on 2-door models, e.g. MG Cyberster)*
 - Bonnet Status
 - Boot Status
 #### Windows
-- Driver Window
-- Passenger Window
-- Rear Left Window
-- Rear Right Window
+- Window Front Left / Window Front Right
+- Window Rear Left / Window Rear Right *(not present on convertibles with no rear glass, e.g. MG Cyberster)*
 - Sunroof Status *(if equipped)*
+#### Lights
+- Dipped Beam Status
+- Main Beam Status
+- Side Light Status
 #### Other
-- Lock Status
-- Charging Gun Status
+- Engine Status
+- HVAC Status *(the AC/climate running state — see states table for what "on" actually covers)*
+- Lock Status *(⚠️ reports on/off, not Locked/Unlocked — see Entity States Reference)*
+- Wheel Tyre Monitor Status *(a "problem" sensor — on means a TPMS/tyre fault is reported, not that everything is fine)*
+- Charging Gun State *(BEV/PHEV only)*
 ### EVENTS
  
-- **Command Error** — fired when a remote command (lock, AC, charge, etc.) fails or is rejected by the vehicle. Use this in automations to get notified when a command does not go through.
+- **Command Errors** — a single event entity with two possible event types:
+  - `command_error` — fired when a remote command (lock, AC, charge, etc.) fails or is rejected by the vehicle.
+  - `command_limit_reached` — fired specifically when the vehicle's remote-command allowance has been used up.
+  Use this in automations to get notified when a command does not go through.
 ### DEVICE TRACKER
 - Latitude
 - Longitude
 - Elevation (Altitude)
 - HDOP
 - Satellites
-- Heading
-- Raw Heading
+- Heading *(numeric, `raw_heading` attribute)*
+- Heading *(cardinal direction, e.g. N/NE/E/SE/S/SW/W/NW, `heading` attribute)*
 ### SWITCHES
 - Charging Start/Stop
 - Battery Heating *(if equipped)*
 - Front Defrost
 - Rear Window Defrost
-- Heated Seats *(if equipped)*
+- Heated Seat Front Left / Heated Seat Front Right *(if equipped; two independent switches, one per seat)*
 - Sunroof *(if equipped)*
-- Charging Port Lock
+- Charging Port Lock *(⚠️ "on" means locked — see Entity States Reference)*
 ### BUTTONS
-- Trigger Find My Car Alarm
+- Trigger Alarm
 - Update Vehicle Data
+- Open Boot *(momentary — releases the boot/tailgate latch; the SAIC API only supports remote opening, not closing, hence a button rather than a lock/cover)*
 ### LOCK
 - Lock entity for door lock/unlock
-- Boot/Tailgate lock entity
+  *(There is no separate lock entity for the boot/tailgate — use the "Open Boot" button instead, since the API only supports releasing the latch remotely, not locking it again.)*
 ### CLIMATE
 - AC Control Climate entity
   * Temperature
@@ -173,7 +177,7 @@ The MG/SAIC Custom Integration provides the following sensors, binary sensors, a
 - Target SOC *(shown only on models where the iSmart app supports it)*
 ### SELECT
 - Charging Current Limit
-- Heated Seats Level *(if equipped)*
+- Heated Seat Front Left Level / Heated Seat Front Right Level *(if equipped)*
 **Note: Actions (Services) can be accessed and activated from the Actions menu under Developer Tools.**
 ![image](https://github.com/user-attachments/assets/14be0d41-ae65-4738-8bc0-5b0f743c290f)
  
@@ -230,6 +234,88 @@ This means you can set a long polling interval (e.g. 30 minutes or more) for idl
 > **Multiple vehicles on one account:** The integration uses a single API session and a single message poll loop per SAIC account, regardless of how many vehicles are registered under it. This prevents session conflicts and duplicate API calls.
  
  
+## 📋 Entity States Reference
+ 
+This section lists every possible state for every status and control entity, so you know exactly what to expect when coding dashboards or automations. Home Assistant binary sensors always report the underlying state as **`on`/`off`** — never as descriptive text like "Locked"/"Unlocked" or "Open"/"Closed" — the description below tells you what `on` and `off` actually *mean* for each one. The friendly text ("Open", "Locked", etc.) is only shown in the Lovelace UI because of the entity's device class; the state itself, e.g. as read via `states('binary_sensor...')` in a template, is always `on` or `off`.
+ 
+### Binary sensors
+ 
+| Entity | Device class | `on` means | `off` means |
+|---|---|---|---|
+| Bonnet Status | door | Open | Closed |
+| Boot Status | door | Open | Closed |
+| Door Front Left / Front Right | door | Open | Closed |
+| Door Rear Left / Rear Right | door | Open | Closed |
+| Window Front Left / Front Right | window | Open | Closed |
+| Window Rear Left / Rear Right | window | Open | Closed |
+| Sunroof Status | window | Open | Closed |
+| Dipped Beam Status | light | Light on | Light off |
+| Main Beam Status | light | Light on | Light off |
+| Side Light Status | light | Light on | Light off |
+| Engine Status | power | Engine running | Engine not running |
+| HVAC Status | running | Climate control active (cooling, fan-only, defrost, or heat) | Climate control fully off |
+| **Lock Status** | lock | **Unlocked** | **Locked** |
+| Wheel Tyre Monitor Status | problem | Fault/problem reported (e.g. low pressure or TPMS fault) | No fault reported |
+| Charging Gun State | plug | Charging gun/cable plugged in | Unplugged |
+ 
+> **This is the entity from the issue report:** `binary_sensor` device class **`lock`** is the one HA device class where `on` does *not* mean "active/true" in the usual sense — by HA convention, `on` = unlocked (the "open" state) and `off` = locked. It is easy to assume `on` = Locked, but it's the opposite.
+ 
+### Lock entity
+ 
+| Entity | States |
+|---|---|
+| Lock | `locked` / `unlocked` (standard HA lock entity — reported as plain text, not on/off) |
+ 
+### Switches
+ 
+| Entity | `on` means | `off` means |
+|---|---|---|
+| Charging | Actively charging (AC or DC), or V2X discharging in progress | Not charging (includes "Scheduled Charging" status — the switch only reflects active current flow) |
+| Battery Heating | Battery heating active | Battery heating inactive |
+| Front Defrost | Front defrost running | Front defrost off |
+| Rear Window Defrost | Rear window heater on | Rear window heater off |
+| Heated Seat Front Left / Front Right | Seat heat level 1 or above (Low/Medium/High) | Seat heat level 0 (Off) |
+| Sunroof | Sunroof open | Sunroof closed |
+| **Charging Port Lock** | **Charging port locked** | **Charging port unlocked** |
+ 
+> Note that for **Charging Port Lock**, `on` = locked — the opposite convention to the `lock`-device-class binary sensor above. This is because it's a `switch` entity (where `on` simply reflects "the lock control is engaged"), not a `binary_sensor` with a `lock` device class.
+ 
+### Enumerated sensors (text states)
+ 
+| Entity | Possible states |
+|---|---|
+| Power Mode | `Off`, `Accessory`, `On`, `Start` |
+| Charging Status | `Unplugged`, `Charging (AC)`, `Charging Finished`, `Charging`, `Fault Charging`, `Connecting`, `Unrecognized Connection`, `Plugged In`, `Charging Stopped`, `Scheduled Charging`, `Charging (DC)`, `Super Offboard Charging`, `V2X Discharging` |
+| Battery Heating Status | `Off`, `On`, `Error` |
+| Front Left/Right Heated Seat Level | `Off`, `Low`, `Medium`, `High` |
+| Steering Wheel Heat | `Off`, `On` |
+| Charging Current Limit *(sensor)* | `0A (Ignore)`, `6A`, `8A`, `16A`, `Max` |
+| Target SOC *(sensor)* | `40`, `50`, `60`, `70`, `80`, `90`, `100` (%) |
+ 
+> The API reports two separate raw codes (`3` and `12`) that both map to the plain `Charging` text for the Charging Status sensor. If you need to tell them apart in an automation, use the numeric `bmsChrgSts` value via the debug log rather than the sensor state.
+ 
+### Select entities (settable, same options as their read-only sensor counterparts)
+ 
+| Entity | Options |
+|---|---|
+| Charging Current Limit | `0A (Ignore)`, `6A`, `8A`, `16A`, `Max` |
+| Heated Seat Front Left/Right Level | `Off`, `Low`, `Medium`, `High` |
+ 
+### Climate entity
+ 
+| Attribute | Possible values |
+|---|---|
+| HVAC mode | `Cool`, `Fan Only`, `Off` |
+| Fan mode | `Low`, `Medium`, `High` |
+ 
+### Event entity
+ 
+| Event type | Fired when | Event data |
+|---|---|---|
+| `command_error` | Any remote command fails or is rejected | `source` (which command), `error` (the error message) |
+| `command_limit_reached` | The vehicle's remote command allowance is used up | `source`, `message` |
+ 
+ 
 ## Vehicle Profiles
  
 The integration includes built-in profiles for specific MG/SAIC models that correct known inaccuracies in the API data:
@@ -237,14 +323,16 @@ The integration includes built-in profiles for specific MG/SAIC models that corr
 | Series | Model | Notes |
 |---|---|---|
 | `EH32` | MG4 Electric | Temperature range and fan speed values confirmed |
-| `MIS3E` | MGS6 EV (Long Range / Dual Motor) | Battery capacity 74.3 kWh; inverted temperature index |
-| `AS33P` | MG HS PHEV (Super Hybrid 2025/2026) | BBattery capacity 24.7 kWh; Target SOC not supported by iSmart; electric range uses live SOC-tracking field |
+| `MIS3E` | MGS6 EV (Long Range / Dual Motor) | Battery capacity 74.3 kWh; inverted temperature index; model year override (API reports 2024, corrected to 2025) |
+| `EC32` | MG Cyberster | 2-door BEV roadster; no rear doors/windows; unreliable live electric range field (falls back to estimated range) |
+| `IS31P` | MG S9 PHEV (2025) | Climate status/fan speed mappings confirmed by physical testing |
+| `AS33P` | MG HS PHEV (Super Hybrid 2025/2026) | Battery capacity 24.7 kWh; Target SOC and Charging Current Limit not supported by iSmart; electric range uses live SOC-tracking field; energy values corrected for ~3x API over-reporting |
  
 Models not listed above use safe default values and should work normally. If you notice incorrect sensor readings for your model, please open an issue with your vehicle's debug logs.
-
-
+ 
+ 
 ## 💡 Troubleshooting & FAQ
-
+ 
 * **"Invalid Credentials" or Connection Timeouts:** Ensure you are choosing the correct region (EU, China, Australia, Israel, Turkey, Rest of World) matching your mobile app setup.
 * **Entities showing as 'Unavailable':** The integration respects API rate limits to prevent account lockouts. If an entity is temporarily unavailable, wait for the next scheduled update or use the `button.update_vehicle_data` entity to force a refresh.
 * **My App keeps logging me out:** As noted above, ensure your Home Assistant integration uses a **Secondary Account**, not your primary mobile application credentials.
@@ -252,37 +340,35 @@ Models not listed above use safe default values and should work normally. If you
 * **Electric Range shows an unexpected value:** For some PHEV models the live electric range field is not populated by the API. The integration falls back to the estimated-range-after-full-charge figure from the charging management data.
 * **Two cars on the same account:** Fully supported. Both vehicles share a single API session so neither interferes with the other.
 * **Instant Power sensor shows a stale value after HA restart:** Home Assistant restores entity states from its database on startup. The value will update to `0 kW` on the first successful poll (usually within 30 seconds) if the car is not driving.
-
+* **"Lock Status" binary sensor shows on/off, not Locked/Unlocked:** This is expected HA behaviour for the `lock` device class — see the [Entity States Reference](#entity-states-reference) above for exactly what `on` and `off` mean for every status/control entity in this integration.
 ## How to enable logging
-
+ 
 * Add the following lines to `configuration.yaml` (or your sub `logger.yaml` file if you have broken down `configuraiton.yaml` into smaller files)
-  ```
+```
   logger:
   default: warning
   
   logs:
     custom_components.mg_saic: debug
-  ```
+```
 * Restart Home Assistant
 * Go to System -> Logs
 * Search for `mg_saic`
 * Click the 3 vertical dots
 * Choose `Show full logs`
-
 ## Contributing
-
+ 
 Contributions are welcome! If you have any suggestions or find any issues, please open an [issue](https://github.com/townsmcp/mg-saic-ha/issues) or a [pull request](https://github.com/townsmcp/mg-saic-ha/pulls).
-
+ 
 ## Credits
-
+ 
 This integration was made possible thanks to the [saic-ismart-client-ng](https://github.com/SAIC-iSmart-API/saic-python-client-ng) repository and its developers/contributors.
-
+ 
 Special thanks to ad-ha for creating the original integration and for the hard work put into building and maintaining it in its previous stages. This repository continues that work.
-
+ 
 ## License
-
+ 
 This project is licensed under the MIT License. See the LICENSE file for details.
-
 
 
 ## Disclaimer
